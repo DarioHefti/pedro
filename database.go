@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
@@ -101,6 +102,24 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 	return msgs, nil
 }
 
+func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]Message)
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		result[m.ConversationID] = append(result[m.ConversationID], m)
+	}
+	return result, nil
+}
+
 func (d *Database) AddMessage(conversationID int64, role, content string) (*Message, error) {
 	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)", conversationID, role, content)
 	if err != nil {
@@ -118,6 +137,27 @@ func (d *Database) AddMessage(conversationID int64, role, content string) (*Mess
 	}
 
 	return &Message{ConversationID: conversationID, Role: role, Content: content}, nil
+}
+
+func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
+	var id int64
+	rows, err := d.db.Query("SELECT id FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?", conversationID, messageIndex)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return fmt.Errorf("message not found at index %d", messageIndex)
+	}
+
+	err = rows.Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.db.Exec("DELETE FROM messages WHERE id = ?", id)
+	return err
 }
 
 func (d *Database) UpdateMessageContent(id int64, content string) error {

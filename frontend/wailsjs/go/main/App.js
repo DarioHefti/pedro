@@ -22,8 +22,16 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function RegenerateMessage(arg1) {
+  return window['go']['main']['App']['RegenerateMessage'](arg1);
+}
+
 export function SaveSettings(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2, arg3);
+}
+
+export function SearchMessages(arg1) {
+  return window['go']['main']['App']['SearchMessages'](arg1);
 }
 
 export function SelectFile() {

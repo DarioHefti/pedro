@@ -9,8 +9,10 @@ interface ChatProps {
   messages: main.Message[]
   toolCalls: ToolCall[]
   loading: boolean
+  streamingContent: string
   messageImages: Map<number, string[]>
   onSend: (content: string, attachments?: { type: string; content: string; name: string }[]) => void
+  onRegenerate: (index: number) => void
 }
 
 interface Attachment {
@@ -19,7 +21,7 @@ interface Attachment {
   name: string
 }
 
-export default function Chat({ messages, toolCalls, loading, messageImages, onSend }: ChatProps) {
+export default function Chat({ messages, toolCalls, loading, streamingContent, messageImages, onSend, onRegenerate }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -33,7 +35,7 @@ export default function Chat({ messages, toolCalls, loading, messageImages, onSe
     if (autoScroll && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages, toolCalls, loading, autoScroll])
+  }, [messages, toolCalls, loading, streamingContent, autoScroll])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -157,13 +159,7 @@ export default function Chat({ messages, toolCalls, loading, messageImages, onSe
   }
 
   const regenerateMessage = (index: number) => {
-    const msg = messages[index]
-    if (msg.Role === 'assistant') {
-      const prevUserMsg = messages.slice(0, index).reverse().find(m => m.Role === 'user')
-      if (prevUserMsg) {
-        onSend(prevUserMsg.Content)
-      }
-    }
+    onRegenerate(index)
   }
 
   return (
@@ -217,7 +213,16 @@ export default function Chat({ messages, toolCalls, loading, messageImages, onSe
         ))}
         {loading && (
           <div className="message assistant">
-            <div className="message-content typing">Thinking...</div>
+            {streamingContent ? (
+              <MessageRenderer
+                content={streamingContent}
+                role="assistant"
+                onCopy={() => {}}
+                onRegenerate={() => {}}
+              />
+            ) : (
+              <div className="message-content typing">Thinking...</div>
+            )}
           </div>
         )}
         <div ref={bottomRef} />

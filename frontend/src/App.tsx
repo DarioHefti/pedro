@@ -9,6 +9,7 @@ import {
   DeleteConversation,
   SendMessage,
   SendMessageWithImages,
+  RegenerateMessage,
   GetSettings,
   SaveSettings,
   TestConnection,
@@ -28,9 +29,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
+  const [streamingContent, setStreamingContent] = useState<string>('')
   // Maps message array index -> image data URLs for that user message (session-only, not persisted)
   const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
   const toolCallsRef = useRef<ToolCall[]>([])
+  const streamingContentRef = useRef<string>('')
 
   useEffect(() => {
     loadConversations()
@@ -107,13 +110,20 @@ export default function App() {
     })
 
     toolCallsRef.current = []
+    streamingContentRef.current = ''
     setToolCalls([])
+    setStreamingContent('')
     setLoading(true)
 
     EventsOn('tool_call', (name: string, argsJSON: string) => {
       const tc: ToolCall = { name, argsJSON }
       toolCallsRef.current = [...toolCallsRef.current, tc]
       setToolCalls([...toolCallsRef.current])
+    })
+
+    EventsOn('stream_chunk', (chunk: string) => {
+      streamingContentRef.current += chunk
+      setStreamingContent(streamingContentRef.current)
     })
 
     try {
@@ -154,6 +164,50 @@ export default function App() {
       }
     } finally {
       EventsOff('tool_call')
+      EventsOff('stream_chunk')
+      streamingContentRef.current = ''
+      setStreamingContent('')
+      setLoading(false)
+      setToolCalls([])
+    }
+  }
+
+  async function handleRegenerate(index: number) {
+    const msg = messages[index]
+    if (msg.Role !== 'assistant' || !currentConvID) return
+
+    setMessages(prev => prev.slice(0, index))
+
+    toolCallsRef.current = []
+    streamingContentRef.current = ''
+    setToolCalls([])
+    setStreamingContent('')
+    setLoading(true)
+
+    EventsOn('tool_call', (name: string, argsJSON: string) => {
+      const tc: ToolCall = { name, argsJSON }
+      toolCallsRef.current = [...toolCallsRef.current, tc]
+      setToolCalls([...toolCallsRef.current])
+    })
+
+    EventsOn('stream_chunk', (chunk: string) => {
+      streamingContentRef.current += chunk
+      setStreamingContent(streamingContentRef.current)
+    })
+
+    try {
+      const response = await RegenerateMessage(currentConvID)
+
+      if (response?.startsWith('Error:')) {
+        alert(response)
+      } else {
+        setMessages(prev => [...prev, { Role: 'assistant', Content: response } as main.Message])
+      }
+    } finally {
+      EventsOff('tool_call')
+      EventsOff('stream_chunk')
+      streamingContentRef.current = ''
+      setStreamingContent('')
       setLoading(false)
       setToolCalls([])
     }
@@ -173,8 +227,10 @@ export default function App() {
         messages={messages}
         loading={loading}
         toolCalls={toolCalls}
+        streamingContent={streamingContent}
         messageImages={messageImages}
         onSend={sendMessage}
+        onRegenerate={handleRegenerate}
       />
       {settingsOpen && (
         <SettingsModal

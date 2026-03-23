@@ -26,7 +26,9 @@ type Store interface {
 	CreateConversation() (*Conversation, error)
 	DeleteConversation(id int64) error
 	GetMessages(conversationID int64) ([]Message, error)
+	SearchMessages(query string) (map[int64][]Message, error)
 	AddMessage(conversationID int64, role, content string) (*Message, error)
+	DeleteMessage(conversationID int64, messageIndex int) error
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
 	GetSettings() (map[string]string, error)

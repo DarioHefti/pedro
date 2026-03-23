@@ -12,7 +12,11 @@ export function GetMessages(arg1:number):Promise<Array<main.Message>>;
 
 export function GetSettings():Promise<Record<string, string>>;
 
+export function RegenerateMessage(arg1:number):Promise<string>;
+
 export function SaveSettings(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function SearchMessages(arg1:string):Promise<Record<number, Array<main.Message>>>;
 
 export function SelectFile():Promise<string>;
 

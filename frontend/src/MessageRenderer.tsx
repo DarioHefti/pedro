@@ -114,34 +114,36 @@ export default function MessageRenderer({ content, role, onCopy, onRegenerate }:
   return (
     <>
       <div 
-        className="message-wrapper"
+        className="message-container"
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
       >
+        <div className="message-wrapper">
+          {isArtifact && role === 'assistant' ? (
+            <div className="artifact-preview">
+              <iframe 
+                srcDoc={content}
+                title="Artifact Preview"
+                sandbox="allow-scripts"
+              />
+            </div>
+          ) : (
+            <div className="markdown-content">
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={components}
+              >
+                {content}
+              </ReactMarkdown>
+            </div>
+          )}
+        </div>
         {showActions && (
           <div className="message-actions">
             <button onClick={onCopy} title="Copy">Copy</button>
             {role === 'assistant' && onRegenerate && (
               <button onClick={onRegenerate} title="Regenerate">Regenerate</button>
             )}
-          </div>
-        )}
-        {isArtifact && role === 'assistant' ? (
-          <div className="artifact-preview">
-            <iframe 
-              srcDoc={content}
-              title="Artifact Preview"
-              sandbox="allow-scripts"
-            />
-          </div>
-        ) : (
-          <div className="markdown-content">
-            <ReactMarkdown 
-              remarkPlugins={[remarkGfm]}
-              components={components}
-            >
-              {content}
-            </ReactMarkdown>
           </div>
         )}
       </div>

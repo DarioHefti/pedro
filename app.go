@@ -60,6 +60,14 @@ func (a *App) GetMessages(conversationID int64) []Message {
 	return msgs
 }
 
+func (a *App) SearchMessages(query string) map[int64][]Message {
+	if a.store == nil || query == "" {
+		return map[int64][]Message{}
+	}
+	result, _ := a.store.SearchMessages(query)
+	return result
+}
+
 func (a *App) CreateConversation() *Conversation {
 	if a.store == nil {
 		return &Conversation{ID: 0, Title: "New Chat"}
@@ -95,6 +103,7 @@ func (a *App) SendMessage(conversationID int64, content string) string {
 	err := a.llm.Chat(context.Background(), messages, nil,
 		func(chunk string) {
 			response = append(response, chunk...)
+			runtime.EventsEmit(a.ctx, "stream_chunk", chunk)
 		},
 		func(name, argsJSON string) {
 			runtime.EventsEmit(a.ctx, "tool_call", name, argsJSON)
@@ -132,6 +141,60 @@ func (a *App) SendMessageWithImages(conversationID int64, content string, imageD
 	err := a.llm.Chat(context.Background(), messages, imageDataURLs,
 		func(chunk string) {
 			response = append(response, chunk...)
+			runtime.EventsEmit(a.ctx, "stream_chunk", chunk)
+		},
+		func(name, argsJSON string) {
+			runtime.EventsEmit(a.ctx, "tool_call", name, argsJSON)
+		},
+	)
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+
+	resp := string(response)
+	a.store.AddMessage(conversationID, "assistant", resp)
+	return resp
+}
+
+// RegenerateMessage removes the last assistant message and generates a new one.
+func (a *App) RegenerateMessage(conversationID int64) string {
+	if a.store == nil {
+		return "Error: Database not initialized"
+	}
+
+	messages, err := a.store.GetMessages(conversationID)
+	if err != nil {
+		return "Error: Failed to get messages: " + err.Error()
+	}
+
+	// Find and remove the last assistant message
+	var lastAssistantIdx int = -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "assistant" {
+			lastAssistantIdx = i
+			break
+		}
+	}
+
+	if lastAssistantIdx == -1 {
+		return "Error: No assistant message to regenerate"
+	}
+
+	// Remove the last assistant message from the database
+	a.store.DeleteMessage(conversationID, lastAssistantIdx)
+
+	// Get updated messages (without the deleted assistant message)
+	messages, _ = a.store.GetMessages(conversationID)
+
+	if a.llm == nil {
+		return "Error: Please configure Azure AI settings first"
+	}
+
+	var response []byte
+	err = a.llm.Chat(context.Background(), messages, nil,
+		func(chunk string) {
+			response = append(response, chunk...)
+			runtime.EventsEmit(a.ctx, "stream_chunk", chunk)
 		},
 		func(name, argsJSON string) {
 			runtime.EventsEmit(a.ctx, "tool_call", name, argsJSON)

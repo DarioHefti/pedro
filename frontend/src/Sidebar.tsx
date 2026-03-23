@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTheme } from './ThemeContext'
 import { main } from '../wailsjs/go/models'
+import { SearchMessages } from '../wailsjs/go/main/App'
 
 interface SidebarProps {
   conversations: main.Conversation[]
@@ -21,10 +22,24 @@ export default function Sidebar({
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchConvIDs, setSearchConvIDs] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    async function search() {
+      if (searchQuery.trim()) {
+        const results = await SearchMessages(searchQuery.trim())
+        setSearchConvIDs(new Set(Object.keys(results).map(Number)))
+      } else {
+        setSearchConvIDs(new Set())
+      }
+    }
+    search()
+  }, [searchQuery])
 
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(c => 
-        c.Title?.toLowerCase().includes(searchQuery.toLowerCase())
+        c.Title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        searchConvIDs.has(c.ID)
       )
     : conversations
 

@@ -176,12 +176,14 @@ body {
 .sidebar-footer {
   display: flex;
   gap: 8px;
-  margin: 16px;
+  padding: 16px;
+  padding-top: 0;
 }
 
 .settings-btn {
   flex: 1;
-  padding: 10px 12px;
+  padding: 0 12px;
+  height: 44px;
   background: var(--bg-button-secondary);
   color: var(--text);
   border: none;
@@ -196,7 +198,9 @@ body {
 }
 
 .theme-toggle-btn {
-  padding: 10px 12px;
+  padding: 0 12px;
+  height: 44px;
+  width: 44px;
   background: var(--bg-button-secondary);
   color: var(--text);
   border: none;
@@ -230,11 +234,11 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
 .message {
-  padding: 12px 16px;
+  padding: 6px 10px;
   border-radius: 8px;
   max-width: 80%;
   word-wrap: break-word;
@@ -260,7 +264,7 @@ body {
 
 .message-content {
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: pre-wrap;
   color: var(--text);
 }
@@ -320,6 +324,8 @@ body {
 .input-area textarea {
   flex: 1;
   padding: 12px;
+  min-height: 44px;
+  height: 44px;
   background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
@@ -327,9 +333,22 @@ body {
   resize: none;
   font-size: 14px;
   font-family: inherit;
-  min-height: 44px;
   max-height: 150px;
-  transition: background 0.2s ease, border-color 0.15s ease, color 0.2s ease;
+  overflow-y: auto;
+  transition: background 0.2s ease, border-color 0.15s ease, color 0.2s ease, height 0.2s ease;
+}
+
+.input-area textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.input-area textarea::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 4px;
+}
+
+.input-area textarea:not(:hover)::-webkit-scrollbar-thumb {
+  background-color: transparent;
 }
 
 .input-area textarea::placeholder {
@@ -342,7 +361,8 @@ body {
 }
 
 .input-area button {
-  padding: 12px 24px;
+  padding: 0 24px;
+  height: 44px;
   background: var(--accent);
   color: var(--accent-text);
   border: none;
@@ -466,17 +486,21 @@ body {
 }
 
 /* ===== Message Actions ===== */
-.message-wrapper {
+.message-container {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.message-container:has(.message-actions) {
+  padding-bottom: 4px;
 }
 
 .message-actions {
-  position: absolute;
-  top: -32px;
-  right: 0;
   display: flex;
   gap: 4px;
-  z-index: 10;
+  margin-top: 4px;
 }
 
 .message-actions button {
@@ -497,28 +521,34 @@ body {
 
 /* ===== Markdown Content ===== */
 .markdown-content {
-  line-height: 1.6;
+  line-height: 1.4;
 }
 
 .markdown-content h1 {
   font-size: 1.5em;
-  margin: 0.5em 0;
+  margin: 0.3em 0;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 0.3em;
+  padding-bottom: 0.2em;
 }
 
 .markdown-content h2 {
   font-size: 1.3em;
-  margin: 0.5em 0;
+  margin: 0.3em 0;
 }
 
 .markdown-content h3 {
   font-size: 1.1em;
-  margin: 0.5em 0;
+  margin: 0.3em 0;
 }
 
 .markdown-content p {
-  margin: 0.5em 0;
+  margin: 0.3em 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.3em 0;
+  padding-left: 1.5em;
 }
 
 .markdown-content ul, .markdown-content ol {
@@ -792,8 +822,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   background: var(--accent) !important;
   border: 1px solid var(--accent) !important;
   color: var(--accent-text) !important;
