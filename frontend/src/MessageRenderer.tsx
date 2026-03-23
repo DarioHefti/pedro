@@ -138,10 +138,10 @@ export default function MessageRenderer({ content, role, onCopy, onRegenerate }:
             </div>
           )}
         </div>
-        {showActions && (
+        {showActions && role === 'assistant' && (
           <div className="message-actions">
             <button onClick={onCopy} title="Copy">Copy</button>
-            {role === 'assistant' && onRegenerate && (
+            {onRegenerate && (
               <button onClick={onRegenerate} title="Regenerate">Regenerate</button>
             )}
           </div>
