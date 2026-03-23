@@ -223,6 +223,7 @@ export default function Chat({
         {messages.length === 0 && !loading && (
           <div className="empty-state">
             <p className="empty-state-message">{welcomeMessage}</p>
+            <img src={pedroAvatar} alt="Pedro" className="empty-state-avatar" />
           </div>
         )}
         {messages.map((msg, i) => {
