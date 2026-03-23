@@ -260,14 +260,36 @@ export default function Chat({
           )
         })}
 
-        {toolCalls.map((tc, i) => (
-          <div key={`tc-${i}`} className="message tool">
-            <div className="tool-call-card">
-              <span className="tool-call-icon">🔧</span>
-              <span className="tool-call-label">{tc.name}</span>
+        {toolCalls.map((tc, i) => {
+          let argsDisplay = ''
+          try {
+            const args = JSON.parse(tc.argsJSON)
+            if (tc.name === 'websearch' && args.query) {
+              argsDisplay = `"${args.query}"`
+            } else if (tc.name === 'webfetch' && args.url) {
+              argsDisplay = args.url
+            } else if (args.url) {
+              argsDisplay = args.url
+            } else if (args.query) {
+              argsDisplay = args.query
+            } else if (args.path) {
+              argsDisplay = args.path
+            } else if (args.pattern) {
+              argsDisplay = args.pattern
+            } else if (args.include) {
+              argsDisplay = args.include
+            }
+          } catch {}
+          return (
+            <div key={`tc-${i}`} className="message tool">
+              <div className="tool-call-card">
+                <span className="tool-call-icon">🔧</span>
+                <span className="tool-call-label">{tc.name}</span>
+                {argsDisplay && <span className="tool-call-arg">{argsDisplay}</span>}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {loading && (
           <div className="message-wrapper">
@@ -321,7 +343,7 @@ export default function Chat({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Ctrl+V to paste images)"
+          placeholder="Type a message..."
           rows={1}
           disabled={loading}
         />

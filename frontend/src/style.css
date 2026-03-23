@@ -261,6 +261,8 @@ body {
   border-radius: 8px;
   max-width: 80%;
   word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
   background: var(--bg-message);
   transition: background 0.2s ease;
 }
@@ -353,6 +355,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 300px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
 }
 
 @keyframes tool-call-in {
@@ -566,6 +571,9 @@ body {
 /* ===== Markdown Content ===== */
 .markdown-content {
   line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .markdown-content h1 {
@@ -641,8 +649,11 @@ body {
 .code-block {
   margin: 0.5em 0;
   border-radius: 6px;
-  overflow: hidden;
+  overflow-x: auto;
   background: #1e1e1e;
+  max-width: 100%;
+  word-break: normal;
+  word-wrap: normal;
 }
 
 .code-header {
