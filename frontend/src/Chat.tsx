@@ -19,6 +19,15 @@ interface ChatProps {
   welcomeMessage: string
 }
 
+/**
+ * Strip [File: ...] / [Path: ...] annotations that buildLLMContent appends to
+ * user messages before sending to the LLM. These are stored verbatim in the DB
+ * but should never be shown in the chat UI.
+ */
+function stripFileAnnotations(content: string): string {
+  return content.replace(/\n\n\[File: [\s\S]*$/, '')
+}
+
 export default function Chat({
   messages,
   toolCalls,
@@ -164,6 +173,10 @@ export default function Chat({
   const removeAttachment = (index: number) =>
     setAttachments(prev => prev.filter((_, i) => i !== index))
 
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
   const jumpToBottom = () => {
     setAutoScroll(true)
     setUserHasScrolledUp(false)
@@ -201,10 +214,11 @@ export default function Chat({
           const imgs = messageImages.get(i)
           const files = messageFiles.get(i)
           return (
-            <div key={i} className={`message ${msg.Role}`}>
+            <div key={i} className={`message-wrapper ${msg.Role}`}>
               {msg.Role === 'assistant' && (
                 <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
               )}
+              <div className={`message ${msg.Role}`}>
               {imgs && imgs.length > 0 && (
                 <div className="message-image-previews">
                   {imgs.map((src, j) => (
@@ -228,7 +242,7 @@ export default function Chat({
                 </div>
               )}
               <MessageRenderer
-                content={msg.Content || ''}
+                content={msg.Role === 'user' ? stripFileAnnotations(msg.Content || '') : (msg.Content || '')}
                 role={msg.Role}
               />
               {msg.Role === 'assistant' && (
@@ -241,6 +255,7 @@ export default function Chat({
                   </button>
                 </div>
               )}
+            </div>
             </div>
           )
         })}
@@ -255,16 +270,18 @@ export default function Chat({
         ))}
 
         {loading && (
-          <div className="message assistant">
+          <div className="message-wrapper">
             <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
-            {streamingContent ? (
-              <MessageRenderer
-                content={streamingContent}
-                role="assistant"
-              />
-            ) : (
-              <div className="message-content typing">Thinking...</div>
-            )}
+            <div className="message assistant">
+              {streamingContent ? (
+                <MessageRenderer
+                  content={streamingContent}
+                  role="assistant"
+                />
+              ) : (
+                <div className="message-content typing">Thinking...</div>
+              )}
+            </div>
           </div>
         )}
         <div ref={bottomRef} />

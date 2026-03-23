@@ -1,19 +1,40 @@
-# README
+# Pedro
 
-## About
+Your friendly desktop AI chat companion. Built with Wails, Go.
 
-This is the official Wails Vanilla template.
+## What is this?
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+A desktop app for chatting with Azure AI models. It stores your conversations locally in sqlite, renders pretty markdown, and occasionally hums while it thinks. 
 
-## Live Development
+## Features
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+- Chat with Azure AI
+- Multimodal support - drop images in and ask questions
+- Conversations that persist (SQLite is watching)
+- Markdown rendering + Mermaid diagrams (because why not)
+- Native file picker - because clicking through folders shouldn't be a workout
+- Search across all your chats
+- Websearch
+- Read local files
 
-## Building
+## Quick Start
 
-To build a redistributable, production mode package, use `wails build`.
+1. Configure your Azure AI credentials in Settings
+2. Start chatting
+3. Hope the AI is feeling helpful
+
+## Development
+
+```bash
+wails dev
+```
+
+## Build
+
+```bash
+wails build
+```
+
+## Why "Pedro"?
+
+We didn't name it. The logs just started calling it that and we were too afraid to ask.
