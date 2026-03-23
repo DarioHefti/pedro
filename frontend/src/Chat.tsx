@@ -301,7 +301,9 @@ export default function Chat({
                   role="assistant"
                 />
               ) : (
-                <div className="message-content typing">Thinking...</div>
+                <div className="message-content typing">
+                  Thinking<span className="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+                </div>
               )}
             </div>
           </div>

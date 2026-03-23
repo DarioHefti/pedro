@@ -15,8 +15,8 @@ const SystemPrompt = `You are Pedro, a helpful assistant with access to web sear
 ### fetch_url
 - Use this to read the full content of a specific URL found via web_search.
 - **Do not fetch homepages** (e.g. https://www.20min.ch/). They are almost always JavaScript-rendered and will return no content. Fetch individual article URLs instead.
+- **JavaScript-rendered pages are supported!** This tool automatically uses a headless browser for JS-heavy sites (e.g. fedlex.admin.ch, SPAs). Always try fetch_url first before assuming a page cannot be read.
 - If the result says "[This page is blocked or requires browser verification...]", the site uses bot protection (Cloudflare, CAPTCHA, etc.) and cannot be accessed with this tool. Tell the user clearly.
-- If the result says "[Page appears to be JavaScript-rendered or empty...]", the page requires a real browser to load. Tell the user clearly.
 - For paywalled or heavily protected news sites, use the search snippets directly rather than trying to fetch the full article.
 
 ### read_file
