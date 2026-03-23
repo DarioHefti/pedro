@@ -3,67 +3,71 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import mermaid from 'mermaid'
-import { main } from '../wailsjs/go/models'
+import { useTheme } from './ThemeContext'
 
 interface MessageRendererProps {
   content: string
   role: string
-  onCopy: () => void
-  onRegenerate?: () => void
 }
 
-export default function MessageRenderer({ content, role, onCopy, onRegenerate }: MessageRendererProps) {
-  const [showActions, setShowActions] = useState(false)
+export default function MessageRenderer({
+  content,
+  role,
+}: MessageRendererProps) {
+  const { theme } = useTheme()
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxImage, setLightboxImage] = useState('')
+  // These are reset to [] on each render cycle (before children push into them)
+  // so that refs don't accumulate across re-renders.
   const codeRefs = useRef<HTMLElement[]>([])
   const mermaidRefs = useRef<HTMLDivElement[]>([])
 
+  // Keep Mermaid theme in sync with the app theme.
   useEffect(() => {
-    mermaid.initialize({ startOnLoad: false, theme: 'default' })
-  }, [])
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: theme === 'dark' ? 'dark' : 'default',
+    })
+  }, [theme])
 
+  // Run syntax highlighting and Mermaid rendering whenever content changes.
   useEffect(() => {
-    codeRefs.current.forEach((codeEl, i) => {
-      if (codeEl) {
-        hljs.highlightElement(codeEl)
-      }
+    // Reset and re-highlight; refs were populated during this render.
+    codeRefs.current.forEach(el => {
+      if (el) hljs.highlightElement(el)
     })
 
     mermaidRefs.current.forEach(async (el, i) => {
-      if (el && el.dataset.mermaid) {
+      if (el?.dataset.mermaid) {
         try {
-          const { svg } = await mermaid.render(`mermaid-${i}-${Date.now()}`, el.dataset.mermaid)
+          const { svg } = await mermaid.render(
+            `mermaid-${i}-${Date.now()}`,
+            el.dataset.mermaid,
+          )
           el.innerHTML = svg
-        } catch (e) {
-          el.textContent = el.dataset.mermaid || ''
+        } catch {
+          el.textContent = el.dataset.mermaid ?? ''
         }
       }
     })
   }, [content])
 
-  const isArtifact = content.trim().startsWith('<!DOCTYPE html>') || 
-                     content.trim().startsWith('<html') ||
-                     (content.includes('<script>') && content.includes('</html>'))
+  const isArtifact =
+    content.trim().startsWith('<!DOCTYPE html>') ||
+    content.trim().startsWith('<html') ||
+    (content.includes('<script>') && content.includes('</html>'))
 
-  const openLightbox = (img: string) => {
-    setLightboxImage(img)
-    setLightboxOpen(true)
-  }
-
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code)
-  }
+  const copyCode = (code: string) => navigator.clipboard.writeText(code)
 
   const components = {
-    code({ node, className, children, ...props }: any) {
+    code({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string }) {
       const match = /language-(\w+)/.exec(className || '')
       const code = String(children).replace(/\n$/, '')
-      const isMermaid = match && match[1] === 'mermaid'
+      const isMermaid = match?.[1] === 'mermaid'
 
       if (isMermaid) {
         return (
-          <div 
+          <div
             ref={el => { if (el) mermaidRefs.current.push(el) }}
             data-mermaid={code}
             className="mermaid-diagram"
@@ -76,10 +80,12 @@ export default function MessageRenderer({ content, role, onCopy, onRegenerate }:
           <div className="code-block">
             <div className="code-header">
               <span className="code-language">{match[1]}</span>
-              <button className="copy-code-btn" onClick={() => copyCode(code)}>Copy</button>
+              <button className="copy-code-btn" onClick={() => copyCode(code)}>
+                Copy
+              </button>
             </div>
             <pre>
-              <code 
+              <code
                 ref={el => { if (el) codeRefs.current.push(el) }}
                 className={`hljs language-${match[1]}`}
                 {...props}
@@ -91,37 +97,50 @@ export default function MessageRenderer({ content, role, onCopy, onRegenerate }:
         )
       }
 
-      return <code className="inline-code" {...props}>{children}</code>
+      return (
+        <code className="inline-code" {...props}>
+          {children}
+        </code>
+      )
     },
-    img({ src, alt }: any) {
+    img({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement>) {
       if (src?.startsWith('data:image')) {
         return (
-          <img 
-            src={src} 
-            alt={alt || 'Image'} 
+          <img
+            src={src}
+            alt={alt ?? 'Image'}
             className="message-image"
-            onClick={() => openLightbox(src)}
+            onClick={() => {
+              setLightboxImage(src)
+              setLightboxOpen(true)
+            }}
           />
         )
       }
-      return <img src={src} alt={alt || 'Image'} className="message-image" />
+      return <img src={src} alt={alt ?? 'Image'} className="message-image" />
     },
-    a({ href, children }: any) {
-      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-    }
+    a({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      )
+    },
   }
+
+  // Reset ref arrays before each render so they don't grow unboundedly.
+  codeRefs.current = []
+  mermaidRefs.current = []
 
   return (
     <>
-      <div 
+      <div
         className="message-container"
-        onMouseEnter={() => setShowActions(true)}
-        onMouseLeave={() => setShowActions(false)}
       >
         <div className="message-wrapper">
           {isArtifact && role === 'assistant' ? (
             <div className="artifact-preview">
-              <iframe 
+              <iframe
                 srcDoc={content}
                 title="Artifact Preview"
                 sandbox="allow-scripts"
@@ -129,25 +148,15 @@ export default function MessageRenderer({ content, role, onCopy, onRegenerate }:
             </div>
           ) : (
             <div className="markdown-content">
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm]}
-                components={components}
-              >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={components as any}>
                 {content}
               </ReactMarkdown>
             </div>
           )}
         </div>
-        {showActions && role === 'assistant' && (
-          <div className="message-actions">
-            <button onClick={onCopy} title="Copy">Copy</button>
-            {onRegenerate && (
-              <button onClick={onRegenerate} title="Regenerate">Regenerate</button>
-            )}
-          </div>
-        )}
+
       </div>
-      
+
       {lightboxOpen && (
         <div className="lightbox" onClick={() => setLightboxOpen(false)}>
           <img src={lightboxImage} alt="Full size" />

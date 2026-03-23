@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from './ThemeContext'
-import { main } from '../wailsjs/go/models'
-import { SearchMessages } from '../wailsjs/go/main/App'
+import type { Conversation, Message } from './services/wailsService'
 
 interface SidebarProps {
-  conversations: main.Conversation[]
+  conversations: Conversation[]
   currentConvID: number | null
   onSelect: (id: number) => void
   onNew: () => void
   onDelete: (id: number) => void
   onOpenSettings: () => void
+  /** Called with the search query; returns a map of convID → matching messages. */
+  onSearch: (query: string) => Promise<Record<number, Message[]>>
 }
 
 export default function Sidebar({
@@ -19,6 +20,7 @@ export default function Sidebar({
   onNew,
   onDelete,
   onOpenSettings,
+  onSearch,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
@@ -27,25 +29,28 @@ export default function Sidebar({
   useEffect(() => {
     async function search() {
       if (searchQuery.trim()) {
-        const results = await SearchMessages(searchQuery.trim())
+        const results = await onSearch(searchQuery.trim())
         setSearchConvIDs(new Set(Object.keys(results).map(Number)))
       } else {
         setSearchConvIDs(new Set())
       }
     }
     search()
-  }, [searchQuery])
+  }, [searchQuery, onSearch])
 
   const filteredConversations = searchQuery.trim()
-    ? conversations.filter(c => 
-        c.Title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        searchConvIDs.has(c.ID)
+    ? conversations.filter(
+        c =>
+          c.Title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          searchConvIDs.has(c.ID),
       )
     : conversations
 
   return (
     <div className="sidebar">
-      <button className="new-chat-btn" onClick={onNew}>+ New Chat</button>
+      <button className="new-chat-btn" onClick={onNew}>
+        + New Chat
+      </button>
       {conversations.length > 0 && (
         <div className="sidebar-search">
           <input
@@ -58,11 +63,12 @@ export default function Sidebar({
         </div>
       )}
       <div className="conversation-list">
-        {filteredConversations.length === 0
-          ? <div className="empty-list">
-              {searchQuery ? 'No matching chats' : 'No conversations'}
-            </div>
-          : filteredConversations.map(conv => (
+        {filteredConversations.length === 0 ? (
+          <div className="empty-list">
+            {searchQuery ? 'No matching chats' : 'No conversations'}
+          </div>
+        ) : (
+          filteredConversations.map(conv => (
             <div
               key={conv.ID}
               className={`conversation-item${currentConvID === conv.ID ? ' active' : ''}`}
@@ -71,14 +77,21 @@ export default function Sidebar({
               <div className="conversation-title">{conv.Title || 'New Chat'}</div>
               <button
                 className="delete-btn"
-                onClick={e => { e.stopPropagation(); onDelete(conv.ID) }}
-              >×</button>
+                onClick={e => {
+                  e.stopPropagation()
+                  onDelete(conv.ID)
+                }}
+              >
+                ×
+              </button>
             </div>
           ))
-        }
+        )}
       </div>
       <div className="sidebar-footer">
-        <button className="settings-btn" onClick={onOpenSettings}>⚙ Settings</button>
+        <button className="settings-btn" onClick={onOpenSettings}>
+          ⚙ Settings
+        </button>
         <button
           className="theme-toggle-btn"
           onClick={toggleTheme}

@@ -1,35 +1,41 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import attachmentIcon from './assets/attachment.svg'
-import { main } from '../wailsjs/go/models'
-import { SelectFile } from '../wailsjs/go/main/App'
-import { ToolCall } from './App'
+import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import MessageRenderer from './MessageRenderer'
 
 interface ChatProps {
-  messages: main.Message[]
+  messages: Message[]
   toolCalls: ToolCall[]
   loading: boolean
   streamingContent: string
   messageImages: Map<number, string[]>
-  messageFiles: Map<number, { name: string; path: string; type: string }[]>
-  onSend: (content: string, attachments?: { type: string; content: string; name: string }[]) => void
+  messageFiles: Map<number, FileAttachment[]>
+  onSend: (content: string, attachments?: Attachment[]) => void
   onRegenerate: (index: number) => void
+  /** Opens the native OS file picker; resolves to the selected path or "". */
+  onSelectFile: () => Promise<string>
+  welcomeMessage: string
 }
 
-interface Attachment {
-  type: 'text' | 'image' | 'file-ref'
-  content: string  // for file-ref: full OS path; for text: file content; for image: data URL
-  name: string
-}
-
-export default function Chat({ messages, toolCalls, loading, streamingContent, messageImages, messageFiles, onSend, onRegenerate }: ChatProps) {
+export default function Chat({
+  messages,
+  toolCalls,
+  loading,
+  streamingContent,
+  messageImages,
+  messageFiles,
+  onSend,
+  onRegenerate,
+  onSelectFile,
+  welcomeMessage,
+}: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
-  const [showJumpButtons, setShowJumpButtons] = useState(false)
+  const [showJumpButton, setShowJumpButton] = useState(false)
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
-  
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const prevScrollTop = useRef<number>(0)
@@ -43,34 +49,28 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
 
   useEffect(() => {
     const handleScroll = () => {
-      if (messagesRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = messagesRef.current
-        const atBottom = scrollHeight - scrollTop - clientHeight < 100
-        
-        // Detect if user scrolled up (not just at bottom check)
-        if (scrollTop < prevScrollTop.current - 5) {
-          setUserHasScrolledUp(true)
-          setAutoScroll(false)
-        }
-        
-        prevScrollTop.current = scrollTop
-        
-        // Re-enable auto-scroll only when at bottom AND user hasn't scrolled up
-        if (atBottom && !userHasScrolledUp) {
-          setAutoScroll(true)
-        }
-        
-        setShowJumpButtons(!atBottom)
+      const el = messagesRef.current
+      if (!el) return
+      const { scrollTop, scrollHeight, clientHeight } = el
+      const atBottom = scrollHeight - scrollTop - clientHeight < 100
+
+      if (scrollTop < prevScrollTop.current - 5) {
+        setUserHasScrolledUp(true)
+        setAutoScroll(false)
       }
+      prevScrollTop.current = scrollTop
+
+      if (atBottom && !userHasScrolledUp) setAutoScroll(true)
+      setShowJumpButton(!atBottom)
     }
-    
-    const msgDiv = messagesRef.current
-    msgDiv?.addEventListener('scroll', handleScroll)
-    return () => msgDiv?.removeEventListener('scroll', handleScroll)
+
+    const el = messagesRef.current
+    el?.addEventListener('scroll', handleScroll)
+    return () => el?.removeEventListener('scroll', handleScroll)
   }, [userHasScrolledUp])
 
+  // Re-enable auto-scroll once streaming finishes.
   useEffect(() => {
-    // Reset userHasScrolledUp when streaming ends
     if (!streamingContent && prevStreamingContent.current) {
       setUserHasScrolledUp(false)
     }
@@ -87,23 +87,19 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
   const handleSend = () => {
     const content = input.trim()
     if (!content && attachments.length === 0) return
-    
-    const fullContent = attachments.length > 0 
-      ? `${content}\n\n[Attached files: ${attachments.map(a => a.name).join(', ')}]`
-      : content
-    
     setInput('')
     setAttachments([])
     onSend(content, attachments)
   }
 
-  // For images dropped/pasted: embed as data URL (fine, images are small)
-  // For text files dropped: embed a truncated preview (we don't have the OS path here)
   const processFile = useCallback((file: File) => {
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onload = () => {
-        setAttachments(prev => [...prev, { type: 'image', content: reader.result as string, name: file.name }])
+        setAttachments(prev => [
+          ...prev,
+          { type: 'image', content: reader.result as string, name: file.name },
+        ])
       }
       reader.readAsDataURL(file)
     } else {
@@ -111,60 +107,59 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
       reader.onload = () => {
         const text = reader.result as string
         const MAX = 50_000
-        const content = text.length > MAX
-          ? text.slice(0, MAX) + `\n\n[File truncated — ${(text.length / 1024).toFixed(0)} KB total. Use the 📎 button to attach via path for full access.]`
-          : text
+        const content =
+          text.length > MAX
+            ? text.slice(0, MAX) +
+              `\n\n[File truncated — ${(text.length / 1024).toFixed(0)} KB total. Use the 📎 button to attach via path for full access.]`
+            : text
         setAttachments(prev => [...prev, { type: 'text', content, name: file.name }])
       }
       reader.readAsText(file)
     }
   }, [])
 
-  // Opens native OS file dialog and stores the full path as a file-ref attachment
   const handleSelectFile = useCallback(async () => {
-    const path = await SelectFile()
+    const path = await onSelectFile()
     if (!path) return
     const name = path.split(/[\\/]/).pop() || path
     setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
-  }, [])
+  }, [onSelectFile])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(true)
   }
-
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
   }
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    files.forEach(processFile)
+    Array.from(e.dataTransfer.files).forEach(processFile)
   }
 
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile()
-        if (file) processFile(file)
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) processFile(file)
+        }
       }
-    }
-  }, [processFile])
+    },
+    [processFile],
+  )
 
   useEffect(() => {
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
   }, [handlePaste])
 
-  const removeAttachment = (index: number) => {
+  const removeAttachment = (index: number) =>
     setAttachments(prev => prev.filter((_, i) => i !== index))
-  }
 
   const jumpToBottom = () => {
     setAutoScroll(true)
@@ -172,16 +167,8 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const copyMessage = (content: string) => {
-    navigator.clipboard.writeText(content)
-  }
-
-  const regenerateMessage = (index: number) => {
-    onRegenerate(index)
-  }
-
   return (
-    <div 
+    <div
       className="main"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -193,13 +180,20 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
         </div>
       )}
 
-      {showJumpButtons && (
+      {showJumpButton && (
         <div className="jump-buttons">
-          <button onClick={jumpToBottom} title="Jump to bottom">↓ Bottom</button>
+          <button onClick={jumpToBottom} title="Jump to bottom">
+            ↓ Bottom
+          </button>
         </div>
       )}
 
       <div className="messages" ref={messagesRef}>
+        {messages.length === 0 && !loading && (
+          <div className="empty-state">
+            <p className="empty-state-message">{welcomeMessage}</p>
+          </div>
+        )}
         {messages.map((msg, i) => {
           const imgs = messageImages.get(i)
           const files = messageFiles.get(i)
@@ -208,7 +202,12 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
               {imgs && imgs.length > 0 && (
                 <div className="message-image-previews">
                   {imgs.map((src, j) => (
-                    <img key={j} src={src} alt={`Attached image ${j + 1}`} className="message-image-thumb" />
+                    <img
+                      key={j}
+                      src={src}
+                      alt={`Attached image ${j + 1}`}
+                      className="message-image-thumb"
+                    />
                   ))}
                 </div>
               )}
@@ -225,12 +224,21 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
               <MessageRenderer
                 content={msg.Content || ''}
                 role={msg.Role}
-                onCopy={() => copyMessage(msg.Content || '')}
-                onRegenerate={() => regenerateMessage(i)}
               />
+              {msg.Role === 'assistant' && (
+                <div className="message-actions">
+                  <button onClick={() => navigator.clipboard.writeText(msg.Content || '')} title="Copy">
+                    Copy
+                  </button>
+                  <button onClick={() => onRegenerate(i)} title="Regenerate">
+                    Regenerate
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
+
         {toolCalls.map((tc, i) => (
           <div key={`tc-${i}`} className="message tool">
             <div className="tool-call-card">
@@ -239,14 +247,13 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
             </div>
           </div>
         ))}
+
         {loading && (
           <div className="message assistant">
             {streamingContent ? (
               <MessageRenderer
                 content={streamingContent}
                 role="assistant"
-                onCopy={() => {}}
-                onRegenerate={() => {}}
               />
             ) : (
               <div className="message-content typing">Thinking...</div>
@@ -263,11 +270,15 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
               {att.type === 'image' ? (
                 <img src={att.content} alt={att.name} className="attachment-thumb" />
               ) : att.type === 'file-ref' ? (
-                <span className="attachment-name" title={att.content}>📁 {att.name}</span>
+                <span className="attachment-name" title={att.content}>
+                  📁 {att.name}
+                </span>
               ) : (
                 <span className="attachment-name">📄 {att.name}</span>
               )}
-              <button className="remove-attachment" onClick={() => removeAttachment(i)}>×</button>
+              <button className="remove-attachment" onClick={() => removeAttachment(i)}>
+                ×
+              </button>
             </div>
           ))}
         </div>
@@ -282,7 +293,6 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
         >
           <img src={attachmentIcon} alt="Attach file" width={20} height={20} />
         </button>
-
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}

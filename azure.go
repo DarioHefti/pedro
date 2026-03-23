@@ -18,7 +18,7 @@ type AzureClient struct {
 
 func NewAzureClient(endpoint, apiKey, deployment string, registry *tools.Registry) (*AzureClient, error) {
 	config := openai.DefaultAzureConfig(apiKey, endpoint)
-	config.APIVersion = "2024-12-01-preview"
+	config.APIVersion = AzureAPIVersion
 	config.AzureModelMapperFunc = func(model string) string {
 		return deployment
 	}

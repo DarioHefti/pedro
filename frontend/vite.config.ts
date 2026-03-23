@@ -11,8 +11,6 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom'],
           'highlight': ['highlight.js'],
           'mermaid': ['mermaid'],
-          'katex': ['katex'],
-          'cytoscape': ['cytoscape'],
         },
       },
     },

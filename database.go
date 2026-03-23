@@ -21,10 +21,16 @@ func NewDatabase() (*Database, error) {
 	os.MkdirAll(dbDir, 0755)
 	dbPath := filepath.Join(dbDir, "pedro.db")
 
-	db, err := sql.Open("sqlite", dbPath)
+	// _foreign_keys=on  – enforce FK constraints (including ON DELETE CASCADE).
+	// _busy_timeout=5000 – wait up to 5 s before returning SQLITE_BUSY.
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}
+
+	// SQLite supports only one concurrent writer. Limiting the pool to a single
+	// connection is the standard fix for SQLITE_BUSY with database/sql.
+	db.SetMaxOpenConns(1)
 
 	d := &Database{db: db}
 	if err := d.init(); err != nil {
@@ -140,18 +146,17 @@ func (d *Database) AddMessage(conversationID int64, role, content string) (*Mess
 }
 
 func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
+	// Use QueryRow so the connection is released as soon as Scan returns,
+	// before we call Exec. With MaxOpenConns(1) this avoids a deadlock where
+	// an open *Rows holds the only connection while Exec waits for it.
 	var id int64
-	rows, err := d.db.Query("SELECT id FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?", conversationID, messageIndex)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
+	err := d.db.QueryRow(
+		"SELECT id FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?",
+		conversationID, messageIndex,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
 		return fmt.Errorf("message not found at index %d", messageIndex)
 	}
-
-	err = rows.Scan(&id)
 	if err != nil {
 		return err
 	}
@@ -166,11 +171,9 @@ func (d *Database) UpdateMessageContent(id int64, content string) error {
 }
 
 func (d *Database) DeleteConversation(id int64) error {
-	_, err := d.db.Exec("DELETE FROM messages WHERE conversation_id = ?", id)
-	if err != nil {
-		return err
-	}
-	_, err = d.db.Exec("DELETE FROM conversations WHERE id = ?", id)
+	// ON DELETE CASCADE (enforced via _foreign_keys=on DSN option) handles
+	// the child messages rows automatically.
+	_, err := d.db.Exec("DELETE FROM conversations WHERE id = ?", id)
 	return err
 }
 

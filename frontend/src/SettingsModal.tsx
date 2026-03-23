@@ -1,44 +1,61 @@
 import { useState, useEffect } from 'react'
+import { useToast } from './context/ToastContext'
+
+const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
 interface SettingsModalProps {
   onClose: () => void
-  GetSettings: () => Promise<Record<string, string>>
-  SaveSettings: (endpoint: string, apiKey: string, deployment: string) => Promise<void>
-  TestConnection: (endpoint: string, apiKey: string, deployment: string) => Promise<string>
+  getSettings: () => Promise<Record<string, string>>
+  saveSettings: (endpoint: string, apiKey: string, deployment: string) => Promise<void>
+  setSetting: (key: string, value: string) => Promise<void>
+  testConnection: (
+    endpoint: string,
+    apiKey: string,
+    deployment: string,
+  ) => Promise<string>
 }
 
 export default function SettingsModal({
   onClose,
-  GetSettings,
-  SaveSettings,
-  TestConnection,
+  getSettings,
+  saveSettings,
+  setSetting,
+  testConnection,
 }: SettingsModalProps) {
+  const toast = useToast()
   const [endpoint, setEndpoint] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [deployment, setDeployment] = useState('')
+  const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
   const [testing, setTesting] = useState(false)
 
   useEffect(() => {
-    GetSettings().then(s => {
+    getSettings().then(s => {
       setEndpoint(s.azure_endpoint ?? '')
       setApiKey(s.azure_api_key ?? '')
       setDeployment(s.azure_deployment ?? '')
+      setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
     })
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
-    await SaveSettings(endpoint, apiKey, deployment)
+    await saveSettings(endpoint, apiKey, deployment)
+    await setSetting('welcome_message', welcomeMessage)
+    toast.success('Settings saved!')
     onClose()
-    alert('Settings saved!')
   }
 
   async function test() {
     setTesting(true)
     try {
-      const result = await TestConnection(endpoint, apiKey, deployment)
-      alert(result)
+      const result = await testConnection(endpoint, apiKey, deployment)
+      if (result.startsWith('Error:')) {
+        toast.error(result)
+      } else {
+        toast.success(result)
+      }
     } catch (err) {
-      alert('Error: ' + String(err))
+      toast.error('Error: ' + String(err))
     } finally {
       setTesting(false)
     }
@@ -69,11 +86,20 @@ export default function SettingsModal({
           onChange={e => setDeployment(e.target.value)}
           placeholder="gpt-4"
         />
+        <label>Welcome Message</label>
+        <input
+          type="text"
+          value={welcomeMessage}
+          onChange={e => setWelcomeMessage(e.target.value)}
+          placeholder={DEFAULT_WELCOME_MESSAGE}
+        />
         <div className="modal-buttons">
           <button className="test-btn" onClick={test} disabled={testing}>
             {testing ? 'Testing...' : 'Test Connection'}
           </button>
-          <button className="save-btn" onClick={save}>Save</button>
+          <button className="save-btn" onClick={save}>
+            Save
+          </button>
           <button onClick={onClose}>Cancel</button>
         </div>
       </div>

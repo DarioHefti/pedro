@@ -46,6 +46,10 @@ export function SendMessageWithImages(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3);
 }
 
+export function SetSetting(arg1, arg2) {
+  return window['go']['main']['App']['SetSetting'](arg1, arg2);
+}
+
 export function TestConnection(arg1, arg2, arg3) {
   return window['go']['main']['App']['TestConnection'](arg1, arg2, arg3);
 }

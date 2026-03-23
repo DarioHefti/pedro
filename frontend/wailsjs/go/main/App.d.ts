@@ -24,4 +24,6 @@ export function SendMessage(arg1:number,arg2:string):Promise<string>;
 
 export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>):Promise<string>;
 
+export function SetSetting(arg1:string,arg2:string):Promise<void>;
+
 export function TestConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
