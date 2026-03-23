@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
@@ -148,8 +149,22 @@ export default function Chat({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    Array.from(e.dataTransfer.files).forEach(processFile)
+    // Don't process files here - Wails OnFileDrop handles all file drops
+    // and gives us the native file paths (required for read_file tool)
   }
+
+  // Use Wails' OnFileDrop to get native file paths for drag & drop
+  // useDropTarget=false means accept drops anywhere without requiring CSS properties
+  useEffect(() => {
+    OnFileDrop((_x: number, _y: number, paths: string[]) => {
+      setIsDragging(false)
+      for (const path of paths) {
+        const name = path.split(/[\\/]/).pop() || path
+        setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
+      }
+    }, false)
+    return () => OnFileDropOff()
+  }, [])
 
   const handlePaste = useCallback(
     (e: ClipboardEvent) => {

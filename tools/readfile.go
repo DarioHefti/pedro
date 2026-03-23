@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ledongthuc/pdf"
+	"github.com/xuri/excelize/v2"
 )
 
 const (
@@ -23,7 +24,7 @@ func NewReadFileTool() *ReadFileTool { return &ReadFileTool{} }
 func (ReadFileTool) Definition() Definition {
 	return Definition{
 		Name:        "read_file",
-		Description: "Read a local file in paginated chunks. Always use offset and limit for large files. The response tells you the next offset to use if there is more content.",
+		Description: "Read a local file in paginated chunks. Always use offset and limit for large files. The response tells you the next offset to use if there is more content. For Excel files, it shows sheet metadata and reads data as CSV format.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -33,11 +34,15 @@ func (ReadFileTool) Definition() Definition {
 				},
 				"offset": map[string]any{
 					"type":        "integer",
-					"description": "Line number to start reading from, 1-indexed (default: 1)",
+					"description": "Line/row number to start reading from, 1-indexed (default: 1)",
 				},
 				"limit": map[string]any{
 					"type":        "integer",
-					"description": "Maximum number of lines to read (default: 2000)",
+					"description": "Maximum number of lines/rows to read (default: 2000)",
+				},
+				"sheet": map[string]any{
+					"type":        "string",
+					"description": "For Excel files: sheet name to read (default: first sheet)",
 				},
 			},
 			"required": []string{"path"},
@@ -50,18 +55,19 @@ func (r ReadFileTool) Execute(argsJSON string) (string, error) {
 		Path   string `json:"path"`
 		Offset int    `json:"offset"`
 		Limit  int    `json:"limit"`
+		Sheet  string `json:"sheet"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
-	result, err := r.read(args.Path, args.Offset, args.Limit)
+	result, err := r.read(args.Path, args.Offset, args.Limit, args.Sheet)
 	if err != nil {
 		return fmt.Sprintf("File read error: %v", err), nil
 	}
 	return result, nil
 }
 
-func (ReadFileTool) read(path string, offset, limit int) (string, error) {
+func (ReadFileTool) read(path string, offset, limit int, sheet string) (string, error) {
 	if offset < 1 {
 		offset = 1
 	}
@@ -72,6 +78,9 @@ func (ReadFileTool) read(path string, offset, limit int) (string, error) {
 	ext := strings.ToLower(path)
 	if strings.HasSuffix(ext, ".pdf") {
 		return readPDF(path, offset, limit)
+	}
+	if strings.HasSuffix(ext, ".xlsx") || strings.HasSuffix(ext, ".xls") || strings.HasSuffix(ext, ".xlsm") {
+		return readExcel(path, offset, limit, sheet)
 	}
 
 	return readTextFile(path, offset, limit)
@@ -156,6 +165,157 @@ func readTextFile(path string, offset, limit int) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+func readExcel(path string, offset, limit int, sheetName string) (string, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open Excel file: %v", err)
+	}
+	defer f.Close()
+
+	stat, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	fileSizeMB := float64(stat.Size()) / (1024 * 1024)
+
+	// Get all sheet names and their row counts for metadata
+	sheetList := f.GetSheetList()
+	if len(sheetList) == 0 {
+		return "", fmt.Errorf("Excel file has no sheets")
+	}
+
+	// Build sheet metadata
+	type sheetInfo struct {
+		name     string
+		rowCount int
+	}
+	var sheets []sheetInfo
+	for _, name := range sheetList {
+		rows, err := f.GetRows(name)
+		if err != nil {
+			sheets = append(sheets, sheetInfo{name: name, rowCount: 0})
+		} else {
+			sheets = append(sheets, sheetInfo{name: name, rowCount: len(rows)})
+		}
+	}
+
+	// Select sheet to read
+	targetSheet := sheetName
+	if targetSheet == "" {
+		targetSheet = sheetList[0]
+	}
+
+	// Verify sheet exists
+	sheetExists := false
+	for _, name := range sheetList {
+		if name == targetSheet {
+			sheetExists = true
+			break
+		}
+	}
+	if !sheetExists {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "File: %s (%.1f MB)\n", path, fileSizeMB)
+		sb.WriteString("Available sheets:\n")
+		for _, s := range sheets {
+			fmt.Fprintf(&sb, "  - %s (%d rows)\n", s.name, s.rowCount)
+		}
+		fmt.Fprintf(&sb, "\nError: Sheet '%s' not found", sheetName)
+		return sb.String(), nil
+	}
+
+	// Get rows from target sheet
+	rows, err := f.GetRows(targetSheet)
+	if err != nil {
+		return "", fmt.Errorf("failed to read sheet '%s': %v", targetSheet, err)
+	}
+
+	totalRows := len(rows)
+	var sb strings.Builder
+
+	// Header with metadata
+	fmt.Fprintf(&sb, "File: %s (%.1f MB)\n", path, fileSizeMB)
+	sb.WriteString("Sheets:\n")
+	for _, s := range sheets {
+		marker := "  "
+		if s.name == targetSheet {
+			marker = "→ "
+		}
+		fmt.Fprintf(&sb, "%s%s (%d rows)\n", marker, s.name, s.rowCount)
+	}
+	sb.WriteString("\n")
+
+	if totalRows == 0 {
+		fmt.Fprintf(&sb, "Sheet '%s' is empty", targetSheet)
+		return sb.String(), nil
+	}
+
+	if offset > totalRows {
+		fmt.Fprintf(&sb, "(No content at offset %d — sheet has %d rows total)", offset, totalRows)
+		return sb.String(), nil
+	}
+
+	// Read rows with pagination
+	end := offset + limit - 1
+	if end > totalRows {
+		end = totalRows
+	}
+	hasMore := end < totalRows
+
+	bytesUsed := 0
+	truncatedByBytes := false
+	lastRow := offset - 1
+
+	for i := offset - 1; i < end; i++ {
+		row := rows[i]
+		csvLine := formatRowAsCSV(row)
+		entry := fmt.Sprintf("%d: %s", i+1, csvLine)
+
+		if len(entry) > readMaxLineLen {
+			entry = fmt.Sprintf("%d: %s... (truncated)", i+1, entry[:readMaxLineLen])
+		}
+
+		if bytesUsed+len(entry)+1 > readMaxBytes && i > offset-1 {
+			truncatedByBytes = true
+			hasMore = true
+			break
+		}
+
+		sb.WriteString(entry)
+		sb.WriteByte('\n')
+		bytesUsed += len(entry) + 1
+		lastRow = i + 1
+	}
+
+	nextOffset := lastRow + 1
+
+	switch {
+	case truncatedByBytes:
+		fmt.Fprintf(&sb, "\n(Output capped at 50 KB. Showing rows %d-%d of %d. Call read_file with offset=%d to continue.)",
+			offset, lastRow, totalRows, nextOffset)
+	case hasMore:
+		fmt.Fprintf(&sb, "\n(Showing rows %d-%d of %d. Call read_file with offset=%d to continue.)",
+			offset, lastRow, totalRows, nextOffset)
+	default:
+		fmt.Fprintf(&sb, "\n(End of sheet — %d rows total)", totalRows)
+	}
+
+	return sb.String(), nil
+}
+
+// formatRowAsCSV converts a row to CSV format with proper quoting
+func formatRowAsCSV(row []string) string {
+	var parts []string
+	for _, cell := range row {
+		// Quote if contains comma, quote, or newline
+		if strings.ContainsAny(cell, ",\"\n\r") {
+			cell = "\"" + strings.ReplaceAll(cell, "\"", "\"\"") + "\""
+		}
+		parts = append(parts, cell)
+	}
+	return strings.Join(parts, ",")
 }
 
 func readPDF(path string, offset, limit int) (string, error) {
