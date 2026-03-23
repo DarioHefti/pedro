@@ -235,6 +235,10 @@ export function useMessaging({
     setToolCalls([])
   }
 
+  const stop = useCallback(() => {
+    messageService.abort()
+  }, [])
+
   return {
     messages,
     loading,
@@ -246,6 +250,7 @@ export function useMessaging({
     clear,
     send,
     regenerate,
+    stop,
   }
 }
 

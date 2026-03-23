@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import attachmentIcon from './assets/attachment.svg'
+import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import MessageRenderer from './MessageRenderer'
 
@@ -11,6 +12,7 @@ interface ChatProps {
   messageImages: Map<number, string[]>
   messageFiles: Map<number, FileAttachment[]>
   onSend: (content: string, attachments?: Attachment[]) => void
+  onStop: () => void
   onRegenerate: (index: number) => void
   /** Opens the native OS file picker; resolves to the selected path or "". */
   onSelectFile: () => Promise<string>
@@ -25,6 +27,7 @@ export default function Chat({
   messageImages,
   messageFiles,
   onSend,
+  onStop,
   onRegenerate,
   onSelectFile,
   welcomeMessage,
@@ -199,6 +202,9 @@ export default function Chat({
           const files = messageFiles.get(i)
           return (
             <div key={i} className={`message ${msg.Role}`}>
+              {msg.Role === 'assistant' && (
+                <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
+              )}
               {imgs && imgs.length > 0 && (
                 <div className="message-image-previews">
                   {imgs.map((src, j) => (
@@ -250,6 +256,7 @@ export default function Chat({
 
         {loading && (
           <div className="message assistant">
+            <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
             {streamingContent ? (
               <MessageRenderer
                 content={streamingContent}
@@ -301,7 +308,7 @@ export default function Chat({
           rows={1}
           disabled={loading}
         />
-        <button onClick={handleSend} disabled={loading}>
+        <button onClick={loading ? onStop : handleSend}>
           {loading ? 'Stop' : 'Send'}
         </button>
       </div>

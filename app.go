@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"pedro/tools"
 
@@ -11,10 +13,12 @@ import (
 )
 
 type App struct {
-	ctx      context.Context
-	store    Store
-	llm      LLMClient
-	registry *tools.Registry
+	ctx        context.Context
+	store      Store
+	llm        LLMClient
+	registry   *tools.Registry
+	cancelMu   sync.Mutex
+	cancelFunc context.CancelFunc
 }
 
 func NewApp() *App {
@@ -54,9 +58,21 @@ func (a *App) initLLM() {
 // and returns the full assistant response. It is the single authoritative path
 // for all LLM interactions to eliminate code duplication.
 func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cancelMu.Lock()
+	a.cancelFunc = cancel
+	a.cancelMu.Unlock()
+
+	defer func() {
+		cancel()
+		a.cancelMu.Lock()
+		a.cancelFunc = nil
+		a.cancelMu.Unlock()
+	}()
+
 	var response []byte
 	err := a.llm.Chat(
-		context.Background(),
+		ctx,
 		messages,
 		imageDataURLs,
 		func(chunk string) {
@@ -68,9 +84,22 @@ func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error
 		},
 	)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			// User stopped generation; return whatever was streamed so far.
+			return string(response), nil
+		}
 		return "", err
 	}
 	return string(response), nil
+}
+
+// AbortMessage cancels any in-flight LLM generation.
+func (a *App) AbortMessage() {
+	a.cancelMu.Lock()
+	defer a.cancelMu.Unlock()
+	if a.cancelFunc != nil {
+		a.cancelFunc()
+	}
 }
 
 func (a *App) GetConversations() []Conversation {

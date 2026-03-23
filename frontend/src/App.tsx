@@ -81,6 +81,7 @@ export default function App() {
         messageImages={messaging.messageImages}
         messageFiles={messaging.messageFiles}
         onSend={messaging.send}
+        onStop={messaging.stop}
         onRegenerate={messaging.regenerate}
         onSelectFile={fileService.select}
         welcomeMessage={welcomeMessage}

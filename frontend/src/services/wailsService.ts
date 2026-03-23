@@ -14,6 +14,7 @@ import {
   SendMessage,
   SendMessageWithImages,
   RegenerateMessage,
+  AbortMessage,
   GetSettings,
   SaveSettings,
   SetSetting,
@@ -50,6 +51,7 @@ export const messageService = {
     images: string[],
   ): Promise<string> => SendMessageWithImages(convID, content, images),
   regenerate: (convID: number): Promise<string> => RegenerateMessage(convID),
+  abort: (): Promise<void> => AbortMessage(),
 }
 
 // ---------------------------------------------------------------------------

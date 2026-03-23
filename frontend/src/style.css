@@ -273,6 +273,16 @@ body {
 .message.assistant {
   border-left: 3px solid var(--ai-border);
   align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .message.tool {
