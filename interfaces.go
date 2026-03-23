@@ -38,4 +38,5 @@ type Store interface {
 
 type LLMClient interface {
 	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error
+	SetCustomSystemPrompt(prompt string)
 }

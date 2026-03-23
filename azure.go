@@ -11,9 +11,10 @@ import (
 )
 
 type AzureClient struct {
-	client     *openai.Client
-	deployment string
-	registry   *tools.Registry
+	client             *openai.Client
+	deployment         string
+	registry           *tools.Registry
+	customSystemPrompt string
 }
 
 func NewAzureClient(endpoint, apiKey, deployment string, registry *tools.Registry) (*AzureClient, error) {
@@ -25,10 +26,22 @@ func NewAzureClient(endpoint, apiKey, deployment string, registry *tools.Registr
 	client := openai.NewClientWithConfig(config)
 
 	return &AzureClient{
-		client:     client,
-		deployment: deployment,
-		registry:   registry,
+		client:             client,
+		deployment:         deployment,
+		registry:           registry,
+		customSystemPrompt: "",
 	}, nil
+}
+
+func (a *AzureClient) SetCustomSystemPrompt(prompt string) {
+	a.customSystemPrompt = prompt
+}
+
+func (a *AzureClient) getFullSystemPrompt() string {
+	if a.customSystemPrompt == "" {
+		return SystemPrompt
+	}
+	return SystemPrompt + "\n\n## Additional Instructions\n" + a.customSystemPrompt
 }
 
 // toolDefinitions converts the registry's provider-agnostic definitions to
@@ -52,9 +65,9 @@ func (a *AzureClient) toolDefinitions() []openai.Tool {
 }
 
 func (a *AzureClient) Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error {
-	// Always prepend the system prompt, then append stored messages
+	// Always prepend the system prompt (base + custom), then append stored messages
 	openaiMsgs := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleSystem, Content: SystemPrompt},
+		{Role: openai.ChatMessageRoleSystem, Content: a.getFullSystemPrompt()},
 	}
 	for i, m := range messages {
 		if m.Role != "user" && m.Role != "assistant" && m.Role != "system" {

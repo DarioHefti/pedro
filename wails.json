@@ -9,5 +9,12 @@
   "author": {
     "name": "Dario Hefti",
     "email": "dario.hefti@bluewin.ch"
+  },
+  "Info": {
+    "companyName": "Pedro Corp",
+    "productName": "Pedro",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2026",
+    "comments": "Built with Wails"
   }
 }

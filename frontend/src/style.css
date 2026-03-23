@@ -491,6 +491,13 @@ body {
   transition: background 0.2s ease;
 }
 
+.modal-content.settings-modal {
+  width: 520px;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+
 .modal-content h2 {
   margin-bottom: 20px;
   font-size: 18px;
@@ -520,6 +527,101 @@ body {
 
 .modal-content input::placeholder {
   color: var(--text-muted);
+}
+
+/* ===== Settings Modal Tabs ===== */
+.settings-modal {
+  width: 520px;
+  max-width: 90%;
+}
+
+.settings-modal h2 {
+  margin-bottom: 16px;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tab {
+  padding: 10px 20px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+}
+
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.settings-tab-content {
+  flex: 1;
+  min-height: 280px;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  margin-top: -4px;
+  line-height: 1.4;
+}
+
+.system-prompt-textarea {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 16px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 180px;
+  transition: background 0.2s ease, border-color 0.15s ease;
+}
+
+.system-prompt-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.system-prompt-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.welcome-message-label {
+  margin-top: 8px;
+}
+
+.settings-test-row {
+  margin-top: 8px;
 }
 
 .modal-content input:focus {
@@ -554,13 +656,26 @@ body {
   cursor: not-allowed;
 }
 
-.modal-buttons .test-btn {
+.modal-buttons .test-btn,
+.settings-test-row .test-btn {
   background: var(--ai-border);
   color: #ffffff;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease;
 }
 
-.modal-buttons .test-btn:hover:not(:disabled) {
+.modal-buttons .test-btn:hover:not(:disabled),
+.settings-test-row .test-btn:hover:not(:disabled) {
   filter: brightness(1.1);
+}
+
+.settings-test-row .test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-buttons .save-btn {

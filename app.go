@@ -50,6 +50,11 @@ func (a *App) initLLM() {
 			fmt.Println("LLM init error:", err.Error())
 			return
 		}
+
+		// Load and set custom system prompt if it exists
+		customPrompt, _ := a.store.GetSetting("custom_system_prompt")
+		llm.SetCustomSystemPrompt(customPrompt)
+
 		a.llm = llm
 	}
 }
@@ -311,7 +316,16 @@ func (a *App) SetSetting(key, value string) error {
 	if a.store == nil {
 		return nil
 	}
-	return a.store.SetSetting(key, value)
+	if err := a.store.SetSetting(key, value); err != nil {
+		return err
+	}
+
+	// If the custom system prompt is updated, apply it immediately to the running LLM client
+	if key == "custom_system_prompt" && a.llm != nil {
+		a.llm.SetCustomSystemPrompt(value)
+	}
+
+	return nil
 }
 
 func (a *App) TestConnection(endpoint, apiKey, deployment string) string {
