@@ -759,6 +759,44 @@ body {
   box-shadow: 0 4px 12px var(--shadow);
 }
 
+/* ===== In-message file attachment chips ===== */
+.message-file-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.message-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: default;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.message-file-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.message-file-icon {
+  font-size: 14px;
+}
+
+.message-file-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ===== Attachments ===== */
 .attachments-preview {
   display: flex;

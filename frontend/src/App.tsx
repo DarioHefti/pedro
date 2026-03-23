@@ -32,6 +32,8 @@ export default function App() {
   const [streamingContent, setStreamingContent] = useState<string>('')
   // Maps message array index -> image data URLs for that user message (session-only, not persisted)
   const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
+  // Maps message array index -> file attachments for that user message (session-only, not persisted)
+  const [messageFiles, setMessageFiles] = useState<Map<number, { name: string; path: string; type: string }[]>>(new Map())
   const toolCallsRef = useRef<ToolCall[]>([])
   const streamingContentRef = useRef<string>('')
 
@@ -48,6 +50,7 @@ export default function App() {
   async function selectConversation(id: number) {
     setCurrentConvID(id)
     setMessageImages(new Map()) // clear session images when switching conv
+    setMessageFiles(new Map()) // clear session files when switching conv
     const msgs = await GetMessages(id)
     setMessages(msgs ?? [])
   }
@@ -56,6 +59,7 @@ export default function App() {
     setCurrentConvID(null)
     setMessages([])
     setMessageImages(new Map())
+    setMessageFiles(new Map())
   }
 
   async function deleteConversation(id: number) {
@@ -65,6 +69,7 @@ export default function App() {
       setCurrentConvID(null)
       setMessages([])
       setMessageImages(new Map())
+      setMessageFiles(new Map())
     }
   }
 
@@ -83,26 +88,40 @@ export default function App() {
       .filter(a => a.type === 'image')
       .map(a => a.content)
 
-    const nonImageAttachContent = (attachments ?? [])
-      .filter(a => a.type !== 'image')
-      .map(a => {
-        if (a.type === 'file-ref') {
-          return `[File: ${a.name}]\n[Path: ${a.content}]\n[Large file attached by path. Use the read_file tool with this path to read it in chunks.]`
-        }
-        return `[File: ${a.name}]\n${a.content}`
-      }).join('\n\n')
+    // Create content for the LLM (includes file refs) vs display content (clean)
+    const llmContent = (() => {
+      const nonImageAttachContent = (attachments ?? [])
+        .filter(a => a.type !== 'image')
+        .map(a => {
+          if (a.type === 'file-ref') {
+            return `[File: ${a.name}]\n[Path: ${a.content}]\n[Large file attached by path. Use the read_file tool with this path to read it in chunks.]`
+          }
+          return `[File: ${a.name}]\n${a.content}`
+        }).join('\n\n')
 
-    const fullContent = nonImageAttachContent
-      ? `${content}\n\n${nonImageAttachContent}`
-      : content
+      return nonImageAttachContent
+        ? `${content}\n\n${nonImageAttachContent}`
+        : content
+    })()
 
     // Optimistically add the user message and record image index
     setMessages(prev => {
-      const newMsgs = [...prev, { Role: 'user', Content: fullContent } as main.Message]
+      const newMsgs = [...prev, { Role: 'user', Content: content } as main.Message]  // Display: clean content
       if (imageDataURLs.length > 0) {
         setMessageImages(imgMap => {
           const updated = new Map(imgMap)
           updated.set(newMsgs.length - 1, imageDataURLs)
+          return updated
+        })
+      }
+      // Track file attachments (non-image)
+      const fileAttachments = (attachments ?? [])
+        .filter(a => a.type === 'file-ref')
+        .map(a => ({ name: a.name, path: a.content, type: 'file' }))
+      if (fileAttachments.length > 0) {
+        setMessageFiles(filesMap => {
+          const updated = new Map(filesMap)
+          updated.set(newMsgs.length - 1, fileAttachments)
           return updated
         })
       }
@@ -129,13 +148,13 @@ export default function App() {
     try {
       let response: string
       if (imageDataURLs.length > 0) {
-        response = await SendMessageWithImages(convID, fullContent, imageDataURLs)
+        response = await SendMessageWithImages(convID, llmContent, imageDataURLs)
       } else {
-        response = await SendMessage(convID, fullContent)
+        response = await SendMessage(convID, llmContent)
       }
 
       const msgs = await GetMessages(convID)
-      // Re-map images to new indices after DB reload (user messages keep same relative order)
+      // Re-map images and files to new indices after DB reload (user messages keep same relative order)
       setMessages(prev => {
         const dbMsgs = msgs ?? []
         // Rebuild image map: find user messages that match our tracked ones
@@ -150,6 +169,21 @@ export default function App() {
                   !Array.from(updated.keys()).includes(i)
               )
               if (newIdx >= 0) updated.set(newIdx, imgs)
+            }
+          })
+          return updated
+        })
+        // Rebuild file attachments map
+        setMessageFiles(filesMap => {
+          const updated = new Map<number, { name: string; path: string; type: string }[]>()
+          filesMap.forEach((files, oldIdx) => {
+            const oldMsg = prev[oldIdx]
+            if (oldMsg) {
+              const newIdx = dbMsgs.findIndex(
+                (m, i) => m.Role === 'user' && m.Content === oldMsg.Content &&
+                  !Array.from(updated.keys()).includes(i)
+              )
+              if (newIdx >= 0) updated.set(newIdx, files)
             }
           })
           return updated
@@ -229,6 +263,7 @@ export default function App() {
         toolCalls={toolCalls}
         streamingContent={streamingContent}
         messageImages={messageImages}
+        messageFiles={messageFiles}
         onSend={sendMessage}
         onRegenerate={handleRegenerate}
       />

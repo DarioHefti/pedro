@@ -11,6 +11,7 @@ interface ChatProps {
   loading: boolean
   streamingContent: string
   messageImages: Map<number, string[]>
+  messageFiles: Map<number, { name: string; path: string; type: string }[]>
   onSend: (content: string, attachments?: { type: string; content: string; name: string }[]) => void
   onRegenerate: (index: number) => void
 }
@@ -21,15 +22,18 @@ interface Attachment {
   name: string
 }
 
-export default function Chat({ messages, toolCalls, loading, streamingContent, messageImages, onSend, onRegenerate }: ChatProps) {
+export default function Chat({ messages, toolCalls, loading, streamingContent, messageImages, messageFiles, onSend, onRegenerate }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const [showJumpButtons, setShowJumpButtons] = useState(false)
+  const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const prevScrollTop = useRef<number>(0)
+  const prevStreamingContent = useRef<string>('')
 
   useEffect(() => {
     if (autoScroll && bottomRef.current) {
@@ -42,7 +46,20 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
       if (messagesRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = messagesRef.current
         const atBottom = scrollHeight - scrollTop - clientHeight < 100
-        setAutoScroll(atBottom)
+        
+        // Detect if user scrolled up (not just at bottom check)
+        if (scrollTop < prevScrollTop.current - 5) {
+          setUserHasScrolledUp(true)
+          setAutoScroll(false)
+        }
+        
+        prevScrollTop.current = scrollTop
+        
+        // Re-enable auto-scroll only when at bottom AND user hasn't scrolled up
+        if (atBottom && !userHasScrolledUp) {
+          setAutoScroll(true)
+        }
+        
         setShowJumpButtons(!atBottom)
       }
     }
@@ -50,7 +67,15 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
     const msgDiv = messagesRef.current
     msgDiv?.addEventListener('scroll', handleScroll)
     return () => msgDiv?.removeEventListener('scroll', handleScroll)
-  }, [])
+  }, [userHasScrolledUp])
+
+  useEffect(() => {
+    // Reset userHasScrolledUp when streaming ends
+    if (!streamingContent && prevStreamingContent.current) {
+      setUserHasScrolledUp(false)
+    }
+    prevStreamingContent.current = streamingContent
+  }, [streamingContent])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -143,15 +168,8 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
 
   const jumpToBottom = () => {
     setAutoScroll(true)
+    setUserHasScrolledUp(false)
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const jumpToResponse = () => {
-    const aiIndex = messages.findIndex(m => m.Role === 'assistant')
-    if (aiIndex >= 0 && messagesRef.current) {
-      const msgEl = messagesRef.current.children[aiIndex]
-      msgEl?.scrollIntoView({ behavior: 'smooth' })
-    }
   }
 
   const copyMessage = (content: string) => {
@@ -177,7 +195,6 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
 
       {showJumpButtons && (
         <div className="jump-buttons">
-          <button onClick={jumpToResponse} title="Jump to response">↓ Response</button>
           <button onClick={jumpToBottom} title="Jump to bottom">↓ Bottom</button>
         </div>
       )}
@@ -185,12 +202,23 @@ export default function Chat({ messages, toolCalls, loading, streamingContent, m
       <div className="messages" ref={messagesRef}>
         {messages.map((msg, i) => {
           const imgs = messageImages.get(i)
+          const files = messageFiles.get(i)
           return (
             <div key={i} className={`message ${msg.Role}`}>
               {imgs && imgs.length > 0 && (
                 <div className="message-image-previews">
                   {imgs.map((src, j) => (
                     <img key={j} src={src} alt={`Attached image ${j + 1}`} className="message-image-thumb" />
+                  ))}
+                </div>
+              )}
+              {files && files.length > 0 && (
+                <div className="message-file-previews">
+                  {files.map((file, j) => (
+                    <div key={j} className="message-file-chip" title={file.path}>
+                      <span className="message-file-icon">📄</span>
+                      <span className="message-file-name">{file.name}</span>
+                    </div>
                   ))}
                 </div>
               )}

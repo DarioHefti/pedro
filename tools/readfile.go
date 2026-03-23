@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/ledongthuc/pdf"
 )
 
 const (
 	readDefaultLimit = 2000
-	readMaxBytes     = 50 * 1024 // 50 KB per call
+	readMaxBytes     = 50 * 1024
 	readMaxLineLen   = 2000
 )
 
-// ReadFileTool reads a local file in paginated 50 KB chunks.
-// The LLM is told the next offset to use if there is more content.
 type ReadFileTool struct{}
 
 func NewReadFileTool() *ReadFileTool { return &ReadFileTool{} }
@@ -69,6 +69,15 @@ func (ReadFileTool) read(path string, offset, limit int) (string, error) {
 		limit = readDefaultLimit
 	}
 
+	ext := strings.ToLower(path)
+	if strings.HasSuffix(ext, ".pdf") {
+		return readPDF(path, offset, limit)
+	}
+
+	return readTextFile(path, offset, limit)
+}
+
+func readTextFile(path string, offset, limit int) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -82,7 +91,6 @@ func (ReadFileTool) read(path string, offset, limit int) (string, error) {
 	fileSizeMB := float64(stat.Size()) / (1024 * 1024)
 
 	scanner := bufio.NewScanner(f)
-	// Large buffer — handles minified JSON (single long lines up to 4 MB)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 
 	var lines []string
@@ -145,6 +153,85 @@ func (ReadFileTool) read(path string, offset, limit int) (string, error) {
 			offset, lastLine, nextOffset)
 	default:
 		fmt.Fprintf(&sb, "\n(End of file — %d lines total)", lastLine)
+	}
+
+	return sb.String(), nil
+}
+
+func readPDF(path string, offset, limit int) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	fileSizeMB := float64(stat.Size()) / (1024 * 1024)
+
+	pdfReader, err := pdf.NewReader(f, stat.Size())
+	if err != nil {
+		return "", fmt.Errorf("failed to open PDF: %v", err)
+	}
+
+	numPages := pdfReader.NumPage()
+	var allLines []string
+
+	for i := 1; i <= numPages; i++ {
+		page := pdfReader.Page(i)
+		if page.V.IsNull() {
+			continue
+		}
+
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			continue
+		}
+
+		allLines = append(allLines, fmt.Sprintf("--- Page %d ---", i))
+		lines := strings.Split(text, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				allLines = append(allLines, trimmed)
+			}
+		}
+	}
+
+	totalLines := len(allLines)
+	if offset > totalLines {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "File: %s (%.1f MB)\n\n", path, fileSizeMB)
+		sb.WriteString(fmt.Sprintf("(No content at offset %d — file has %d lines total)", offset, totalLines))
+		return sb.String(), nil
+	}
+
+	end := offset + limit - 1
+	if end > totalLines {
+		end = totalLines
+	}
+	hasMore := end < totalLines
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "File: %s (%.1f MB, %d pages)\n\n", path, fileSizeMB, numPages)
+
+	if totalLines == 0 {
+		sb.WriteString("(No text content found in PDF)")
+		return sb.String(), nil
+	}
+
+	for i := offset - 1; i < end; i++ {
+		sb.WriteString(fmt.Sprintf("%d: %s\n", i+1, allLines[i]))
+	}
+
+	nextOffset := end + 1
+	if hasMore {
+		fmt.Fprintf(&sb, "\n(Showing lines %d-%d of %d. Call read_file with offset=%d to continue.)",
+			offset, end, totalLines, nextOffset)
+	} else {
+		fmt.Fprintf(&sb, "\n(End of file — %d lines total)", totalLines)
 	}
 
 	return sb.String(), nil

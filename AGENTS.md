@@ -1,3 +1,5 @@
+ALWAYS ALWAYS make sure that all code that you changed compiles, be it front or backend!
+
 backend coding guidelines:
 always keep all the implementations hidden behind an interface so it enforces high modularity, exchangeability and testability.
 
@@ -8,28 +10,6 @@ frontend coding guidelines:
 ALWAYS use typescript where possible!
 
 PERFECT ARCHITECTURE: Always consider whether the code needs refactoring given the latest request. If it does, refactor the code to be more efficient and maintainable. Spaghetti code is your enemy.
-
-### SEO Requirements:
-
-ALWAYS implement SEO best practices automatically for every page/component.
-
-- **Title tags**: Include main keyword, keep under 60 characters
-- **Meta description**: Max 160 characters with target keyword naturally integrated
-- **Single H1**: Must match page's primary intent and include main keyword
-- **Semantic HTML**: Use ``, ``, ``, ``, ``, ``
-- **Image optimization**: All images must have descriptive alt attributes with relevant keywords
-- **Structured data**: Add JSON-LD for products, articles, FAQs when applicable
-- **Performance**: Implement lazy loading for images, defer non-critical scripts
-- **Canonical tags**: Add to prevent duplicate content issues
-- **Mobile optimization**: Ensure responsive design with proper viewport meta tag
-- **Clean URLs**: Use descriptive, crawlable internal links
-
-- Assume users want to discuss and plan rather than immediately implement code.
-- Before coding, verify if the requested feature already exists. If it does, inform the user without modifying code.
-- For debugging, ALWAYS use debugging tools FIRST before examining or modifying code.
-- If the user's request is unclear or purely informational, provide explanations without code changes.
-- ALWAYS check the "useful-context" section before reading files that might already be in your context.
-- If you want to edit a file, you need to be sure you have it in your context, and read it if you 
 
 ## Design guidelines
 
