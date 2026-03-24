@@ -42,3 +42,22 @@ git push origin v1.0.0
 ## Why "Pedro"?
 
 We didn't name it. The logs just started calling it that and we were too afraid to ask.
+
+
+# Problems on windows (windows defender issues)
+the installer is not signed, so you need to do the following to allow it.
+right click on the installer, then click "unblock", apply, save.
+
+then open powershell as admin and run this (you will need to set the actual path)
+
+```ps
+Add-MpPreference -AttackSurfaceReductionOnlyExclusions "PATH TO INSTALLER \Pedro-windows-amd64-installer.exe"
+```
+
+then run this (if you use the standard installation path, otherwise set your path).
+
+```ps
+Add-MpPreference -AttackSurfaceReductionOnlyExclusions "C:\Program Files\Pedro Corp\Pedro\pedro.exe"
+```
+
+then double click the installer and it should finally work.
