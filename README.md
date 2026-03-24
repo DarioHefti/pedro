@@ -35,6 +35,10 @@ wails dev
 wails build
 ```
 
+# Create a release
+git tag v1.0.0
+git push origin v1.0.0
+
 ## Why "Pedro"?
 
 We didn't name it. The logs just started calling it that and we were too afraid to ask.
