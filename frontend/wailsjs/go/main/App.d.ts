@@ -8,15 +8,19 @@ export function CreateConversation():Promise<main.Conversation>;
 
 export function DeleteConversation(arg1:number):Promise<void>;
 
+export function GetAvailableProviders():Promise<Array<Record<string, string>>>;
+
 export function GetConversations():Promise<Array<main.Conversation>>;
 
 export function GetMessages(arg1:number):Promise<Array<main.Message>>;
 
 export function GetSettings():Promise<Record<string, string>>;
 
+export function IsAuthenticated():Promise<boolean>;
+
 export function RegenerateMessage(arg1:number):Promise<string>;
 
-export function SaveSettings(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SaveSettings(arg1:Record<string, string>):Promise<void>;
 
 export function SearchMessages(arg1:string):Promise<Record<number, Array<main.Message>>>;
 
@@ -28,4 +32,8 @@ export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>
 
 export function SetSetting(arg1:string,arg2:string):Promise<void>;
 
-export function TestConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function SignIn():Promise<string>;
+
+export function SignOut():Promise<void>;
+
+export function TestConnection():Promise<string>;

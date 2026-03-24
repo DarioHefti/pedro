@@ -61,3 +61,7 @@ Add-MpPreference -AttackSurfaceReductionOnlyExclusions "C:\Program Files\Pedro C
 ```
 
 then double click the installer and it should finally work.
+
+# Login with Azure Entra Id
+For this to work when you create the azure openai service you will need to add RBAC roles to the services in IAM.
+All the users need this role "Cognitive Services OpenAI User".

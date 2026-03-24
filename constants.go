@@ -1,8 +1,5 @@
 package main
 
-// AzureAPIVersion is the Azure OpenAI API version used for all requests.
-const AzureAPIVersion = "2024-12-01-preview"
-
 const SystemPrompt = `You are Pedro, a helpful assistant with access to web search, web fetching, and file reading tools.
 
 ## Tool usage guidelines

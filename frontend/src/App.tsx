@@ -93,6 +93,9 @@ export default function App() {
           saveSettings={settingsService.save}
           setSetting={settingsService.setSetting}
           testConnection={settingsService.test}
+          signIn={settingsService.signIn}
+          signOut={settingsService.signOut}
+          isAuthenticated={settingsService.isAuthenticated}
         />
       )}
       <Toaster />

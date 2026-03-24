@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"time"
 )
 
@@ -34,9 +33,4 @@ type Store interface {
 	SetSetting(key, value string) error
 	GetSettings() (map[string]string, error)
 	Close() error
-}
-
-type LLMClient interface {
-	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error
-	SetCustomSystemPrompt(prompt string)
 }
