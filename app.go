@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 
+	"pedro/providers"
 	"pedro/tools"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -15,8 +15,9 @@ import (
 type App struct {
 	ctx        context.Context
 	store      Store
-	llm        LLMClient
+	llm        providers.LLMClient
 	registry   *tools.Registry
+	factory    *providers.Factory
 	cancelMu   sync.Mutex
 	cancelFunc context.CancelFunc
 }
@@ -25,12 +26,16 @@ func NewApp() *App {
 	db, err := NewDatabase()
 	if err != nil {
 		fmt.Println("Database error:", err.Error())
-		return &App{store: nil, llm: nil, registry: nil}
+		return &App{store: nil, registry: nil, factory: nil}
 	}
+
+	factory := providers.NewFactory()
+	providers.RegisterProviders(factory)
 
 	return &App{
 		store:    db,
 		registry: tools.New(),
+		factory:  factory,
 	}
 }
 
@@ -40,28 +45,40 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) initLLM() {
-	endpoint, _ := a.store.GetSetting("azure_endpoint")
-	apiKey, _ := a.store.GetSetting("azure_api_key")
-	deployment, _ := a.store.GetSetting("azure_deployment")
-
-	if endpoint != "" && apiKey != "" && deployment != "" {
-		llm, err := NewAzureClient(endpoint, apiKey, deployment, a.registry)
-		if err != nil {
-			fmt.Println("LLM init error:", err.Error())
-			return
-		}
-
-		// Load and set custom system prompt if it exists
-		customPrompt, _ := a.store.GetSetting("custom_system_prompt")
-		llm.SetCustomSystemPrompt(customPrompt)
-
-		a.llm = llm
+	settings, err := a.store.GetSettings()
+	if err != nil {
+		fmt.Println("GetSettings error:", err.Error())
+		return
 	}
+
+	providerType := settings["provider_type"]
+	if providerType == "" {
+		return
+	}
+
+	cfg, err := a.factory.ParseSettings(settings)
+	if err != nil {
+		fmt.Println("Failed to parse provider config:", err.Error())
+		return
+	}
+
+	llm, err := a.factory.Create(cfg, a.store, a.registry)
+	if err != nil {
+		fmt.Println("LLM init error:", err.Error())
+		return
+	}
+
+	if settings["authenticated"] == "true" {
+		llm.SetAuthenticated(true)
+	}
+
+	if customPrompt, ok := settings["custom_system_prompt"]; ok {
+		llm.SetCustomSystemPrompt(customPrompt)
+	}
+
+	a.llm = llm
 }
 
-// runChat invokes the LLM, streams chunks and tool-call events to the frontend,
-// and returns the full assistant response. It is the single authoritative path
-// for all LLM interactions to eliminate code duplication.
 func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancelMu.Lock()
@@ -75,10 +92,15 @@ func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error
 		a.cancelMu.Unlock()
 	}()
 
+	llmMessages := make([]providers.Message, len(messages))
+	for i, m := range messages {
+		llmMessages[i] = providers.Message{Role: m.Role, Content: m.Content}
+	}
+
 	var response []byte
 	err := a.llm.Chat(
 		ctx,
-		messages,
+		llmMessages,
 		imageDataURLs,
 		func(chunk string) {
 			response = append(response, chunk...)
@@ -90,7 +112,6 @@ func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error
 	)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			// User stopped generation; return whatever was streamed so far.
 			return string(response), nil
 		}
 		return "", err
@@ -98,13 +119,38 @@ func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error
 	return string(response), nil
 }
 
-// AbortMessage cancels any in-flight LLM generation.
 func (a *App) AbortMessage() {
 	a.cancelMu.Lock()
 	defer a.cancelMu.Unlock()
 	if a.cancelFunc != nil {
 		a.cancelFunc()
 	}
+}
+
+func (a *App) SignIn() string {
+	if a.llm == nil {
+		return "Error: No LLM provider configured – save your settings first"
+	}
+	if err := a.llm.SignIn(context.Background()); err != nil {
+		return "Error: " + err.Error()
+	}
+	_ = a.store.SetSetting("authenticated", "true")
+	return ""
+}
+
+func (a *App) SignOut() error {
+	if a.llm != nil {
+		_ = a.llm.SignOut()
+	}
+	_ = a.store.SetSetting("authenticated", "false")
+	return nil
+}
+
+func (a *App) IsAuthenticated() bool {
+	if a.llm == nil {
+		return false
+	}
+	return a.llm.IsAuthenticated()
 }
 
 func (a *App) GetConversations() []Conversation {
@@ -177,7 +223,7 @@ func (a *App) SendMessage(conversationID int64, content string) string {
 	}
 
 	if a.llm == nil {
-		return "Error: Please configure Azure AI settings first"
+		return "Error: Please configure LLM provider settings first"
 	}
 
 	resp, err := a.runChat(messages, nil)
@@ -191,9 +237,6 @@ func (a *App) SendMessage(conversationID int64, content string) string {
 	return resp
 }
 
-// SendMessageWithImages sends a user message alongside image data URLs.
-// The plain text content is stored in the DB; images are passed directly to
-// the LLM via the multimodal API and are not persisted.
 func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string) string {
 	if a.store == nil {
 		return "Error: Database not initialized"
@@ -209,7 +252,7 @@ func (a *App) SendMessageWithImages(conversationID int64, content string, imageD
 	}
 
 	if a.llm == nil {
-		return "Error: Please configure Azure AI settings first"
+		return "Error: Please configure LLM provider settings first"
 	}
 
 	resp, err := a.runChat(messages, imageDataURLs)
@@ -223,7 +266,6 @@ func (a *App) SendMessageWithImages(conversationID int64, content string, imageD
 	return resp
 }
 
-// RegenerateMessage removes the last assistant message and generates a new one.
 func (a *App) RegenerateMessage(conversationID int64) string {
 	if a.store == nil {
 		return "Error: Database not initialized"
@@ -234,7 +276,6 @@ func (a *App) RegenerateMessage(conversationID int64) string {
 		return "Error: Failed to get messages: " + err.Error()
 	}
 
-	// Find and remove the last assistant message
 	lastAssistantIdx := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "assistant" {
@@ -257,7 +298,7 @@ func (a *App) RegenerateMessage(conversationID int64) string {
 	}
 
 	if a.llm == nil {
-		return "Error: Please configure Azure AI settings first"
+		return "Error: Please configure LLM provider settings first"
 	}
 
 	resp, err := a.runChat(messages, nil)
@@ -283,25 +324,31 @@ func (a *App) GetSettings() map[string]string {
 	return settings
 }
 
-func (a *App) SaveSettings(endpoint, apiKey, deployment string) error {
+func (a *App) SaveSettings(settings map[string]string) error {
 	if a.store == nil {
 		return nil
 	}
-	if err := a.store.SetSetting("azure_endpoint", endpoint); err != nil {
-		return err
+
+	if nextProvider, hasProvider := settings["provider_type"]; hasProvider {
+		prevProvider, _ := a.store.GetSetting("provider_type")
+		if prevProvider != "" && prevProvider != nextProvider {
+			if a.llm != nil {
+				_ = a.llm.SignOut()
+			}
+			_ = a.store.SetSetting("authenticated", "false")
+		}
 	}
-	if err := a.store.SetSetting("azure_api_key", apiKey); err != nil {
-		return err
+
+	for key, value := range settings {
+		if err := a.store.SetSetting(key, value); err != nil {
+			return err
+		}
 	}
-	if err := a.store.SetSetting("azure_deployment", deployment); err != nil {
-		return err
-	}
+
 	a.initLLM()
 	return nil
 }
 
-// SelectFile opens a native OS file dialog and returns the selected file path.
-// Returns an empty string if the user cancels.
 func (a *App) SelectFile() string {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select File",
@@ -309,7 +356,7 @@ func (a *App) SelectFile() string {
 	if err != nil || path == "" {
 		return ""
 	}
-	return filepath.ToSlash(path)
+	return path
 }
 
 func (a *App) SetSetting(key, value string) error {
@@ -320,7 +367,6 @@ func (a *App) SetSetting(key, value string) error {
 		return err
 	}
 
-	// If the custom system prompt is updated, apply it immediately to the running LLM client
 	if key == "custom_system_prompt" && a.llm != nil {
 		a.llm.SetCustomSystemPrompt(value)
 	}
@@ -328,19 +374,37 @@ func (a *App) SetSetting(key, value string) error {
 	return nil
 }
 
-func (a *App) TestConnection(endpoint, apiKey, deployment string) string {
-	if endpoint == "" || apiKey == "" || deployment == "" {
-		return "Error: All fields are required"
+func (a *App) TestConnection() string {
+	if a.llm == nil {
+		return "Error: No LLM provider configured – save your settings first"
 	}
 
-	client, err := NewAzureClient(endpoint, apiKey, deployment, nil)
-	if err != nil {
-		return "Error: " + err.Error()
+	if !a.llm.IsAuthenticated() {
+		if err := a.llm.SignIn(context.Background()); err != nil {
+			return "Error: Sign in failed: " + err.Error()
+		}
+		_ = a.store.SetSetting("authenticated", "true")
 	}
 
-	testMsg := []Message{{Role: "user", Content: "Hi"}}
-	if err := client.Chat(context.Background(), testMsg, nil, func(string) {}, nil); err != nil {
+	testMsg := []providers.Message{{Role: "user", Content: "Hi"}}
+	if err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil); err != nil {
 		return "Error: " + err.Error()
 	}
 	return "Connection successful!"
+}
+
+func (a *App) GetAvailableProviders() []map[string]string {
+	if a.factory == nil {
+		return []map[string]string{}
+	}
+
+	descriptors := a.factory.RegisteredProviderDescriptors()
+	result := make([]map[string]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		result = append(result, map[string]string{
+			"id":   string(descriptor.ID),
+			"name": descriptor.Name,
+		})
+	}
+	return result
 }

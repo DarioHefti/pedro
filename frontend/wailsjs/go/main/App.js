@@ -14,6 +14,10 @@ export function DeleteConversation(arg1) {
   return window['go']['main']['App']['DeleteConversation'](arg1);
 }
 
+export function GetAvailableProviders() {
+  return window['go']['main']['App']['GetAvailableProviders']();
+}
+
 export function GetConversations() {
   return window['go']['main']['App']['GetConversations']();
 }
@@ -26,12 +30,16 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function IsAuthenticated() {
+  return window['go']['main']['App']['IsAuthenticated']();
+}
+
 export function RegenerateMessage(arg1) {
   return window['go']['main']['App']['RegenerateMessage'](arg1);
 }
 
-export function SaveSettings(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SaveSettings'](arg1, arg2, arg3);
+export function SaveSettings(arg1) {
+  return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
 export function SearchMessages(arg1) {
@@ -54,6 +62,14 @@ export function SetSetting(arg1, arg2) {
   return window['go']['main']['App']['SetSetting'](arg1, arg2);
 }
 
-export function TestConnection(arg1, arg2, arg3) {
-  return window['go']['main']['App']['TestConnection'](arg1, arg2, arg3);
+export function SignIn() {
+  return window['go']['main']['App']['SignIn']();
+}
+
+export function SignOut() {
+  return window['go']['main']['App']['SignOut']();
+}
+
+export function TestConnection() {
+  return window['go']['main']['App']['TestConnection']();
 }

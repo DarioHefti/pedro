@@ -694,6 +694,26 @@ body {
   line-height: 1.4;
 }
 
+.provider-select {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.15s ease;
+}
+
+.provider-select:focus {
+  outline: none;
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-shadow);
+}
+
 .system-prompt-textarea {
   width: 100%;
   padding: 12px;
@@ -726,6 +746,78 @@ body {
 
 .settings-test-row {
   margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ===== Auth Status ===== */
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.auth-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.auth-dot--signed-in {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+
+.auth-dot--signed-out {
+  background: var(--text-muted, var(--text-secondary));
+}
+
+.auth-status-text {
+  font-weight: 500;
+}
+
+/* Sign In / Sign Out buttons */
+.sign-in-btn,
+.sign-out-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sign-in-btn {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.sign-in-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.sign-out-btn {
+  background: var(--bg-chat-user);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.sign-out-btn:hover:not(:disabled) {
+  background: var(--btn-ghost-hover-bg);
+}
+
+.sign-in-btn:disabled,
+.sign-out-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-content input:focus {

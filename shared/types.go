@@ -1,7 +1,35 @@
-package main
+package shared
 
-// AzureAPIVersion is the Azure OpenAI API version used for all requests.
-const AzureAPIVersion = "2024-12-01-preview"
+import (
+	"context"
+)
+
+// SettingsStore provides key-value persistence for provider-specific data
+// (e.g. OAuth tokens, auth records). Implemented by the app's database layer.
+type SettingsStore interface {
+	GetSetting(key string) (string, error)
+	SetSetting(key, value string) error
+}
+
+type LLMClient interface {
+	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error
+	SetCustomSystemPrompt(prompt string)
+	SignIn(ctx context.Context) error
+	SignOut() error
+	IsAuthenticated() bool
+	SetAuthenticated(auth bool)
+	Name() string
+}
+
+type Config interface {
+	Type() string
+	Validate() error
+}
+
+type Message struct {
+	Role    string
+	Content string
+}
 
 const SystemPrompt = `You are Pedro, a helpful assistant with access to web search, web fetching, and file reading tools.
 

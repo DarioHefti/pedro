@@ -292,12 +292,6 @@ func fetchPageContent(browser *rod.Browser, rawURL string) (string, error) {
 	return result, nil
 }
 
-// FetchWithJS explicitly fetches a URL using headless browser (for JS-rendered sites).
-// Useful when you know in advance the page needs JS.
-func FetchWithJS(rawURL string) (string, error) {
-	return fetchWithHeadlessBrowser(rawURL)
-}
-
 // jsRenderingHints are domain patterns that are known to require JS rendering
 var jsRenderingHints = []string{
 	"fedlex.admin.ch",

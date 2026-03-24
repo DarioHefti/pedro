@@ -19,6 +19,9 @@ import {
   SaveSettings,
   SetSetting,
   TestConnection,
+  SignIn,
+  SignOut,
+  IsAuthenticated,
   SelectFile,
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
@@ -59,17 +62,12 @@ export const messageService = {
 // ---------------------------------------------------------------------------
 export const settingsService = {
   get: (): Promise<Record<string, string>> => GetSettings(),
-  save: (
-    endpoint: string,
-    apiKey: string,
-    deployment: string,
-  ): Promise<void> => SaveSettings(endpoint, apiKey, deployment),
+  save: (settings: Record<string, string>): Promise<void> => SaveSettings(settings),
   setSetting: (key: string, value: string): Promise<void> => SetSetting(key, value),
-  test: (
-    endpoint: string,
-    apiKey: string,
-    deployment: string,
-  ): Promise<string> => TestConnection(endpoint, apiKey, deployment),
+  test: (): Promise<string> => TestConnection(),
+  signIn: (): Promise<string> => SignIn(),
+  signOut: (): Promise<void> => SignOut(),
+  isAuthenticated: (): Promise<boolean> => IsAuthenticated(),
 }
 
 // ---------------------------------------------------------------------------
