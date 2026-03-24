@@ -41,6 +41,21 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Wire up auth record persistence for Azure SSO
+	providers.SetAuthRecordCallbacks(
+		func(data string) error {
+			return a.store.SetSetting("azure_auth_record", data)
+		},
+		func() (string, error) {
+			settings, err := a.store.GetSettings()
+			if err != nil {
+				return "", err
+			}
+			return settings["azure_auth_record"], nil
+		},
+	)
+
 	a.initLLM()
 }
 

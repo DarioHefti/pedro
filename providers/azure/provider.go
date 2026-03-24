@@ -2,6 +2,7 @@ package azure
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -39,6 +40,10 @@ const cognitiveServicesScope = "https://cognitiveservices.azure.com/.default"
 
 const DefaultAPIVersion = "2024-12-01-preview"
 
+// Callback to persist auth record to storage (set by app.go)
+var SaveAuthRecord func(data string) error
+var LoadAuthRecord func() (string, error)
+
 type Provider struct {
 	client             openai.Client
 	credential         *azidentity.InteractiveBrowserCredential
@@ -57,31 +62,52 @@ type Builder struct{}
 
 var (
 	sharedCredential *azidentity.InteractiveBrowserCredential
-	credentialOnce   sync.Once
-	credentialErr    error
+	credentialMu     sync.Mutex
 )
 
 func getOrCreateCredential() (*azidentity.InteractiveBrowserCredential, error) {
-	credentialOnce.Do(func() {
-		opts := &azidentity.InteractiveBrowserCredentialOptions{
-			// Let SDK handle auth automatically - browser opens when needed,
-			// tokens refresh silently when cached.
-			DisableAutomaticAuthentication: false,
-		}
+	credentialMu.Lock()
+	defer credentialMu.Unlock()
 
-		// Persistent cache with app-specific name for token storage
-		persistentCache, err := azcache.New(&azcache.Options{
-			Name: "pedro-azure-token-cache",
-		})
-		if err != nil {
-			fmt.Printf("Warning: failed to create persistent cache: %v\n", err)
-		} else {
-			opts.Cache = persistentCache
-		}
+	if sharedCredential != nil {
+		return sharedCredential, nil
+	}
 
-		sharedCredential, credentialErr = azidentity.NewInteractiveBrowserCredential(opts)
-	})
-	return sharedCredential, credentialErr
+	opts := &azidentity.InteractiveBrowserCredentialOptions{
+		// Disable automatic auth so we control when browser opens
+		// and can capture the AuthenticationRecord for persistence.
+		DisableAutomaticAuthentication: true,
+	}
+
+	// Persistent cache with app-specific name for token storage
+	if cache, err := azcache.New(&azcache.Options{Name: "pedro-azure-token-cache"}); err == nil {
+		opts.Cache = cache
+	}
+
+	// Try to load saved AuthenticationRecord for cross-session persistence
+	if LoadAuthRecord != nil {
+		if data, err := LoadAuthRecord(); err == nil && data != "" {
+			var record azidentity.AuthenticationRecord
+			if err := json.Unmarshal([]byte(data), &record); err == nil {
+				opts.AuthenticationRecord = record
+			}
+		}
+	}
+
+	cred, err := azidentity.NewInteractiveBrowserCredential(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	sharedCredential = cred
+	return sharedCredential, nil
+}
+
+// ResetCredential forces recreation of credential (e.g., after sign out)
+func ResetCredential() {
+	credentialMu.Lock()
+	defer credentialMu.Unlock()
+	sharedCredential = nil
 }
 
 func (Builder) Build(registry *tools.Registry) (shared.LLMClient, error) {
@@ -135,16 +161,21 @@ func (p *Provider) SignIn(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("sign in failed: %w", err)
 	}
-	fmt.Printf("SignIn: authenticated as %s\n", record.Username)
+
+	// Save the AuthenticationRecord for cross-session persistence
+	if SaveAuthRecord != nil {
+		if data, err := json.Marshal(record); err == nil {
+			_ = SaveAuthRecord(string(data))
+		}
+	}
 
 	// Verify the token is usable by acquiring it again (should be silent now)
-	token, err := p.credential.GetToken(ctx, policy.TokenRequestOptions{
+	_, err = p.credential.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes: []string{cognitiveServicesScope},
 	})
 	if err != nil {
 		return fmt.Errorf("token verification failed: %w", err)
 	}
-	fmt.Printf("SignIn: token acquired, expires at %v\n", token.ExpiresOn)
 
 	p.authenticated = true
 	return nil
@@ -152,7 +183,31 @@ func (p *Provider) SignIn(ctx context.Context) error {
 
 func (p *Provider) SignOut() error {
 	p.authenticated = false
+
+	// Clear saved auth record
+	if SaveAuthRecord != nil {
+		_ = SaveAuthRecord("")
+	}
+
+	// Reset credential so next sign-in creates fresh one
+	ResetCredential()
+
 	return nil
+}
+
+// ensureAuthenticated checks if we have a valid token, and if not, signs in
+func (p *Provider) ensureAuthenticated(ctx context.Context) error {
+	// Try to get a token silently first
+	_, err := p.credential.GetToken(ctx, policy.TokenRequestOptions{
+		Scopes: []string{cognitiveServicesScope},
+	})
+	if err == nil {
+		p.authenticated = true
+		return nil
+	}
+
+	// Need to authenticate interactively
+	return p.SignIn(ctx)
 }
 
 func (p *Provider) IsAuthenticated() bool {
@@ -230,7 +285,10 @@ func (p *Provider) buildInitialMessages(messages []shared.Message, imageDataURLs
 }
 
 func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error {
-	// No auth check needed - SDK will automatically prompt for login if needed
+	// Ensure we're authenticated (will open browser if needed, and save record)
+	if err := p.ensureAuthenticated(ctx); err != nil {
+		return err
+	}
 
 	apiMessages := p.buildInitialMessages(messages, imageDataURLs, "")
 	toolDefs := p.toolDefinitions()
