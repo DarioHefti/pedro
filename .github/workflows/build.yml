@@ -119,11 +119,16 @@ jobs:
       - name: List build output
         run: ls -la build/bin/
 
+      - name: Zip macOS App
+        run: |
+          cd build/bin
+          zip -r pedro-${{ matrix.arch }}.app.zip pedro.app
+          
       - name: Upload macOS App
         uses: actions/upload-artifact@v4
         with:
           name: pedro-macos-${{ matrix.arch }}-app
-          path: build/bin/pedro.app
+          path: build/bin/pedro-${{ matrix.arch }}.app.zip
           if-no-files-found: error
 
       - name: Upload macOS DMG
@@ -204,25 +209,43 @@ jobs:
         run: |
           mkdir -p release
           
+          echo "=== Listing all artifacts ==="
+          find artifacts -type f -o -type d | head -100
+          
           # Windows installer
-          cp artifacts/pedro-windows-amd64-installer/*-installer.exe release/Pedro-windows-amd64-installer.exe || true
+          if [ -d "artifacts/pedro-windows-amd64-installer" ]; then
+            cp artifacts/pedro-windows-amd64-installer/*-installer.exe release/Pedro-windows-amd64-installer.exe || echo "No Windows installer found"
+          fi
           
           # Windows binary
-          cp artifacts/pedro-windows-amd64/pedro.exe release/Pedro-windows-amd64.exe || true
+          if [ -d "artifacts/pedro-windows-amd64" ]; then
+            cp artifacts/pedro-windows-amd64/pedro.exe release/Pedro-windows-amd64.exe || echo "No Windows binary found"
+          fi
           
           # macOS DMGs
-          cp artifacts/pedro-macos-amd64-dmg/*.dmg release/Pedro-macos-amd64.dmg || true
-          cp artifacts/pedro-macos-arm64-dmg/*.dmg release/Pedro-macos-arm64.dmg || true
+          if [ -d "artifacts/pedro-macos-amd64-dmg" ]; then
+            cp artifacts/pedro-macos-amd64-dmg/*.dmg release/Pedro-macos-amd64.dmg || echo "No amd64 DMG found"
+          fi
+          if [ -d "artifacts/pedro-macos-arm64-dmg" ]; then
+            cp artifacts/pedro-macos-arm64-dmg/*.dmg release/Pedro-macos-arm64.dmg || echo "No arm64 DMG found"
+          fi
           
-          # macOS apps (zip them)
-          cd artifacts/pedro-macos-amd64-app && zip -r ../../release/Pedro-macos-amd64-app.zip pedro.app && cd ../..
-          cd artifacts/pedro-macos-arm64-app && zip -r ../../release/Pedro-macos-arm64-app.zip pedro.app && cd ../..
+          # macOS apps (already zipped)
+          if [ -d "artifacts/pedro-macos-amd64-app" ]; then
+            cp artifacts/pedro-macos-amd64-app/*.zip release/Pedro-macos-amd64-app.zip || echo "No amd64 app zip found"
+          fi
+          if [ -d "artifacts/pedro-macos-arm64-app" ]; then
+            cp artifacts/pedro-macos-arm64-app/*.zip release/Pedro-macos-arm64-app.zip || echo "No arm64 app zip found"
+          fi
           
           # Linux binary
-          cp artifacts/pedro-linux-amd64/pedro release/Pedro-linux-amd64 || true
-          chmod +x release/Pedro-linux-amd64 || true
+          if [ -d "artifacts/pedro-linux-amd64" ]; then
+            cp artifacts/pedro-linux-amd64/pedro release/Pedro-linux-amd64 || echo "No Linux binary found"
+            chmod +x release/Pedro-linux-amd64 || true
+          fi
           
-          ls -la release/
+          echo "=== Release files ==="
+          ls -la release/ || echo "Release directory is empty or does not exist"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
