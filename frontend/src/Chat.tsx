@@ -211,10 +211,12 @@ export default function Chat({
         </div>
       )}
 
-      {showJumpButton && (
+      {showJumpButton && messages.length > 0 && (
         <div className="jump-buttons">
           <button onClick={jumpToBottom} title="Jump to bottom">
-            ↓ Bottom
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </button>
         </div>
       )}

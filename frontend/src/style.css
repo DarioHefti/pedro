@@ -379,6 +379,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  width: 100%;
 }
 
 .message-wrapper.user {
@@ -830,6 +831,7 @@ body {
   word-wrap: break-word;
   overflow-wrap: break-word;
   word-break: break-word;
+  width: 100%;
 }
 
 .markdown-content h1 {
@@ -908,13 +910,17 @@ body {
 }
 
 /* ===== Code Blocks ===== */
+.markdown-content > pre {
+  display: block;
+  width: 100%;
+}
+
 .code-block {
   margin: 0.5em 0;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--code-bg);
-  width: calc(100% - 8px);
-  max-width: calc(100% - 8px);
+  width: 100%;
 }
 
 .code-header {
@@ -1213,16 +1219,19 @@ body {
 }
 
 .jump-buttons button {
-  padding: 8px 16px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-surface);
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  font-size: 12px;
   cursor: pointer;
   box-shadow: var(--shadow-md);
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
 }
 
 .jump-buttons button:hover {
