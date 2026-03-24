@@ -1,6 +1,6 @@
 <svg width="260" height="260" viewBox="50 40 160 160" xmlns="http://www.w3.org/2000/svg">
   <!-- Background -->
-  <rect x="50" y="40" width="160" height="160" fill="#f4f4f4"/>
+  <rect x="50" y="40" width="160" height="160" fill="transparent"/>
 
   <!-- Head -->
   <circle cx="130" cy="100" r="50" fill="#f1c27d"/>
