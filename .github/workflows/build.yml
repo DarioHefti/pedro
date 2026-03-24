@@ -1,0 +1,229 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        default: 'dev'
+
+env:
+  GO_VERSION: '1.25'
+  NODE_VERSION: '20'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [amd64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+          echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build Windows with NSIS Installer
+        run: wails build --platform windows/${{ matrix.arch }} --nsis
+        
+      - name: List build output
+        run: Get-ChildItem -Path build/bin -Recurse
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedro-windows-${{ matrix.arch }}-installer
+          path: build/bin/*-installer.exe
+          if-no-files-found: error
+
+      - name: Upload Windows Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedro-windows-${{ matrix.arch }}
+          path: build/bin/pedro.exe
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build macOS
+        run: wails build --platform darwin/${{ matrix.arch }}
+
+      - name: Create DMG
+        run: |
+          # Create a simple DMG from the .app bundle
+          APP_PATH="build/bin/pedro.app"
+          DMG_NAME="Pedro-macos-${{ matrix.arch }}.dmg"
+          
+          if [ -d "$APP_PATH" ]; then
+            hdiutil create -volname "Pedro" -srcfolder "$APP_PATH" -ov -format UDZO "build/bin/$DMG_NAME"
+          fi
+
+      - name: List build output
+        run: ls -la build/bin/
+
+      - name: Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedro-macos-${{ matrix.arch }}-app
+          path: build/bin/pedro.app
+          if-no-files-found: error
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedro-macos-${{ matrix.arch }}-dmg
+          path: build/bin/*.dmg
+          if-no-files-found: warn
+
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build Linux
+        run: wails build --platform linux/${{ matrix.arch }}
+
+      - name: List build output
+        run: ls -la build/bin/
+
+      - name: Upload Linux Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedro-linux-${{ matrix.arch }}
+          path: build/bin/pedro
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          
+          # Windows installer
+          cp artifacts/pedro-windows-amd64-installer/*-installer.exe release/Pedro-windows-amd64-installer.exe || true
+          
+          # Windows binary
+          cp artifacts/pedro-windows-amd64/pedro.exe release/Pedro-windows-amd64.exe || true
+          
+          # macOS DMGs
+          cp artifacts/pedro-macos-amd64-dmg/*.dmg release/Pedro-macos-amd64.dmg || true
+          cp artifacts/pedro-macos-arm64-dmg/*.dmg release/Pedro-macos-arm64.dmg || true
+          
+          # macOS apps (zip them)
+          cd artifacts/pedro-macos-amd64-app && zip -r ../../release/Pedro-macos-amd64-app.zip pedro.app && cd ../..
+          cd artifacts/pedro-macos-arm64-app && zip -r ../../release/Pedro-macos-arm64-app.zip pedro.app && cd ../..
+          
+          # Linux binary
+          cp artifacts/pedro-linux-amd64/pedro release/Pedro-linux-amd64 || true
+          chmod +x release/Pedro-linux-amd64 || true
+          
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
