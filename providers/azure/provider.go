@@ -5,28 +5,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	azcache "github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/azure"
+	"pedro/providers/openaiutil"
 	"pedro/shared"
 	"pedro/tools"
 )
 
-type AzureConfig struct {
+type Config struct {
 	Endpoint   string
 	Deployment string
 	APIVersion string
+	// TenantID is the Azure AD tenant for interactive login (optional).
+	// Not the OpenAI resource URL — use Endpoint for that.
+	TenantID string
 }
 
-func (c AzureConfig) Type() string {
-	return "azure"
-}
+func (c Config) Type() string { return "azure" }
 
-func (c AzureConfig) Validate() error {
+func (c Config) Validate() error {
 	if c.Endpoint == "" {
 		return errors.New("azure endpoint is required")
 	}
@@ -37,59 +41,51 @@ func (c AzureConfig) Validate() error {
 }
 
 const cognitiveServicesScope = "https://cognitiveservices.azure.com/.default"
-
 const DefaultAPIVersion = "2024-12-01-preview"
 
-// Callback to persist auth record to storage (set by app.go)
-var SaveAuthRecord func(data string) error
-var LoadAuthRecord func() (string, error)
+const authRecordKey = "azure_auth_record"
+const authTenantBindKey = "azure_auth_tenant_id"
+const authCacheNameKey = "azure_auth_cache_name"
+const defaultAuthCacheName = "pedro-azure-token-cache"
 
-type Provider struct {
-	client             openai.Client
-	credential         *azidentity.InteractiveBrowserCredential
-	config             AzureConfig
-	registry           *tools.Registry
-	customSystemPrompt string
-	authenticated      bool
-}
-
-func (p *Provider) SetAuthenticated(auth bool) {
-	// With automatic auth, this is just a hint for UI state
-	p.authenticated = auth
-}
-
-type Builder struct{}
-
+// Shared credential singleton — survives provider re-creation so the
+// in-memory token cache and persistent cache stay warm.
 var (
 	sharedCredential *azidentity.InteractiveBrowserCredential
 	credentialMu     sync.Mutex
+	credTenantKey    string // tenant option used to build sharedCredential; must match on reuse
 )
 
-func getOrCreateCredential() (*azidentity.InteractiveBrowserCredential, error) {
+func getOrCreateCredential(store shared.SettingsStore, tenantID string) (*azidentity.InteractiveBrowserCredential, error) {
 	credentialMu.Lock()
 	defer credentialMu.Unlock()
 
-	if sharedCredential != nil {
+	if sharedCredential != nil && credTenantKey == tenantID {
 		return sharedCredential, nil
 	}
+	sharedCredential = nil
 
+	// false: HTTP clients (e.g. streaming) call GetToken without going through our
+	// SignIn(); they must be allowed to trigger the browser when no silent token exists.
 	opts := &azidentity.InteractiveBrowserCredentialOptions{
-		// Disable automatic auth so we control when browser opens
-		// and can capture the AuthenticationRecord for persistence.
-		DisableAutomaticAuthentication: true,
+		DisableAutomaticAuthentication: false,
+	}
+	if tenantID != "" {
+		opts.TenantID = tenantID
 	}
 
-	// Persistent cache with app-specific name for token storage
-	if cache, err := azcache.New(&azcache.Options{Name: "pedro-azure-token-cache"}); err == nil {
+	if cache, err := azcache.New(&azcache.Options{Name: authCacheName(store)}); err == nil {
 		opts.Cache = cache
 	}
 
-	// Try to load saved AuthenticationRecord for cross-session persistence
-	if LoadAuthRecord != nil {
-		if data, err := LoadAuthRecord(); err == nil && data != "" {
-			var record azidentity.AuthenticationRecord
-			if err := json.Unmarshal([]byte(data), &record); err == nil {
-				opts.AuthenticationRecord = record
+	if store != nil {
+		boundTenant, _ := store.GetSetting(authTenantBindKey)
+		if boundTenant == tenantID {
+			if data, err := store.GetSetting(authRecordKey); err == nil && data != "" {
+				var record azidentity.AuthenticationRecord
+				if err := json.Unmarshal([]byte(data), &record); err == nil {
+					opts.AuthenticationRecord = record
+				}
 			}
 		}
 	}
@@ -100,34 +96,49 @@ func getOrCreateCredential() (*azidentity.InteractiveBrowserCredential, error) {
 	}
 
 	sharedCredential = cred
+	credTenantKey = tenantID
 	return sharedCredential, nil
 }
 
-// ResetCredential forces recreation of credential (e.g., after sign out)
+func authCacheName(store shared.SettingsStore) string {
+	if store == nil {
+		return defaultAuthCacheName
+	}
+	if name, err := store.GetSetting(authCacheNameKey); err == nil && name != "" {
+		return name
+	}
+	return defaultAuthCacheName
+}
+
+// ResetCredential forces recreation of credential (e.g. after sign out).
 func ResetCredential() {
 	credentialMu.Lock()
 	defer credentialMu.Unlock()
 	sharedCredential = nil
+	credTenantKey = ""
 }
 
-func (Builder) Build(registry *tools.Registry) (shared.LLMClient, error) {
-	cred, err := getOrCreateCredential()
-	if err != nil {
-		return nil, fmt.Errorf("creating browser credential: %w", err)
-	}
-
-	return &Provider{
-		client:     openai.Client{},
-		credential: cred,
-		registry:   registry,
-	}, nil
+type Provider struct {
+	client             openai.Client
+	credential         *azidentity.InteractiveBrowserCredential
+	config             Config
+	registry           *tools.Registry
+	store              shared.SettingsStore
+	customSystemPrompt string
+	authenticated      bool
 }
+
+func (p *Provider) Name() string            { return "azure" }
+func (p *Provider) IsAuthenticated() bool    { return p.authenticated }
+func (p *Provider) SetAuthenticated(a bool)  { p.authenticated = a }
+func (p *Provider) SetCustomSystemPrompt(s string) { p.customSystemPrompt = s }
 
 func ParseConfig(settings map[string]string) (shared.Config, error) {
-	cfg := AzureConfig{
+	cfg := Config{
 		Endpoint:   settings["azure_endpoint"],
 		Deployment: settings["azure_deployment"],
 		APIVersion: settings["azure_api_version"],
+		TenantID:   strings.TrimSpace(settings["azure_tenant_id"]),
 	}
 	if cfg.APIVersion == "" {
 		cfg.APIVersion = DefaultAPIVersion
@@ -135,26 +146,36 @@ func ParseConfig(settings map[string]string) (shared.Config, error) {
 	return cfg, nil
 }
 
-func (p *Provider) Name() string {
-	return "azure"
-}
+// Build creates a fully-configured Azure-login provider.
+func Build(cfg shared.Config, store shared.SettingsStore, registry *tools.Registry) (shared.LLMClient, error) {
+	c, ok := cfg.(Config)
+	if !ok {
+		return nil, fmt.Errorf("azure: expected Config, got %T", cfg)
+	}
 
-func (p *Provider) SetConfig(cfg AzureConfig) {
-	p.config = cfg
+	cred, err := getOrCreateCredential(store, c.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("creating browser credential: %w", err)
+	}
 
-	apiVersion := cfg.APIVersion
+	apiVersion := c.APIVersion
 	if apiVersion == "" {
 		apiVersion = DefaultAPIVersion
 	}
 
-	p.client = openai.NewClient(
-		azure.WithEndpoint(cfg.Endpoint, apiVersion),
-		azure.WithTokenCredential(p.credential),
-	)
+	return &Provider{
+		client: openai.NewClient(
+			azure.WithEndpoint(c.Endpoint, apiVersion),
+			azure.WithTokenCredential(cred),
+		),
+		credential: cred,
+		config:     c,
+		registry:   registry,
+		store:      store,
+	}, nil
 }
 
 func (p *Provider) SignIn(ctx context.Context) error {
-	// Authenticate interactively - this opens the browser
 	record, err := p.credential.Authenticate(ctx, &policy.TokenRequestOptions{
 		Scopes: []string{cognitiveServicesScope},
 	})
@@ -162,14 +183,13 @@ func (p *Provider) SignIn(ctx context.Context) error {
 		return fmt.Errorf("sign in failed: %w", err)
 	}
 
-	// Save the AuthenticationRecord for cross-session persistence
-	if SaveAuthRecord != nil {
+	if p.store != nil {
 		if data, err := json.Marshal(record); err == nil {
-			_ = SaveAuthRecord(string(data))
+			_ = p.store.SetSetting(authRecordKey, string(data))
+			_ = p.store.SetSetting(authTenantBindKey, p.config.TenantID)
 		}
 	}
 
-	// Verify the token is usable by acquiring it again (should be silent now)
 	_, err = p.credential.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes: []string{cognitiveServicesScope},
 	})
@@ -183,21 +203,16 @@ func (p *Provider) SignIn(ctx context.Context) error {
 
 func (p *Provider) SignOut() error {
 	p.authenticated = false
-
-	// Clear saved auth record
-	if SaveAuthRecord != nil {
-		_ = SaveAuthRecord("")
+	if p.store != nil {
+		_ = p.store.SetSetting(authRecordKey, "")
+		_ = p.store.SetSetting(authTenantBindKey, "")
+		_ = p.store.SetSetting(authCacheNameKey, fmt.Sprintf("%s-%d", defaultAuthCacheName, time.Now().UnixNano()))
 	}
-
-	// Reset credential so next sign-in creates fresh one
 	ResetCredential()
-
 	return nil
 }
 
-// ensureAuthenticated checks if we have a valid token, and if not, signs in
 func (p *Provider) ensureAuthenticated(ctx context.Context) error {
-	// Try to get a token silently first
 	_, err := p.credential.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes: []string{cognitiveServicesScope},
 	})
@@ -205,137 +220,37 @@ func (p *Provider) ensureAuthenticated(ctx context.Context) error {
 		p.authenticated = true
 		return nil
 	}
-
-	// Need to authenticate interactively
 	return p.SignIn(ctx)
 }
 
-func (p *Provider) IsAuthenticated() bool {
-	return p.authenticated
-}
-
-func (p *Provider) SetCustomSystemPrompt(prompt string) {
-	p.customSystemPrompt = prompt
-}
-
-func (p *Provider) getFullSystemPrompt(systemPrompt string) string {
-	if p.customSystemPrompt == "" {
-		return systemPrompt
-	}
-	return systemPrompt + "\n\n## Additional Instructions\n" + p.customSystemPrompt
-}
-
-func (p *Provider) toolDefinitions() []openai.ChatCompletionToolParam {
-	if p.registry == nil {
-		return nil
-	}
-	var result []openai.ChatCompletionToolParam
-	for _, def := range p.registry.Definitions() {
-		result = append(result, openai.ChatCompletionToolParam{
-			Function: openai.FunctionDefinitionParam{
-				Name:        def.Name,
-				Description: openai.String(def.Description),
-				Parameters:  openai.FunctionParameters(def.Parameters),
-			},
-		})
-	}
-	return result
-}
-
-func (p *Provider) buildInitialMessages(messages []shared.Message, imageDataURLs []string, systemPrompt string) []openai.ChatCompletionMessageParamUnion {
-	result := []openai.ChatCompletionMessageParamUnion{
-		openai.SystemMessage(p.getFullSystemPrompt(systemPrompt)),
-	}
-
-	totalUsers := 0
-	for _, m := range messages {
-		if m.Role == "user" {
-			totalUsers++
-		}
-	}
-
-	userCount := 0
-	for _, m := range messages {
-		switch m.Role {
-		case "user":
-			userCount++
-			isLastUser := userCount == totalUsers
-			if isLastUser && len(imageDataURLs) > 0 {
-				parts := []openai.ChatCompletionContentPartUnionParam{
-					openai.TextContentPart(m.Content),
-				}
-				for _, img := range imageDataURLs {
-					parts = append(parts, openai.ImageContentPart(
-						openai.ChatCompletionContentPartImageImageURLParam{
-							URL:    img,
-							Detail: "auto",
-						},
-					))
-				}
-				result = append(result, openai.UserMessage(parts))
-			} else {
-				result = append(result, openai.UserMessage(m.Content))
-			}
-		case "assistant":
-			result = append(result, openai.AssistantMessage(m.Content))
-		}
-	}
-
-	return result
-}
-
 func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error {
-	// Ensure we're authenticated (will open browser if needed, and save record)
 	if err := p.ensureAuthenticated(ctx); err != nil {
 		return err
 	}
 
-	apiMessages := p.buildInitialMessages(messages, imageDataURLs, "")
-	toolDefs := p.toolDefinitions()
-
-	for {
-		params := openai.ChatCompletionNewParams{
-			Model:    openai.ChatModel(p.config.Deployment),
-			Messages: apiMessages,
-			Tools:    toolDefs,
-		}
-
-		stream := p.client.Chat.Completions.NewStreaming(ctx, params)
-		acc := openai.ChatCompletionAccumulator{}
-
-		for stream.Next() {
-			chunk := stream.Current()
-			acc.AddChunk(chunk)
-			for _, choice := range chunk.Choices {
-				if choice.Delta.Content != "" {
-					onChunk(choice.Delta.Content)
-				}
-			}
-		}
-
-		if err := stream.Err(); err != nil {
-			return fmt.Errorf("streaming error: %w", err)
-		}
-
-		if len(acc.Choices) == 0 {
-			break
-		}
-
-		msg := acc.Choices[0].Message
-		if len(msg.ToolCalls) == 0 {
-			break
-		}
-
-		apiMessages = append(apiMessages, msg.ToParam())
-
-		for _, tc := range msg.ToolCalls {
-			if onToolCall != nil {
-				onToolCall(tc.Function.Name, tc.Function.Arguments)
-			}
-			result := p.registry.Execute(tc.Function.Name, tc.Function.Arguments)
-			apiMessages = append(apiMessages, openai.ToolMessage(result, tc.ID))
-		}
+	prompt := openaiutil.FullSystemPrompt(shared.SystemPrompt, p.customSystemPrompt)
+	err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	// If streaming still fails with an interaction-required token error, sign in once and retry.
+	if !requiresInteractiveAuth(err) {
+		return err
+	}
+	if signInErr := p.SignIn(ctx); signInErr != nil {
+		return fmt.Errorf("interactive authentication required: %w", signInErr)
+	}
+	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
+}
+
+func requiresInteractiveAuth(err error) bool {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		msg := e.Error()
+		if strings.Contains(msg, "InteractiveBrowserCredential can't acquire a token without user interaction") ||
+			strings.Contains(msg, "Call Authenticate to authenticate a user interactively") {
+			return true
+		}
+	}
+	return false
 }

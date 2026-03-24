@@ -41,21 +41,6 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-
-	// Wire up auth record persistence for Azure SSO
-	providers.SetAuthRecordCallbacks(
-		func(data string) error {
-			return a.store.SetSetting("azure_auth_record", data)
-		},
-		func() (string, error) {
-			settings, err := a.store.GetSettings()
-			if err != nil {
-				return "", err
-			}
-			return settings["azure_auth_record"], nil
-		},
-	)
-
 	a.initLLM()
 }
 
@@ -77,26 +62,18 @@ func (a *App) initLLM() {
 		return
 	}
 
-	llm, err := a.factory.Create(cfg, a.registry)
+	llm, err := a.factory.Create(cfg, a.store, a.registry)
 	if err != nil {
 		fmt.Println("LLM init error:", err.Error())
 		return
 	}
 
 	if settings["authenticated"] == "true" {
-		if authClient, ok := llm.(interface{ SetAuthenticated(bool) }); ok {
-			authClient.SetAuthenticated(true)
-		}
+		llm.SetAuthenticated(true)
 	}
 
 	if customPrompt, ok := settings["custom_system_prompt"]; ok {
 		llm.SetCustomSystemPrompt(customPrompt)
-	}
-
-	if azureProvider, ok := llm.(*providers.AzureProvider); ok {
-		if cfg, ok := cfg.(providers.AzureConfig); ok {
-			azureProvider.SetConfig(cfg)
-		}
 	}
 
 	a.llm = llm
@@ -352,6 +329,16 @@ func (a *App) SaveSettings(settings map[string]string) error {
 		return nil
 	}
 
+	if nextProvider, hasProvider := settings["provider_type"]; hasProvider {
+		prevProvider, _ := a.store.GetSetting("provider_type")
+		if prevProvider != "" && prevProvider != nextProvider {
+			if a.llm != nil {
+				_ = a.llm.SignOut()
+			}
+			_ = a.store.SetSetting("authenticated", "false")
+		}
+	}
+
 	for key, value := range settings {
 		if err := a.store.SetSetting(key, value); err != nil {
 			return err
@@ -407,8 +394,17 @@ func (a *App) TestConnection() string {
 }
 
 func (a *App) GetAvailableProviders() []map[string]string {
-	return []map[string]string{
-		{"id": "azure", "name": "Azure OpenAI"},
-		{"id": "openai", "name": "OpenAI"},
+	if a.factory == nil {
+		return []map[string]string{}
 	}
+
+	descriptors := a.factory.RegisteredProviderDescriptors()
+	result := make([]map[string]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		result = append(result, map[string]string{
+			"id":   string(descriptor.ID),
+			"name": descriptor.Name,
+		})
+	}
+	return result
 }

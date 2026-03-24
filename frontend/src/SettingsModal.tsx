@@ -33,6 +33,8 @@ export default function SettingsModal({
   const [providerType, setProviderType] = useState('azure')
   const [endpoint, setEndpoint] = useState('')
   const [deployment, setDeployment] = useState('')
+  const [azureApiKey, setAzureApiKey] = useState('')
+  const [azureTenantId, setAzureTenantId] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('gpt-4o')
   const [authenticated, setAuthenticated] = useState(false)
@@ -47,8 +49,10 @@ export default function SettingsModal({
   useEffect(() => {
     Promise.all([getSettings(), isAuthenticated()]).then(([s, auth]) => {
       setProviderType(s.provider_type ?? 'azure')
-      setEndpoint(s.azure_endpoint ?? s.openai_endpoint ?? '')
+      setEndpoint(s.azure_endpoint ?? '')
       setDeployment(s.azure_deployment ?? '')
+      setAzureApiKey(s.azure_api_key ?? '')
+      setAzureTenantId(s.azure_tenant_id ?? '')
       setApiKey(s.openai_api_key ?? '')
       setModel(s.openai_model ?? 'gpt-4o')
       setAuthenticated(auth)
@@ -57,7 +61,7 @@ export default function SettingsModal({
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function save() {
+  function buildProviderSettings(): Record<string, string> {
     const settings: Record<string, string> = {
       provider_type: providerType,
     }
@@ -65,14 +69,27 @@ export default function SettingsModal({
     if (providerType === 'azure') {
       settings.azure_endpoint = endpoint
       settings.azure_deployment = deployment
+      settings.azure_tenant_id = azureTenantId.trim()
+    } else if (providerType === 'azure_apikey') {
+      settings.azure_endpoint = endpoint
+      settings.azure_deployment = deployment
+      settings.azure_api_key = azureApiKey
     } else if (providerType === 'openai') {
       settings.openai_api_key = apiKey
       settings.openai_model = model
     }
 
-    await saveSettings(settings)
+    return settings
+  }
+
+  async function applyProviderSettings() {
+    await saveSettings(buildProviderSettings())
     await setSetting('custom_system_prompt', customSystemPrompt)
     await setSetting('welcome_message', welcomeMessage)
+  }
+
+  async function save() {
+    await applyProviderSettings()
     toast.success('Settings saved!')
     onClose()
   }
@@ -80,6 +97,7 @@ export default function SettingsModal({
   async function handleSignIn() {
     setSigningIn(true)
     try {
+      await applyProviderSettings()
       const errMsg = await signIn()
       if (errMsg && errMsg.startsWith('Error:')) {
         toast.error(errMsg)
@@ -97,12 +115,10 @@ export default function SettingsModal({
   async function handleSignOut() {
     setSigningOut(true)
     try {
+      await applyProviderSettings()
       await signOut()
       setAuthenticated(false)
-      setEndpoint('')
-      setDeployment('')
       toast.success('Signed out')
-      onClose()
     } catch (err) {
       toast.error('Sign out error: ' + String(err))
     } finally {
@@ -113,11 +129,11 @@ export default function SettingsModal({
   async function test() {
     setTesting(true)
     try {
+      await applyProviderSettings()
       const result = await testConnection()
       if (result.startsWith('Error:')) {
         toast.error(result)
       } else {
-        // testConnection may have triggered sign-in
         const auth = await isAuthenticated()
         setAuthenticated(auth)
         toast.success(result)
@@ -160,13 +176,18 @@ export default function SettingsModal({
                 onChange={e => setProviderType(e.target.value)}
                 className="provider-select"
               >
-                <option value="azure">Azure OpenAI</option>
+                <option value="azure">Azure OpenAI (Login)</option>
+                <option value="azure_apikey">Azure OpenAI (API Key)</option>
                 <option value="openai">OpenAI</option>
               </select>
 
-              {providerType === 'azure' && (
+              {(providerType === 'azure' || providerType === 'azure_apikey') && (
                 <>
-                  <label>Endpoint URL</label>
+                  <label>Azure OpenAI resource URL</label>
+                  <p className="settings-description">
+                    API base URL for your OpenAI resource (e.g. https://your-resource.openai.azure.com). This is
+                    not the same as the Microsoft login page URL.
+                  </p>
                   <input
                     type="text"
                     value={endpoint}
@@ -179,6 +200,34 @@ export default function SettingsModal({
                     value={deployment}
                     onChange={e => setDeployment(e.target.value)}
                     placeholder="gpt-4"
+                  />
+                </>
+              )}
+
+              {providerType === 'azure' && (
+                <>
+                  <label>Directory (tenant) ID — optional</label>
+                  <p className="settings-description">
+                    Use your Azure AD tenant GUID or domain if your org requires a specific tenant for sign-in.
+                    Leave empty for the default multi-tenant sign-in experience.
+                  </p>
+                  <input
+                    type="text"
+                    value={azureTenantId}
+                    onChange={e => setAzureTenantId(e.target.value)}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx or contoso.onmicrosoft.com"
+                  />
+                </>
+              )}
+
+              {providerType === 'azure_apikey' && (
+                <>
+                  <label>API Key</label>
+                  <input
+                    type="password"
+                    value={azureApiKey}
+                    onChange={e => setAzureApiKey(e.target.value)}
+                    placeholder="Enter your Azure OpenAI API key"
                   />
                 </>
               )}
@@ -211,22 +260,24 @@ export default function SettingsModal({
               </div>
 
               <div className="settings-test-row">
-                {authenticated ? (
-                  <button
-                    className="sign-out-btn"
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                  >
-                    {signingOut ? 'Signing out...' : 'Sign Out'}
-                  </button>
-                ) : (
-                  <button
-                    className="sign-in-btn"
-                    onClick={handleSignIn}
-                    disabled={signingIn}
-                  >
-                    {signingIn ? 'Opening browser...' : providerType === 'azure' ? 'Sign In with Azure' : 'Sign In'}
-                  </button>
+                {providerType === 'azure' && (
+                  authenticated ? (
+                    <button
+                      className="sign-out-btn"
+                      onClick={handleSignOut}
+                      disabled={signingOut}
+                    >
+                      {signingOut ? 'Signing out...' : 'Sign Out'}
+                    </button>
+                  ) : (
+                    <button
+                      className="sign-in-btn"
+                      onClick={handleSignIn}
+                      disabled={signingIn}
+                    >
+                      {signingIn ? 'Opening browser...' : 'Sign In with Azure'}
+                    </button>
+                  )
                 )}
                 <button className="test-btn" onClick={test} disabled={testing}>
                   {testing ? 'Testing...' : 'Test Connection'}
