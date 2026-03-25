@@ -191,6 +191,11 @@ func (d *Database) SetSetting(key, value string) error {
 	return err
 }
 
+func (d *Database) DeleteSetting(key string) error {
+	_, err := d.db.Exec("DELETE FROM settings WHERE key = ?", key)
+	return err
+}
+
 func (d *Database) GetSettings() (map[string]string, error) {
 	rows, err := d.db.Query("SELECT key, value FROM settings")
 	if err != nil {

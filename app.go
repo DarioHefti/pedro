@@ -339,10 +339,22 @@ func (a *App) SaveSettings(settings map[string]string) error {
 		}
 	}
 
+	invalidateConnectionTest := false
+	for key := range settings {
+		if settingsKeyInvalidatesConnectionTest(key) {
+			invalidateConnectionTest = true
+			break
+		}
+	}
+
 	for key, value := range settings {
 		if err := a.store.SetSetting(key, value); err != nil {
 			return err
 		}
+	}
+
+	if invalidateConnectionTest {
+		a.clearPersistedConnectionTest()
 	}
 
 	a.initLLM()
@@ -367,6 +379,10 @@ func (a *App) SetSetting(key, value string) error {
 		return err
 	}
 
+	if settingsKeyInvalidatesConnectionTest(key) {
+		a.clearPersistedConnectionTest()
+	}
+
 	if key == "custom_system_prompt" && a.llm != nil {
 		a.llm.SetCustomSystemPrompt(value)
 	}
@@ -379,18 +395,31 @@ func (a *App) TestConnection() string {
 		return "Error: No LLM provider configured – save your settings first"
 	}
 
+	settings, err := a.store.GetSettings()
+	if err != nil {
+		settings = map[string]string{}
+	}
+	fp := connectionSettingsFingerprint(settings)
+
 	if !a.llm.IsAuthenticated() {
 		if err := a.llm.SignIn(context.Background()); err != nil {
-			return "Error: Sign in failed: " + err.Error()
+			ret := "Error: Sign in failed: " + err.Error()
+			a.persistConnectionTest(false, connectionTestFailureMessageForStore(ret), fp)
+			return ret
 		}
 		_ = a.store.SetSetting("authenticated", "true")
 	}
 
 	testMsg := []providers.Message{{Role: "user", Content: "Hi"}}
 	if err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil); err != nil {
-		return "Error: " + err.Error()
+		ret := "Error: " + err.Error()
+		a.persistConnectionTest(false, connectionTestFailureMessageForStore(ret), fp)
+		return ret
 	}
-	return "Connection successful!"
+
+	ok := "Connection successful!"
+	a.persistConnectionTest(true, ok, fp)
+	return ok
 }
 
 func (a *App) GetAvailableProviders() []map[string]string {

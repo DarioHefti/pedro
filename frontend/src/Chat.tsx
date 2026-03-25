@@ -149,13 +149,18 @@ export default function Chat({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    // Don't process files here - Wails OnFileDrop handles all file drops
-    // and gives us the native file paths (required for read_file tool)
+    // Wails: native paths come from OnFileDrop. Browser: use File API.
+    const rt = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDrop?: unknown } }).runtime : undefined
+    if (rt?.OnFileDrop) return
+    const files = Array.from(e.dataTransfer?.files ?? [])
+    for (const file of files) processFile(file)
   }
 
   // Use Wails' OnFileDrop to get native file paths for drag & drop
   // useDropTarget=false means accept drops anywhere without requiring CSS properties
   useEffect(() => {
+    const rt = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDrop?: unknown } }).runtime : undefined
+    if (!rt?.OnFileDrop) return
     OnFileDrop((_x: number, _y: number, paths: string[]) => {
       setIsDragging(false)
       for (const path of paths) {
@@ -163,7 +168,10 @@ export default function Chat({
         setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
       }
     }, false)
-    return () => OnFileDropOff()
+    return () => {
+      const rtOff = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDropOff?: unknown } }).runtime : undefined
+      if (rtOff?.OnFileDropOff) OnFileDropOff()
+    }
   }, [])
 
   const handlePaste = useCallback(
@@ -224,8 +232,12 @@ export default function Chat({
       <div className="messages" ref={messagesRef}>
         {messages.length === 0 && !loading && (
           <div className="empty-state">
-            <p className="empty-state-message">{welcomeMessage}</p>
-            <img src={pedroAvatar} alt="Pedro" className="empty-state-avatar" />
+            <div className="empty-state-inner">
+              <p className="empty-state-message">{welcomeMessage}</p>
+              <div className="empty-state-avatar-wrap">
+                <img src={pedroAvatar} alt="Pedro" className="empty-state-avatar" />
+              </div>
+            </div>
           </div>
         )}
         {messages.map((msg, i) => {
@@ -357,7 +369,7 @@ export default function Chat({
           onClick={handleSelectFile}
           disabled={loading}
         >
-          <img src={attachmentIcon} alt="Attach file" width={20} height={20} />
+          <img src={attachmentIcon} alt="Attach file" width={18} height={18} />
         </button>
         <textarea
           value={input}
@@ -367,7 +379,11 @@ export default function Chat({
           rows={1}
           disabled={loading}
         />
-        <button onClick={loading ? onStop : handleSend}>
+        <button
+          type="button"
+          className="send-btn"
+          onClick={loading ? onStop : handleSend}
+        >
           {loading ? 'Stop' : 'Send'}
         </button>
       </div>

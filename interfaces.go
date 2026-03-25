@@ -31,6 +31,7 @@ type Store interface {
 	UpdateMessageContent(id int64, content string) error
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
+	DeleteSetting(key string) error
 	GetSettings() (map[string]string, error)
 	Close() error
 }

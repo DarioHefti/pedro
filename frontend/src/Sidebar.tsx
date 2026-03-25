@@ -49,7 +49,8 @@ export default function Sidebar({
   return (
     <div className="sidebar">
       <button className="new-chat-btn" onClick={onNew}>
-        + New Chat
+        <span className="new-chat-btn-label">New chat</span>
+        <span className="new-chat-btn-icon" aria-hidden="true">+</span>
       </button>
       {conversations.length > 0 && (
         <div className="sidebar-search">

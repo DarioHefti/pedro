@@ -89,6 +89,11 @@ export default function App() {
       {settingsOpen && (
         <SettingsModal
           onClose={handleSettingsClose}
+          onSaved={() => {
+            settingsService.get().then(s => {
+              setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
+            })
+          }}
           getSettings={settingsService.get}
           saveSettings={settingsService.save}
           setSetting={settingsService.setSetting}

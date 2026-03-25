@@ -35,6 +35,9 @@ wails dev
 wails build
 ```
 
+frontend is also served here by default:
+http://localhost:5173/
+
 # Create a release
 git tag v1.0.0
 git push origin v1.0.0
