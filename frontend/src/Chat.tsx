@@ -4,6 +4,7 @@ import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import MessageRenderer from './MessageRenderer'
+import AssistantMessageActions from './AssistantMessageActions'
 
 interface ChatProps {
   messages: Message[]
@@ -27,78 +28,6 @@ interface ChatProps {
  */
 function stripFileAnnotations(content: string): string {
   return content.replace(/\n\n\[File: [\s\S]*$/, '')
-}
-
-function IconCopy() {
-  return (
-    <svg
-      width={18}
-      height={18}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <rect
-        x="9"
-        y="9"
-        width="13"
-        height="13"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function IconRegenerate() {
-  return (
-    <svg
-      width={18}
-      height={18}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <path
-        d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M3 3v5h5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M21 21v-5h-5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
 }
 
 function toolCallArgDisplay(tc: ToolCall): string {
@@ -318,58 +247,58 @@ export default function Chat({
     const msg = messages[i]
     const imgs = messageImages.get(i)
     const files = messageFiles.get(i)
-    return (
-      <div key={i} className={`message-wrapper ${msg.Role}`}>
-        <div className={`message ${msg.Role}`}>
-          {imgs && imgs.length > 0 && (
-            <div className="message-image-previews">
-              {imgs.map((src, j) => (
-                <img
-                  key={j}
-                  src={src}
-                  alt={`Attached image ${j + 1}`}
-                  className="message-image-thumb"
-                />
-              ))}
-            </div>
-          )}
-          {files && files.length > 0 && (
-            <div className="message-file-previews">
-              {files.map((file, j) => (
-                <div key={j} className="message-file-chip" title={file.path}>
-                  <span className="message-file-icon">📄</span>
-                  <span className="message-file-name">{file.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <MessageRenderer
-            content={msg.Role === 'user' ? stripFileAnnotations(msg.Content || '') : (msg.Content || '')}
-            role={msg.Role}
-          />
-        </div>
-        {msg.Role === 'assistant' && (
-          <div className="message-actions">
-            <button
-              type="button"
-              className="message-action-btn"
-              onClick={() => navigator.clipboard.writeText(msg.Content || '')}
-              title="Copy message"
-              aria-label="Copy message"
-            >
-              <IconCopy />
-            </button>
-            <button
-              type="button"
-              className="message-action-btn"
-              onClick={() => onRegenerate(i)}
-              title="Regenerate response"
-              aria-label="Regenerate response"
-            >
-              <IconRegenerate />
-            </button>
+
+    const bubble = (
+      <div className={`message ${msg.Role}`}>
+        {imgs && imgs.length > 0 && (
+          <div className="message-image-previews">
+            {imgs.map((src, j) => (
+              <img
+                key={j}
+                src={src}
+                alt={`Attached image ${j + 1}`}
+                className="message-image-thumb"
+              />
+            ))}
           </div>
         )}
+        {files && files.length > 0 && (
+          <div className="message-file-previews">
+            {files.map((file, j) => (
+              <div key={j} className="message-file-chip" title={file.path}>
+                <span className="message-file-icon">📄</span>
+                <span className="message-file-name">{file.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <MessageRenderer
+          content={msg.Role === 'user' ? stripFileAnnotations(msg.Content || '') : (msg.Content || '')}
+          role={msg.Role}
+        />
+      </div>
+    )
+
+    if (msg.Role === 'assistant') {
+      return (
+        <div key={i} className="message-wrapper assistant">
+          <div className="assistant-bubble-shell">
+            {bubble}
+            <AssistantMessageActions
+              visible
+              onCopy={() => void navigator.clipboard.writeText(msg.Content || '')}
+              onRegenerate={() => void onRegenerate(i)}
+              copyDisabled={!(msg.Content || '').trim()}
+              regenerateDisabled={loading}
+            />
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div key={i} className={`message-wrapper ${msg.Role}`}>
+        {bubble}
       </div>
     )
   }
@@ -432,17 +361,25 @@ export default function Chat({
 
         {loading && (
           <div className="message-wrapper assistant">
-            <div className="message assistant">
-              {streamingContent ? (
-                <MessageRenderer
-                  content={streamingContent}
-                  role="assistant"
-                />
-              ) : (
-                <div className="message-content typing">
-                  Thinking<span className="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
-                </div>
-              )}
+            <div className="assistant-bubble-shell">
+              <div className="message assistant">
+                {streamingContent ? (
+                  <MessageRenderer content={streamingContent} role="assistant" />
+                ) : (
+                  <div className="message-content typing">
+                    Thinking<span className="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+                  </div>
+                )}
+              </div>
+              <AssistantMessageActions
+                visible
+                onCopy={() => void navigator.clipboard.writeText(streamingContent)}
+                onRegenerate={() => {
+                  /* Streaming: regenerate disabled until message exists */
+                }}
+                copyDisabled={!streamingContent.trim()}
+                regenerateDisabled
+              />
             </div>
           </div>
         )}
