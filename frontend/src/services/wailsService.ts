@@ -58,7 +58,7 @@ function stubConversation(): main.Conversation {
 // ---------------------------------------------------------------------------
 
 /** Dev-only sample thread in sidebar. Keep `false` for production builds. */
-export const MOCK_EMPTY_CHAT_UI = true
+export const MOCK_EMPTY_CHAT_UI = false
 
 /** Reserved ID for the in-memory-only sample conversation (not stored in DB). */
 export const MOCK_UI_CONVERSATION_ID = -9_001

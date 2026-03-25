@@ -485,7 +485,9 @@ body {
   background: var(--bg-chat-user);
 }
 
-.message.assistant {
+/* Only Chat assistant bubbles — not user, not tool rows, not MessageRenderer inner layout */
+.message.assistant-reply-bubble {
+  margin-bottom: var(--space-1);
   border-left: 3px solid var(--accent-primary);
   align-self: flex-start;
 }
@@ -517,7 +519,7 @@ body {
   max-width: 90%;
 }
 
-.message-wrapper.assistant .message {
+.message-wrapper.assistant .assistant-reply-bubble {
   width: 100%;
 }
 
@@ -1251,7 +1253,15 @@ body {
   align-items: flex-start;
 }
 
+.message-body-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
 .message-actions {
+  opacity: 60%;
   display: flex;
   gap: var(--space-2);
   align-items: center;
@@ -1306,34 +1316,34 @@ body {
   align-self: stretch;
 }
 
-.assistant-bubble-shell .message.assistant {
-  padding-bottom: 40px;
-}
+/* No extra padding — controls float bottom-right over the corner only */
 
-.message-actions.message-actions--assistant-peek-br {
+.message-actions.message-actions--assistant-actions-overlay-br {
   position: absolute;
   z-index: 3;
-  right: 8px;
   bottom: 8px;
-  left: auto;
+  right: 8px;
   top: auto;
+  left: auto;
   margin-top: 0;
   flex-direction: row;
-  gap: 5px;
-  padding: 4px 5px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  opacity: 0.88;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.assistant-bubble-shell:hover .message-actions.message-actions--assistant-peek-br,
-.message-actions.message-actions--assistant-peek-br:hover {
-  opacity: 1;
+.assistant-bubble-shell:hover .message-actions.message-actions--assistant-actions-overlay-br,
+.message-actions.message-actions--assistant-actions-overlay-br:hover {
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-md);
 }
 
-.message-actions.message-actions--assistant-peek-br .message-action-btn {
+.message-actions.message-actions--assistant-actions-overlay-br .message-action-btn {
   width: 28px;
   height: 28px;
   min-width: 28px;
@@ -1341,17 +1351,33 @@ body {
   background: transparent;
   border: none;
   box-shadow: none;
+  color: var(--text-secondary);
+  opacity: 0.72;
+  transition: opacity 0.18s ease, color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
-.message-actions.message-actions--assistant-peek-br .message-action-btn:hover:not(:disabled) {
-  background: var(--btn-ghost-hover-bg);
-  color: var(--accent-primary);
+.assistant-bubble-shell:hover .message-actions.message-actions--assistant-actions-overlay-br .message-action-btn:not(:disabled),
+.message-actions.message-actions--assistant-actions-overlay-br:hover .message-action-btn:not(:disabled) {
+  opacity: 1;
+  color: var(--text-primary);
 }
 
-.message-actions.message-actions--assistant-peek-br .message-action-btn:disabled:hover {
+.message-actions.message-actions--assistant-actions-overlay-br .message-action-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--btn-primary-text);
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.message-actions.message-actions--assistant-actions-overlay-br .message-action-btn:disabled {
+  opacity: 0.38;
+}
+
+.message-actions.message-actions--assistant-actions-overlay-br .message-action-btn:disabled:hover {
   background: transparent;
   color: var(--text-secondary);
   border: none;
+  transform: none;
 }
 
 /* ===== Markdown Content ===== */
@@ -1360,6 +1386,11 @@ body {
   overflow-wrap: break-word;
   word-break: break-word;
   width: 100%;
+}
+
+/* Room for bottom-right overlay actions — assistant bubbles only */
+.assistant-reply-bubble .markdown-content {
+  padding-bottom: var(--space-2);
 }
 
 .markdown-content h1 {

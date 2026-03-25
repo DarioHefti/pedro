@@ -137,7 +137,7 @@ export default function MessageRenderer({
       <div
         className="message-container"
       >
-        <div className="message-wrapper">
+        <div className="message-body-wrap">
           {isArtifact && role === 'assistant' ? (
             <div className="artifact-preview">
               <iframe

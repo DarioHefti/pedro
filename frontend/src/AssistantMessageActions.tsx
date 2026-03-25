@@ -89,7 +89,7 @@ export default function AssistantMessageActions({
 
   return (
     <div
-      className="message-actions message-actions--assistant-peek-br"
+      className="message-actions message-actions--assistant-actions-overlay-br"
       role="group"
       aria-label="Assistant message actions"
     >

@@ -249,7 +249,13 @@ export default function Chat({
     const files = messageFiles.get(i)
 
     const bubble = (
-      <div className={`message ${msg.Role}`}>
+      <div
+        className={
+          msg.Role === 'assistant'
+            ? 'message assistant assistant-reply-bubble'
+            : `message ${msg.Role}`
+        }
+      >
         {imgs && imgs.length > 0 && (
           <div className="message-image-previews">
             {imgs.map((src, j) => (
@@ -362,7 +368,7 @@ export default function Chat({
         {loading && (
           <div className="message-wrapper assistant">
             <div className="assistant-bubble-shell">
-              <div className="message assistant">
+              <div className="message assistant assistant-reply-bubble">
                 {streamingContent ? (
                   <MessageRenderer content={streamingContent} role="assistant" />
                 ) : (
