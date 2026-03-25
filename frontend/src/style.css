@@ -38,6 +38,20 @@
     calc(var(--font-size-message-body) * 0.88)
   );
 
+  /* Chat thread + bubbles — compact spacing */
+  --chat-thread-pad: 12px 16px 8px;
+  --chat-thread-gap: 3px;
+  --chat-bubble-pad-y: 6px;
+  --chat-bubble-pad-x: 10px;
+  --chat-bubble-stack-gap: 2px;
+  --chat-tool-pad-y: 4px;
+  --chat-tool-pad-x: 8px;
+  --chat-markdown-actions-pad-bottom: 6px;
+  --chat-inbubble-preview-gap: 6px;
+  --chat-file-chip-pad-y: 5px;
+  --chat-file-chip-pad-x: 10px;
+  --chat-file-chip-gap: 5px;
+
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-smooth: 0.2s ease;
 
@@ -414,11 +428,11 @@ body {
 
 .messages {
   flex: 1;
-  padding: 16px 20px 12px;
+  padding: var(--chat-thread-pad);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--chat-thread-gap);
   background: var(--bg);
   position: relative;
   z-index: 1;
@@ -482,7 +496,7 @@ body {
 }
 
 .message {
-  padding: 8px 12px;
+  padding: var(--chat-bubble-pad-y) var(--chat-bubble-pad-x);
   border-radius: var(--radius-md);
   max-width: 100%;
   word-wrap: break-word;
@@ -507,7 +521,7 @@ body {
 
 /* Only Chat assistant bubbles — not user, not tool rows, not MessageRenderer inner layout */
 .message.assistant-reply-bubble {
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--chat-bubble-stack-gap);
   border-left: 3px solid var(--accent-primary);
   align-self: flex-start;
 }
@@ -532,7 +546,7 @@ body {
 }
 
 .message-wrapper.assistant {
-  margin-top: var(--space-1);
+  margin-top: var(--chat-bubble-stack-gap);
   align-self: flex-start;
   align-items: flex-start;
   width: 90%;
@@ -545,7 +559,8 @@ body {
 
 .message.tool {
   width: fit-content;
-  margin-top: var(--space-1);
+  margin-top: var(--chat-bubble-stack-gap);
+  padding: var(--chat-tool-pad-y) var(--chat-tool-pad-x);
   border-left: 3px solid var(--warning);
   align-self: flex-start;
   font-size: var(--font-size-chat-tool-call);
@@ -603,8 +618,8 @@ body {
 .tool-call-card {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 4px;
+  gap: 3px;
+  padding: 1px 3px;
   border-radius: 20px;
   background: transparent;
   font-size: inherit;
@@ -630,7 +645,7 @@ body {
   max-width: 300px;
   display: inline-block;
   vertical-align: middle;
-  margin-left: 4px;
+  margin-left: 3px;
 }
 
 @keyframes tool-call-in {
@@ -1322,7 +1337,7 @@ body {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .message-actions .message-action-btn {
@@ -1378,15 +1393,15 @@ body {
 .message-actions.message-actions--assistant-actions-overlay-br {
   position: absolute;
   z-index: 3;
-  bottom: 8px;
-  right: 8px;
+  bottom: 6px;
+  right: 6px;
   top: auto;
   left: auto;
   margin-top: 0;
   flex-direction: row;
   align-items: center;
   gap: 2px;
-  padding: 3px 4px;
+  padding: 2px 3px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1453,7 +1468,7 @@ body {
 
 /* Room for bottom-right overlay actions — assistant bubbles only */
 .assistant-reply-bubble .markdown-content {
-  padding-bottom: var(--space-2);
+  padding-bottom: var(--chat-markdown-actions-pad-bottom);
 }
 
 .markdown-content h1 {
@@ -1683,8 +1698,8 @@ body {
 .message-image-previews {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--chat-inbubble-preview-gap);
+  margin-bottom: var(--chat-inbubble-preview-gap);
 }
 
 .message-image-thumb {
@@ -1706,15 +1721,15 @@ body {
 .message-file-previews {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--chat-inbubble-preview-gap);
+  margin-bottom: var(--chat-inbubble-preview-gap);
 }
 
 .message-file-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--chat-file-chip-gap);
+  padding: var(--chat-file-chip-pad-y) var(--chat-file-chip-pad-x);
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
@@ -1920,7 +1935,7 @@ body {
 .user-message-with-image {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--chat-inbubble-preview-gap);
 }
 
 /* ===== Highlight.js Theme Override ===== */

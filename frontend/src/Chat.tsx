@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
@@ -57,6 +57,9 @@ function toolCallArgDisplay(tc: ToolCall): string {
   return argsDisplay
 }
 
+/** Pixels from bottom beyond which we treat the user as having left the tail (stop auto-follow). */
+const SCROLL_STICK_THRESHOLD_PX = 80
+
 export default function Chat({
   messages,
   toolCalls,
@@ -74,52 +77,62 @@ export default function Chat({
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
-  const [autoScroll, setAutoScroll] = useState(true)
+  /** When true, new assistant content / stream keeps the viewport pinned to the bottom. */
+  const [stickToBottom, setStickToBottom] = useState(true)
   const [showJumpButton, setShowJumpButton] = useState(false)
-  const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const attachWrapRef = useRef<HTMLDivElement>(null)
-  const prevScrollTop = useRef<number>(0)
-  const prevStreamingContent = useRef<string>('')
+  /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
+  const suppressStickBreakRef = useRef(false)
 
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior })
+  }, [])
+
+  /** User scrolled away from the tail → stop following. Following only resumes on Send or “jump to bottom”. */
   useEffect(() => {
-    if (autoScroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [messages, toolCalls, loading, streamingContent, autoScroll])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const el = messagesRef.current
-      if (!el) return
-      const { scrollTop, scrollHeight, clientHeight } = el
-      const atBottom = scrollHeight - scrollTop - clientHeight < 100
-
-      if (scrollTop < prevScrollTop.current - 5) {
-        setUserHasScrolledUp(true)
-        setAutoScroll(false)
-      }
-      prevScrollTop.current = scrollTop
-
-      if (atBottom && !userHasScrolledUp) setAutoScroll(true)
-      setShowJumpButton(!atBottom)
-    }
-
     const el = messagesRef.current
-    el?.addEventListener('scroll', handleScroll)
-    return () => el?.removeEventListener('scroll', handleScroll)
-  }, [userHasScrolledUp])
+    if (!el) return
 
-  // Re-enable auto-scroll once streaming finishes.
-  useEffect(() => {
-    if (!streamingContent && prevStreamingContent.current) {
-      setUserHasScrolledUp(false)
+    const onScroll = () => {
+      if (suppressStickBreakRef.current) return
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      const away = distance > SCROLL_STICK_THRESHOLD_PX
+      setShowJumpButton(away)
+      if (away) {
+        setStickToBottom(false)
+      }
     }
-    prevStreamingContent.current = streamingContent
-  }, [streamingContent])
+
+    onScroll()
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = messagesRef.current
+    if (!el) return
+    if (stickToBottom) {
+      scrollMessagesToBottom('auto')
+    }
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    setShowJumpButton(distance > SCROLL_STICK_THRESHOLD_PX)
+  }, [messages, toolCalls, loading, streamingContent, stickToBottom, scrollMessagesToBottom])
+
+  /** Stream / images can resize the thread without changing React deps; keep pinned when following. */
+  useEffect(() => {
+    if (!stickToBottom) return
+    const el = messagesRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      scrollMessagesToBottom('auto')
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [stickToBottom, scrollMessagesToBottom])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -131,6 +144,7 @@ export default function Chat({
   const handleSend = () => {
     const content = input.trim()
     if (!content && attachments.length === 0) return
+    setStickToBottom(true)
     setInput('')
     setAttachments([])
     onSend(content, attachments)
@@ -256,9 +270,16 @@ export default function Chat({
   // ---------------------------------------------------------------------------
 
   const jumpToBottom = () => {
-    setAutoScroll(true)
-    setUserHasScrolledUp(false)
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setStickToBottom(true)
+    suppressStickBreakRef.current = true
+    scrollMessagesToBottom('smooth')
+    window.setTimeout(() => {
+      suppressStickBreakRef.current = false
+      const el = messagesRef.current
+      if (!el) return
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      setShowJumpButton(distance > SCROLL_STICK_THRESHOLD_PX)
+    }, 400)
   }
 
   const lastUserMessageIndex = messages.reduce(
@@ -408,15 +429,6 @@ export default function Chat({
                   </div>
                 )}
               </div>
-              <AssistantMessageActions
-                visible
-                onCopy={() => void navigator.clipboard.writeText(streamingContent)}
-                onRegenerate={() => {
-                  /* Streaming: regenerate disabled until message exists */
-                }}
-                copyDisabled={!streamingContent.trim()}
-                regenerateDisabled
-              />
             </div>
           </div>
         )}
