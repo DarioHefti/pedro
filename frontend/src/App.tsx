@@ -13,7 +13,7 @@ import {
   MOCK_EMPTY_CHAT_UI,
   MOCK_UI_CONVERSATION_ID,
 } from './services/wailsService'
-import { applyDesignPaletteToDocument, getDesignPaletteFromSettings } from './designTheme'
+import { applyDesignAndTypographyFromSettings } from './designTheme'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
@@ -39,7 +39,7 @@ export default function App() {
   useEffect(() => {
     settingsService.get().then(s => {
       setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-      applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
+      applyDesignAndTypographyFromSettings(s)
     })
   }, [])
 
@@ -77,7 +77,7 @@ export default function App() {
     // Reload welcome message in case it was changed
     settingsService.get().then(s => {
       setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-      applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
+      applyDesignAndTypographyFromSettings(s)
     })
   }
 
@@ -102,7 +102,8 @@ export default function App() {
         onSend={messaging.send}
         onStop={messaging.stop}
         onRegenerate={messaging.regenerate}
-        onSelectFile={fileService.select}
+        onSelectFile={fileService.selectFile}
+        onSelectFolder={fileService.selectFolder}
         welcomeMessage={welcomeMessage}
       />
       {settingsOpen && (
@@ -111,7 +112,7 @@ export default function App() {
           onSaved={() => {
             settingsService.get().then(s => {
               setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-              applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
+              applyDesignAndTypographyFromSettings(s)
             })
           }}
           getSettings={settingsService.get}

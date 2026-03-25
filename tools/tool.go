@@ -82,5 +82,6 @@ func New() *Registry {
 	r.Register(NewSearchTool())
 	r.Register(NewFetchURLTool())
 	r.Register(NewReadFileTool())
+	r.Register(NewShowFileTreeTool())
 	return r
 }

@@ -50,6 +50,10 @@ export function SelectFile() {
   return window['go']['main']['App']['SelectFile']();
 }
 
+export function SelectFolder() {
+  return window['go']['main']['App']['SelectFolder']();
+}
+
 export function SendMessage(arg1, arg2) {
   return window['go']['main']['App']['SendMessage'](arg1, arg2);
 }

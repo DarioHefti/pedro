@@ -26,6 +26,7 @@ import {
   SignOut,
   IsAuthenticated,
   SelectFile,
+  SelectFolder,
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { main } from '../../wailsjs/go/models'
@@ -201,7 +202,8 @@ export const settingsService = {
 // File service
 // ---------------------------------------------------------------------------
 export const fileService = {
-  select: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFile()),
+  selectFile: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFile()),
+  selectFolder: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFolder()),
 }
 
 // ---------------------------------------------------------------------------

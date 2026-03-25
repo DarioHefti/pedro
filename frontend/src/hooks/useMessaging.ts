@@ -20,8 +20,8 @@ export interface ToolCall {
 }
 
 export interface Attachment {
-  type: 'text' | 'image' | 'file-ref'
-  /** For file-ref: full OS path. For text: file content. For image: data URL. */
+  type: 'text' | 'image' | 'file-ref' | 'folder-ref'
+  /** For file-ref / folder-ref: full OS path. For text: file content. For image: data URL. */
   content: string
   name: string
 }
@@ -29,6 +29,7 @@ export interface Attachment {
 export interface FileAttachment {
   name: string
   path: string
+  /** "file" | "folder" — drives LLM hints (read_file vs show_file_tree). */
   type: string
 }
 
@@ -115,8 +116,12 @@ export function useMessaging({
         .map(a => a.content)
 
       const fileAttachments: FileAttachment[] = (attachments ?? [])
-        .filter(a => a.type === 'file-ref')
-        .map(a => ({ name: a.name, path: a.content, type: 'file' }))
+        .filter(a => a.type === 'file-ref' || a.type === 'folder-ref')
+        .map(a => ({
+          name: a.name,
+          path: a.content,
+          type: a.type === 'folder-ref' ? 'folder' : 'file',
+        }))
 
       const llmContent = buildLLMContent(content, attachments)
 
@@ -283,6 +288,13 @@ function buildLLMContent(content: string, attachments?: Attachment[]): string {
           `[File: ${a.name}]\n` +
           `[Path: ${a.content}]\n` +
           `[Large file attached by path. Use the read_file tool with this path to read it in chunks.]`
+        )
+      }
+      if (a.type === 'folder-ref') {
+        return (
+          `[Folder: ${a.name}]\n` +
+          `[Path: ${a.content}]\n` +
+          `[Folder attached by path. Use the show_file_tree tool with this path (depth as needed; paginate with offset if truncated), then read_file for specific files.]`
         )
       }
       return `[File: ${a.name}]\n${a.content}`

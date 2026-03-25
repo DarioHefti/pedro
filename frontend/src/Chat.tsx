@@ -18,16 +18,18 @@ interface ChatProps {
   onRegenerate: (index: number) => void
   /** Opens the native OS file picker; resolves to the selected path or "". */
   onSelectFile: () => Promise<string>
+  /** Opens the native folder picker; resolves to the selected path or "". */
+  onSelectFolder: () => Promise<string>
   welcomeMessage: string
 }
 
 /**
- * Strip [File: ...] / [Path: ...] annotations that buildLLMContent appends to
+ * Strip [File: ...] / [Folder: ...] / [Path: ...] annotations that buildLLMContent appends to
  * user messages before sending to the LLM. These are stored verbatim in the DB
  * but should never be shown in the chat UI.
  */
 function stripFileAnnotations(content: string): string {
-  return content.replace(/\n\n\[File: [\s\S]*$/, '')
+  return content.replace(/\n\n\[(File|Folder): [\s\S]*$/, '')
 }
 
 function toolCallArgDisplay(tc: ToolCall): string {
@@ -66,6 +68,7 @@ export default function Chat({
   onStop,
   onRegenerate,
   onSelectFile,
+  onSelectFolder,
   welcomeMessage,
 }: ChatProps) {
   const [input, setInput] = useState('')
@@ -74,9 +77,11 @@ export default function Chat({
   const [autoScroll, setAutoScroll] = useState(true)
   const [showJumpButton, setShowJumpButton] = useState(false)
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const attachWrapRef = useRef<HTMLDivElement>(null)
   const prevScrollTop = useRef<number>(0)
   const prevStreamingContent = useRef<string>('')
 
@@ -149,7 +154,7 @@ export default function Chat({
         const content =
           text.length > MAX
             ? text.slice(0, MAX) +
-              `\n\n[File truncated — ${(text.length / 1024).toFixed(0)} KB total. Use the 📎 button to attach via path for full access.]`
+              `\n\n[File truncated — ${(text.length / 1024).toFixed(0)} KB total. Use Attach → File to reference the path for full access.]`
             : text
         setAttachments(prev => [...prev, { type: 'text', content, name: file.name }])
       }
@@ -163,6 +168,30 @@ export default function Chat({
     const name = path.split(/[\\/]/).pop() || path
     setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
   }, [onSelectFile])
+
+  const handleSelectFolder = useCallback(async () => {
+    const path = await onSelectFolder()
+    if (!path) return
+    const name = path.split(/[\\/]/).pop() || path
+    setAttachments(prev => [...prev, { type: 'folder-ref', content: path, name }])
+  }, [onSelectFolder])
+
+  useEffect(() => {
+    if (!attachMenuOpen) return
+    const onDocMouseDown = (ev: MouseEvent) => {
+      const el = attachWrapRef.current
+      if (el && !el.contains(ev.target as Node)) setAttachMenuOpen(false)
+    }
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setAttachMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [attachMenuOpen])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -272,7 +301,9 @@ export default function Chat({
           <div className="message-file-previews">
             {files.map((file, j) => (
               <div key={j} className="message-file-chip" title={file.path}>
-                <span className="message-file-icon">📄</span>
+                <span className="message-file-icon">
+                  {file.type === 'folder' ? '📁' : '📄'}
+                </span>
                 <span className="message-file-name">{file.name}</span>
               </div>
             ))}
@@ -333,7 +364,7 @@ export default function Chat({
     >
       {isDragging && (
         <div className="drop-overlay">
-          <div className="drop-message">Drop files here to attach</div>
+          <div className="drop-message">Drop files here to attach by path</div>
         </div>
       )}
 
@@ -398,9 +429,13 @@ export default function Chat({
             <div key={i} className="attachment-item">
               {att.type === 'image' ? (
                 <img src={att.content} alt={att.name} className="attachment-thumb" />
-              ) : att.type === 'file-ref' ? (
+              ) : att.type === 'folder-ref' ? (
                 <span className="attachment-name" title={att.content}>
                   📁 {att.name}
+                </span>
+              ) : att.type === 'file-ref' ? (
+                <span className="attachment-name" title={att.content}>
+                  📄 {att.name}
                 </span>
               ) : (
                 <span className="attachment-name">📄 {att.name}</span>
@@ -414,14 +449,46 @@ export default function Chat({
       )}
 
       <div className="input-area">
-        <button
-          className="file-attach-btn"
-          title="Attach file (opens file picker — large files are referenced by path)"
-          onClick={handleSelectFile}
-          disabled={loading}
-        >
-          <img src={attachmentIcon} alt="Attach file" width={18} height={18} />
-        </button>
+        <div className="composer-attach-wrap" ref={attachWrapRef}>
+          <button
+            type="button"
+            className="file-attach-btn"
+            title="Attach file or folder"
+            aria-label="Attach file or folder"
+            aria-expanded={attachMenuOpen}
+            aria-haspopup="menu"
+            disabled={loading}
+            onClick={() => setAttachMenuOpen(o => !o)}
+          >
+            <img src={attachmentIcon} alt="" width={18} height={18} />
+          </button>
+          {attachMenuOpen && (
+            <div className="attach-menu" role="menu" aria-label="Attachment type">
+              <button
+                type="button"
+                role="menuitem"
+                className="attach-menu-item"
+                onClick={() => {
+                  setAttachMenuOpen(false)
+                  void handleSelectFile()
+                }}
+              >
+                File…
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="attach-menu-item"
+                onClick={() => {
+                  setAttachMenuOpen(false)
+                  void handleSelectFolder()
+                }}
+              >
+                Folder…
+              </button>
+            </div>
+          )}
+        </div>
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}

@@ -26,6 +26,8 @@ export function SearchMessages(arg1:string):Promise<Record<number, Array<main.Me
 
 export function SelectFile():Promise<string>;
 
+export function SelectFolder():Promise<string>;
+
 export function SendMessage(arg1:number,arg2:string):Promise<string>;
 
 export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>):Promise<string>;

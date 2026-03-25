@@ -23,6 +23,20 @@
   --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
   --font-main: var(--font-sans);
+  /* Root size: scales rem and inherited body text (browser default is 16px) */
+  --font-size-root: 14px;
+  /* Chat bubble prose — overridable in Settings → Design */
+  --font-size-message-body: var(--custom-message-font-size, 12px);
+  /* Tool rows — smaller than message text */
+  --font-size-chat-tool-call: max(
+    10px,
+    calc(var(--font-size-message-body) * 0.83)
+  );
+  /* In-bubble file chips + composer attachment strip */
+  --font-size-chat-attachment-info: max(
+    10px,
+    calc(var(--font-size-message-body) * 0.88)
+  );
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-smooth: 0.2s ease;
@@ -64,7 +78,7 @@
   --btn-ghost-hover-bg: var(--custom-dark-btn-ghost-hover-bg, rgba(100, 120, 212, 0.12));
   --sidebar-selected-bg: var(--custom-dark-sidebar-selected-bg, rgba(100, 120, 212, 0.14));
   --sidebar-selected-indicator: var(--custom-dark-sidebar-selected-indicator, #7c8fe0);
-  --conversation-item-border: rgba(40, 50, 86, 0.42);
+  --conversation-item-border: rgba(100, 120, 212, 0.22);
   --conversation-item-border-hover: var(--accent-primary);
   --input-bg: #0a0e1c;
   --input-border: #283256;
@@ -111,7 +125,7 @@
   --btn-ghost-hover-bg: var(--custom-light-btn-ghost-hover-bg, rgba(36, 47, 98, 0.06));
   --sidebar-selected-bg: var(--custom-light-sidebar-selected-bg, rgba(36, 47, 98, 0.08));
   --sidebar-selected-indicator: var(--custom-light-sidebar-selected-indicator, #242f62);
-  --conversation-item-border: rgba(36, 47, 98, 0.14);
+  --conversation-item-border: rgba(36, 47, 98, 0.12);
   --conversation-item-border-hover: var(--accent-primary);
   --input-bg: #ffffff;
   --input-border: #d8deef;
@@ -139,6 +153,10 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-root);
 }
 
 body {
@@ -266,8 +284,9 @@ body {
 }
 
 .conversation-item {
-  margin: 0 8px 4px;
+  margin: 0 16px 4px;
   padding: 10px 12px;
+  box-sizing: border-box;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -278,15 +297,15 @@ body {
   position: relative;
 }
 
+.conversation-item.active {
+  background: var(--sidebar-selected-bg);
+  border-color: var(--conversation-item-border);
+  box-shadow: none;
+}
+
 .conversation-item:hover {
   background: var(--bg-hover, rgba(255, 255, 255, 0.04));
   border-color: var(--conversation-item-border-hover);
-}
-
-.conversation-item.active {
-  background: var(--sidebar-selected-bg);
-  border-color: var(--sidebar-selected-indicator);
-  box-shadow: none;
 }
 
 .conversation-title {
@@ -294,7 +313,8 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  min-width: 0;
+  flex: 1;
   color: var(--text-primary);
 }
 
@@ -528,13 +548,14 @@ body {
   margin-top: var(--space-1);
   border-left: 3px solid var(--warning);
   align-self: flex-start;
-  font-size: 12px;
+  font-size: var(--font-size-chat-tool-call);
+  line-height: 1.45;
   background: var(--bg-surface);
 }
 
 .message-content {
-  font-size: 15px;
-  line-height: 1.58;
+  font-size: var(--font-size-message-body);
+  line-height: 1.52;
   white-space: pre-wrap;
   color: var(--text-primary);
 }
@@ -586,13 +607,13 @@ body {
   padding: 2px 4px;
   border-radius: 20px;
   background: transparent;
-  font-size: 12px;
+  font-size: inherit;
   color: var(--warning);
   animation: tool-call-in 0.2s ease;
 }
 
 .tool-call-icon {
-  font-size: 13px;
+  font-size: 1.12em;
   line-height: 1;
 }
 
@@ -1072,6 +1093,42 @@ body {
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+.design-message-font-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.design-message-font-row label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.design-message-font-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.design-message-font-slider {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-height-inner);
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.design-message-font-value {
+  flex-shrink: 0;
+  min-width: 3.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .design-reset-btn:hover {
   background: var(--btn-ghost-hover-bg);
 }
@@ -1388,6 +1445,12 @@ body {
   width: 100%;
 }
 
+/* Chat messages (excludes .message.tool rows) */
+.message:not(.tool) .markdown-content {
+  font-size: var(--font-size-message-body);
+  line-height: 1.52;
+}
+
 /* Room for bottom-right overlay actions — assistant bubbles only */
 .assistant-reply-bubble .markdown-content {
   padding-bottom: var(--space-2);
@@ -1655,7 +1718,8 @@ body {
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  font-size: 13px;
+  font-size: var(--font-size-chat-attachment-info);
+  line-height: 1.4;
   color: var(--text-primary);
   cursor: default;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -1668,7 +1732,8 @@ body {
 }
 
 .message-file-icon {
-  font-size: 14px;
+  font-size: 1.1em;
+  line-height: 1;
 }
 
 .message-file-name {
@@ -1700,6 +1765,8 @@ body {
   background: var(--bg-chat-user);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+  font-size: var(--font-size-chat-attachment-info);
+  line-height: 1.4;
 }
 
 .attachment-thumb {
@@ -1717,7 +1784,7 @@ body {
 }
 
 .attachment-name {
-  font-size: 12px;
+  font-size: inherit;
   color: var(--text-primary);
   max-width: 100px;
   overflow: hidden;
@@ -1729,7 +1796,7 @@ body {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 16px;
+  font-size: 1.35em;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -1740,8 +1807,52 @@ body {
 }
 
 /* ===== Input Area Buttons ===== */
-.file-attach-btn {
+.composer-attach-wrap {
+  position: relative;
   margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.attach-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 10rem;
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+}
+
+.attach-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-family: var(--font-main);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-smooth);
+}
+
+.attach-menu-item:hover:not(:disabled) {
+  background: var(--accent-subtle-bg);
+}
+
+.attach-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-attach-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1768,7 +1879,8 @@ body {
   cursor: not-allowed;
 }
 
-.file-attach-btn:disabled svg {
+.file-attach-btn:disabled svg,
+.file-attach-btn:disabled img {
   opacity: 0.5;
 }
 

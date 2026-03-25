@@ -1,8 +1,13 @@
 const DESIGN_LIGHT_BASE_KEY = 'design_light_base_color'
 const DESIGN_DARK_BASE_KEY = 'design_dark_base_color'
+const DESIGN_MESSAGE_FONT_SIZE_KEY = 'design_message_font_size_px'
 
 const DEFAULT_LIGHT_BASE = '#242f62'
 const DEFAULT_DARK_BASE = '#6478d4'
+
+export const DEFAULT_MESSAGE_FONT_SIZE_PX = 12
+export const MESSAGE_FONT_SIZE_SLIDER_MIN_PX = 10
+export const MESSAGE_FONT_SIZE_SLIDER_MAX_PX = 22
 
 interface RgbColor {
   r: number
@@ -36,7 +41,31 @@ export function getDesignSettingsKeys() {
   return {
     light: DESIGN_LIGHT_BASE_KEY,
     dark: DESIGN_DARK_BASE_KEY,
+    messageFontSizePx: DESIGN_MESSAGE_FONT_SIZE_KEY,
   }
+}
+
+export function getMessageFontSizePxFromSettings(settings: Record<string, string>): number {
+  const raw = settings[DESIGN_MESSAGE_FONT_SIZE_KEY]?.trim()
+  const n = raw ? Number.parseInt(raw, 10) : NaN
+  if (!Number.isFinite(n)) {
+    return DEFAULT_MESSAGE_FONT_SIZE_PX
+  }
+  return clamp(n, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)
+}
+
+export function applyMessageFontSizeToDocument(px: number) {
+  if (typeof document === 'undefined') {
+    return
+  }
+  const clamped = clamp(px, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)
+  document.documentElement.style.setProperty('--custom-message-font-size', `${clamped}px`)
+}
+
+/** Applies saved design palette + chat message font size to `document.documentElement`. */
+export function applyDesignAndTypographyFromSettings(settings: Record<string, string>) {
+  applyDesignPaletteToDocument(getDesignPaletteFromSettings(settings))
+  applyMessageFontSizeToDocument(getMessageFontSizePxFromSettings(settings))
 }
 
 export function getDesignPaletteFromSettings(settings: Record<string, string>): DesignPalette {

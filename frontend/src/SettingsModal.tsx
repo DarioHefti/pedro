@@ -2,8 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { useToast } from './context/ToastContext'
 import {
   applyDesignPaletteToDocument,
+  applyMessageFontSizeToDocument,
+  DEFAULT_MESSAGE_FONT_SIZE_PX,
   getDesignPaletteFromSettings,
   getDesignSettingsKeys,
+  getMessageFontSizePxFromSettings,
+  MESSAGE_FONT_SIZE_SLIDER_MAX_PX,
+  MESSAGE_FONT_SIZE_SLIDER_MIN_PX,
   normalizeHex,
 } from './designTheme'
 
@@ -28,6 +33,7 @@ interface FullSettingsSnapshot {
   welcomeMessage: string
   designLightBaseColor: string
   designDarkBaseColor: string
+  messageFontSizePx: number
 }
 
 function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
@@ -37,6 +43,7 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
     welcome_message: s.welcomeMessage,
     [getDesignSettingsKeys().light]: s.designLightBaseColor,
     [getDesignSettingsKeys().dark]: s.designDarkBaseColor,
+    [getDesignSettingsKeys().messageFontSizePx]: String(s.messageFontSizePx),
   }
 
   if (s.providerType === 'azure') {
@@ -177,6 +184,12 @@ export default function SettingsModal({
   const [persistedDesignDarkBaseColor, setPersistedDesignDarkBaseColor] = useState(
     getDesignPaletteFromSettings({}).darkBase
   )
+  const [messageFontSizePx, setMessageFontSizePx] = useState(() =>
+    getMessageFontSizePxFromSettings({}),
+  )
+  const [persistedMessageFontSizePx, setPersistedMessageFontSizePx] = useState(() =>
+    getMessageFontSizePxFromSettings({}),
+  )
   const designSettingsKeys = getDesignSettingsKeys()
 
   const snapshot = useMemo<FullSettingsSnapshot>(
@@ -192,6 +205,7 @@ export default function SettingsModal({
       welcomeMessage,
       designLightBaseColor,
       designDarkBaseColor,
+      messageFontSizePx,
     }),
     [
       providerType,
@@ -205,6 +219,7 @@ export default function SettingsModal({
       welcomeMessage,
       designLightBaseColor,
       designDarkBaseColor,
+      messageFontSizePx,
     ]
   )
 
@@ -225,6 +240,7 @@ export default function SettingsModal({
       const csp = s.custom_system_prompt ?? ''
       const wm = s.welcome_message ?? DEFAULT_WELCOME_MESSAGE
       const designPalette = getDesignPaletteFromSettings(s)
+      const msgPx = getMessageFontSizePxFromSettings(s)
 
       setProviderType(pt)
       setEndpoint(ep)
@@ -240,6 +256,8 @@ export default function SettingsModal({
       setDesignDarkBaseColor(designPalette.darkBase)
       setPersistedDesignLightBaseColor(designPalette.lightBase)
       setPersistedDesignDarkBaseColor(designPalette.darkBase)
+      setMessageFontSizePx(msgPx)
+      setPersistedMessageFontSizePx(msgPx)
 
       const fp = fingerprintFromSnapshot({
         providerType: pt,
@@ -253,6 +271,7 @@ export default function SettingsModal({
         welcomeMessage: wm,
         designLightBaseColor: designPalette.lightBase,
         designDarkBaseColor: designPalette.darkBase,
+        messageFontSizePx: msgPx,
       })
       setLastPersistedFingerprint(fp)
       setConnectionCheck(connectionCheckFromStoredSettings(s, fp))
@@ -271,7 +290,8 @@ export default function SettingsModal({
       lightBase: designLightBaseColor,
       darkBase: designDarkBaseColor,
     })
-  }, [designLightBaseColor, designDarkBaseColor])
+    applyMessageFontSizeToDocument(messageFontSizePx)
+  }, [designLightBaseColor, designDarkBaseColor, messageFontSizePx])
 
   function buildProviderSettings(): Record<string, string> {
     const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo } =
@@ -302,12 +322,14 @@ export default function SettingsModal({
     await setSetting('welcome_message', welcomeMessage)
     await setSetting(designSettingsKeys.light, designLightBaseColor)
     await setSetting(designSettingsKeys.dark, designDarkBaseColor)
+    await setSetting(designSettingsKeys.messageFontSizePx, String(messageFontSizePx))
   }
 
   function markPersistedFromState() {
     setLastPersistedFingerprint(fingerprintFromSnapshot(snapshot))
     setPersistedDesignLightBaseColor(designLightBaseColor)
     setPersistedDesignDarkBaseColor(designDarkBaseColor)
+    setPersistedMessageFontSizePx(messageFontSizePx)
   }
 
   function handleClose() {
@@ -315,6 +337,7 @@ export default function SettingsModal({
       lightBase: persistedDesignLightBaseColor,
       darkBase: persistedDesignDarkBaseColor,
     })
+    applyMessageFontSizeToDocument(persistedMessageFontSizePx)
     onClose()
   }
 
@@ -330,6 +353,7 @@ export default function SettingsModal({
     const defaults = getDesignPaletteFromSettings({})
     setDesignLightBaseColor(defaults.lightBase)
     setDesignDarkBaseColor(defaults.darkBase)
+    setMessageFontSizePx(DEFAULT_MESSAGE_FONT_SIZE_PX)
   }
 
   async function syncConnectionCheckFromBackend() {
@@ -676,6 +700,26 @@ export default function SettingsModal({
                 <div className="design-preview-tile">
                   <span className="design-preview-label">Dark preview</span>
                   <span className="design-preview-swatch design-preview-swatch--dark" />
+                </div>
+              </div>
+
+              <div className="design-message-font-row">
+                <label htmlFor="design-message-font-size">Chat message font size</label>
+                <div className="design-message-font-control">
+                  <input
+                    id="design-message-font-size"
+                    type="range"
+                    className="design-message-font-slider"
+                    min={MESSAGE_FONT_SIZE_SLIDER_MIN_PX}
+                    max={MESSAGE_FONT_SIZE_SLIDER_MAX_PX}
+                    step={1}
+                    value={messageFontSizePx}
+                    onChange={e => setMessageFontSizePx(Number(e.target.value))}
+                    aria-valuemin={MESSAGE_FONT_SIZE_SLIDER_MIN_PX}
+                    aria-valuemax={MESSAGE_FONT_SIZE_SLIDER_MAX_PX}
+                    aria-valuenow={messageFontSizePx}
+                  />
+                  <span className="design-message-font-value">{messageFontSizePx}px</span>
                 </div>
               </div>
 

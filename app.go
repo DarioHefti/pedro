@@ -371,6 +371,16 @@ func (a *App) SelectFile() string {
 	return path
 }
 
+func (a *App) SelectFolder() string {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Folder",
+	})
+	if err != nil || path == "" {
+		return ""
+	}
+	return path
+}
+
 func (a *App) SetSetting(key, value string) error {
 	if a.store == nil {
 		return nil
