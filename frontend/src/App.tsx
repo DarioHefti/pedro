@@ -6,13 +6,22 @@ import Toaster from './components/Toaster'
 import { useConversations } from './hooks/useConversations'
 import { useMessaging } from './hooks/useMessaging'
 import { useToast } from './context/ToastContext'
-import { conversationService, settingsService, fileService } from './services/wailsService'
+import {
+  conversationService,
+  settingsService,
+  fileService,
+  MOCK_EMPTY_CHAT_UI,
+  MOCK_UI_CONVERSATION_ID,
+} from './services/wailsService'
+import { applyDesignPaletteToDocument, getDesignPaletteFromSettings } from './designTheme'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
 export default function App() {
   const toast = useToast()
-  const [currentConvID, setCurrentConvID] = useState<number | null>(null)
+  const [currentConvID, setCurrentConvID] = useState<number | null>(() =>
+    MOCK_EMPTY_CHAT_UI ? MOCK_UI_CONVERSATION_ID : null,
+  )
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
 
@@ -30,7 +39,16 @@ export default function App() {
   useEffect(() => {
     settingsService.get().then(s => {
       setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
+      applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
     })
+  }, [])
+
+  useEffect(() => {
+    if (!MOCK_EMPTY_CHAT_UI) return
+    if (currentConvID !== MOCK_UI_CONVERSATION_ID) return
+    void messaging.load(MOCK_UI_CONVERSATION_ID)
+    // Bootstrap sample thread once when opening on the virtual conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [])
 
   // Explicit: load messages only when the user actively selects a conversation.
@@ -59,6 +77,7 @@ export default function App() {
     // Reload welcome message in case it was changed
     settingsService.get().then(s => {
       setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
+      applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
     })
   }
 
@@ -92,6 +111,7 @@ export default function App() {
           onSaved={() => {
             settingsService.get().then(s => {
               setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
+              applyDesignPaletteToDocument(getDesignPaletteFromSettings(s))
             })
           }}
           getSettings={settingsService.get}

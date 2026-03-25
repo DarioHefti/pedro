@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from './ThemeContext'
 import type { Conversation, Message } from './services/wailsService'
+import { MOCK_UI_CONVERSATION_ID } from './services/wailsService'
 
 interface SidebarProps {
   conversations: Conversation[]
@@ -76,15 +77,17 @@ export default function Sidebar({
               onClick={() => onSelect(conv.ID)}
             >
               <div className="conversation-title">{conv.Title || 'New Chat'}</div>
-              <button
-                className="delete-btn"
-                onClick={e => {
-                  e.stopPropagation()
-                  onDelete(conv.ID)
-                }}
-              >
-                ×
-              </button>
+              {conv.ID !== MOCK_UI_CONVERSATION_ID ? (
+                <button
+                  className="delete-btn"
+                  onClick={e => {
+                    e.stopPropagation()
+                    onDelete(conv.ID)
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
             </div>
           ))
         )}

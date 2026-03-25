@@ -29,6 +29,103 @@ function stripFileAnnotations(content: string): string {
   return content.replace(/\n\n\[File: [\s\S]*$/, '')
 }
 
+function IconCopy() {
+  return (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <rect
+        x="9"
+        y="9"
+        width="13"
+        height="13"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function IconRegenerate() {
+  return (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path
+        d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 3v5h5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M21 21v-5h-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function toolCallArgDisplay(tc: ToolCall): string {
+  let argsDisplay = ''
+  try {
+    const args = JSON.parse(tc.argsJSON) as Record<string, unknown>
+    if (tc.name === 'websearch' && typeof args.query === 'string') {
+      argsDisplay = `"${args.query}"`
+    } else if (tc.name === 'webfetch' && typeof args.url === 'string') {
+      argsDisplay = args.url
+    } else if (typeof args.url === 'string') {
+      argsDisplay = args.url
+    } else if (typeof args.query === 'string') {
+      argsDisplay = args.query
+    } else if (typeof args.path === 'string') {
+      argsDisplay = args.path
+    } else if (typeof args.pattern === 'string') {
+      argsDisplay = args.pattern
+    } else if (typeof args.include === 'string') {
+      argsDisplay = args.include
+    }
+  } catch {
+    /* ignore */
+  }
+  return argsDisplay
+}
+
 export default function Chat({
   messages,
   toolCalls,
@@ -206,6 +303,92 @@ export default function Chat({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const lastUserMessageIndex = messages.reduce(
+    (acc, m, idx) => (m.Role === 'user' ? idx : acc),
+    -1,
+  )
+  /** Tool rows belong after the latest user turn and before its assistant reply (incl. streaming). */
+  const splitMessagesForToolCalls =
+    toolCalls.length > 0 && lastUserMessageIndex >= 0
+  const messageHeadCount = splitMessagesForToolCalls
+    ? lastUserMessageIndex + 1
+    : messages.length
+
+  function renderMessageRow(i: number) {
+    const msg = messages[i]
+    const imgs = messageImages.get(i)
+    const files = messageFiles.get(i)
+    return (
+      <div key={i} className={`message-wrapper ${msg.Role}`}>
+        <div className={`message ${msg.Role}`}>
+          {imgs && imgs.length > 0 && (
+            <div className="message-image-previews">
+              {imgs.map((src, j) => (
+                <img
+                  key={j}
+                  src={src}
+                  alt={`Attached image ${j + 1}`}
+                  className="message-image-thumb"
+                />
+              ))}
+            </div>
+          )}
+          {files && files.length > 0 && (
+            <div className="message-file-previews">
+              {files.map((file, j) => (
+                <div key={j} className="message-file-chip" title={file.path}>
+                  <span className="message-file-icon">📄</span>
+                  <span className="message-file-name">{file.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <MessageRenderer
+            content={msg.Role === 'user' ? stripFileAnnotations(msg.Content || '') : (msg.Content || '')}
+            role={msg.Role}
+          />
+        </div>
+        {msg.Role === 'assistant' && (
+          <div className="message-actions">
+            <button
+              type="button"
+              className="message-action-btn"
+              onClick={() => navigator.clipboard.writeText(msg.Content || '')}
+              title="Copy message"
+              aria-label="Copy message"
+            >
+              <IconCopy />
+            </button>
+            <button
+              type="button"
+              className="message-action-btn"
+              onClick={() => onRegenerate(i)}
+              title="Regenerate response"
+              aria-label="Regenerate response"
+            >
+              <IconRegenerate />
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderToolCallRows() {
+    return toolCalls.map((tc, i) => {
+      const argsDisplay = toolCallArgDisplay(tc)
+      return (
+        <div key={`tc-${i}`} className="message tool">
+          <div className="tool-call-card">
+            <span className="tool-call-icon">🔧</span>
+            <span className="tool-call-label">{tc.name}</span>
+            {argsDisplay ? <span className="tool-call-arg">{argsDisplay}</span> : null}
+          </div>
+        </div>
+      )
+    })
+  }
+
   return (
     <div
       className="main"
@@ -240,90 +423,15 @@ export default function Chat({
             </div>
           </div>
         )}
-        {messages.map((msg, i) => {
-          const imgs = messageImages.get(i)
-          const files = messageFiles.get(i)
-          return (
-            <div key={i} className={`message-wrapper ${msg.Role}`}>
-              {msg.Role === 'assistant' && (
-                <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
-              )}
-              <div className={`message ${msg.Role}`}>
-              {imgs && imgs.length > 0 && (
-                <div className="message-image-previews">
-                  {imgs.map((src, j) => (
-                    <img
-                      key={j}
-                      src={src}
-                      alt={`Attached image ${j + 1}`}
-                      className="message-image-thumb"
-                    />
-                  ))}
-                </div>
-              )}
-              {files && files.length > 0 && (
-                <div className="message-file-previews">
-                  {files.map((file, j) => (
-                    <div key={j} className="message-file-chip" title={file.path}>
-                      <span className="message-file-icon">📄</span>
-                      <span className="message-file-name">{file.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <MessageRenderer
-                content={msg.Role === 'user' ? stripFileAnnotations(msg.Content || '') : (msg.Content || '')}
-                role={msg.Role}
-              />
-              {msg.Role === 'assistant' && (
-                <div className="message-actions">
-                  <button onClick={() => navigator.clipboard.writeText(msg.Content || '')} title="Copy">
-                    Copy
-                  </button>
-                  <button onClick={() => onRegenerate(i)} title="Regenerate">
-                    Regenerate
-                  </button>
-                </div>
-              )}
-            </div>
-            </div>
-          )
-        })}
-
-        {toolCalls.map((tc, i) => {
-          let argsDisplay = ''
-          try {
-            const args = JSON.parse(tc.argsJSON)
-            if (tc.name === 'websearch' && args.query) {
-              argsDisplay = `"${args.query}"`
-            } else if (tc.name === 'webfetch' && args.url) {
-              argsDisplay = args.url
-            } else if (args.url) {
-              argsDisplay = args.url
-            } else if (args.query) {
-              argsDisplay = args.query
-            } else if (args.path) {
-              argsDisplay = args.path
-            } else if (args.pattern) {
-              argsDisplay = args.pattern
-            } else if (args.include) {
-              argsDisplay = args.include
-            }
-          } catch {}
-          return (
-            <div key={`tc-${i}`} className="message tool">
-              <div className="tool-call-card">
-                <span className="tool-call-icon">🔧</span>
-                <span className="tool-call-label">{tc.name}</span>
-                {argsDisplay && <span className="tool-call-arg">{argsDisplay}</span>}
-              </div>
-            </div>
-          )
-        })}
+        {Array.from({ length: messageHeadCount }, (_, i) => renderMessageRow(i))}
+        {splitMessagesForToolCalls ? renderToolCallRows() : null}
+        {splitMessagesForToolCalls
+          ? messages.slice(messageHeadCount).map((_, j) => renderMessageRow(messageHeadCount + j))
+          : null}
+        {!splitMessagesForToolCalls && toolCalls.length > 0 ? renderToolCallRows() : null}
 
         {loading && (
-          <div className="message-wrapper">
-            <img src={pedroAvatar} alt="Pedro" className="message-avatar" />
+          <div className="message-wrapper assistant">
             <div className="message assistant">
               {streamingContent ? (
                 <MessageRenderer

@@ -53,19 +53,114 @@ function stubConversation(): main.Conversation {
 }
 
 // ---------------------------------------------------------------------------
+// UI dev: virtual conversation (sidebar row + thread). Set MOCK_EMPTY_CHAT_UI
+// false (or delete this block) to remove. Does not touch the Go backend.
+// ---------------------------------------------------------------------------
+
+/** Dev-only sample thread in sidebar. Keep `false` for production builds. */
+export const MOCK_EMPTY_CHAT_UI = false
+
+/** Reserved ID for the in-memory-only sample conversation (not stored in DB). */
+export const MOCK_UI_CONVERSATION_ID = -9_001
+
+const MOCK_SAMPLE_TITLE = 'Sample chat'
+
+const MOCK_SAMPLE_USER_CONTENT =
+  'What does this project use for the desktop shell?'
+
+const MOCK_SAMPLE_ASSISTANT_CONTENT =
+  'This app is built with Wails: the UI is the Vite/React frontend while Go hosts native APIs. Tool calls like search and repo grep are typical for how the assistant answers.'
+
+function buildMockConversation(): main.Conversation {
+  const now = new Date().toISOString()
+  return new main.Conversation({
+    ID: MOCK_UI_CONVERSATION_ID,
+    Title: MOCK_SAMPLE_TITLE,
+    CreatedAt: now,
+    UpdatedAt: now,
+  })
+}
+
+function buildMockMessagesForConversation(conversationID: number): main.Message[] {
+  const now = new Date().toISOString()
+  return [
+    new main.Message({
+      ID: -1,
+      ConversationID: conversationID,
+      Role: 'user',
+      Content: MOCK_SAMPLE_USER_CONTENT,
+      CreatedAt: now,
+    }),
+    new main.Message({
+      ID: -2,
+      ConversationID: conversationID,
+      Role: 'assistant',
+      Content: MOCK_SAMPLE_ASSISTANT_CONTENT,
+      CreatedAt: now,
+    }),
+  ]
+}
+
+/** Sample tool rows paired with `isSeededEmptyChatMock` for the mock thread. */
+export const mockEmptyChatToolCalls: { name: string; argsJSON: string }[] = [
+  { name: 'websearch', argsJSON: JSON.stringify({ query: 'Wails v2 desktop Go bindings' }) },
+  { name: 'grep', argsJSON: JSON.stringify({ pattern: 'wails', path: 'frontend' }) },
+]
+
+export function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
+  if (!MOCK_EMPTY_CHAT_UI || msgs.length !== 2) return false
+  return (
+    msgs[0]?.Role === 'user' &&
+    msgs[0]?.Content === MOCK_SAMPLE_USER_CONTENT &&
+    msgs[1]?.Role === 'assistant' &&
+    msgs[1]?.Content === MOCK_SAMPLE_ASSISTANT_CONTENT
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Conversation service
 // ---------------------------------------------------------------------------
 export const conversationService = {
-  getAll: (): Promise<main.Conversation[]> =>
-    useDevStub ? Promise.resolve([]) : GetConversations(),
-  getMessages: (id: number): Promise<main.Message[]> =>
-    useDevStub ? Promise.resolve([]) : GetMessages(id),
+  getAll: async (): Promise<main.Conversation[]> => {
+    const raw = useDevStub ? [] : await GetConversations()
+    const list = raw ?? []
+    if (!MOCK_EMPTY_CHAT_UI) return list
+    return [buildMockConversation(), ...list]
+  },
+  getMessages: async (id: number): Promise<main.Message[]> => {
+    if (MOCK_EMPTY_CHAT_UI && id === MOCK_UI_CONVERSATION_ID) {
+      return buildMockMessagesForConversation(MOCK_UI_CONVERSATION_ID)
+    }
+    const raw = useDevStub ? [] : await GetMessages(id)
+    return raw ?? []
+  },
   create: (): Promise<main.Conversation> =>
     useDevStub ? Promise.resolve(stubConversation()) : CreateConversation(),
-  delete: (id: number): Promise<void> =>
-    useDevStub ? Promise.resolve() : DeleteConversation(id),
-  search: (query: string): Promise<Record<number, main.Message[]>> =>
-    useDevStub ? Promise.resolve({}) : SearchMessages(query),
+  delete: (id: number): Promise<void> => {
+    if (MOCK_EMPTY_CHAT_UI && id === MOCK_UI_CONVERSATION_ID) {
+      return Promise.resolve()
+    }
+    return useDevStub ? Promise.resolve() : DeleteConversation(id)
+  },
+  search: async (query: string): Promise<Record<number, main.Message[]>> => {
+    const base = useDevStub ? {} : await SearchMessages(query)
+    const out: Record<number, main.Message[]> = { ...(base ?? {}) }
+    if (MOCK_EMPTY_CHAT_UI && query.trim()) {
+      const q = query.trim().toLowerCase()
+      const mockMsgs = buildMockMessagesForConversation(MOCK_UI_CONVERSATION_ID)
+      if (MOCK_SAMPLE_TITLE.toLowerCase().includes(q)) {
+        out[MOCK_UI_CONVERSATION_ID] = mockMsgs
+      } else {
+        const matching = mockMsgs.filter(m =>
+          (m.Content || '').toLowerCase().includes(q),
+        )
+        if (matching.length > 0) {
+          out[MOCK_UI_CONVERSATION_ID] = matching
+        }
+      }
+    }
+    return out
+  },
 }
 
 // ---------------------------------------------------------------------------

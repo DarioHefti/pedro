@@ -3,6 +3,9 @@ import {
   conversationService,
   messageService,
   eventService,
+  MOCK_UI_CONVERSATION_ID,
+  mockEmptyChatToolCalls,
+  isSeededEmptyChatMock,
   type Conversation,
   type Message,
 } from '../services/wailsService'
@@ -76,14 +79,21 @@ export function useMessaging({
   /** Load messages for a conversation and clear any in-session attachment maps. */
   const load = useCallback(async (convID: number): Promise<void> => {
     const msgs = await conversationService.getMessages(convID)
-    setMessages(msgs ?? [])
+    const list = msgs ?? []
+    setMessages(list)
     setMessageImages(new Map())
     setMessageFiles(new Map())
+    setToolCalls(
+      isSeededEmptyChatMock(list)
+        ? mockEmptyChatToolCalls.map(tc => ({ ...tc }))
+        : [],
+    )
   }, [])
 
   /** Clear all message state (e.g. when "New Chat" is selected). */
   const clear = useCallback((): void => {
     setMessages([])
+    setToolCalls([])
     setMessageImages(new Map())
     setMessageFiles(new Map())
   }, [])
@@ -93,7 +103,7 @@ export function useMessaging({
     async (content: string, attachments?: Attachment[]): Promise<void> => {
       let convID = currentConvID
 
-      if (!convID) {
+      if (!convID || convID === MOCK_UI_CONVERSATION_ID) {
         const conv = await createConversation()
         convID = conv.ID
         onConversationCreated(convID)
@@ -176,6 +186,7 @@ export function useMessaging({
     async (index: number): Promise<void> => {
       const msg = messages[index]
       if (msg?.Role !== 'assistant' || !currentConvID) return
+      if (currentConvID === MOCK_UI_CONVERSATION_ID) return
 
       setMessages(prev => prev.slice(0, index))
       prepareStreaming()

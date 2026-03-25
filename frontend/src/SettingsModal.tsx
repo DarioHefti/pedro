@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useToast } from './context/ToastContext'
+import {
+  applyDesignPaletteToDocument,
+  getDesignPaletteFromSettings,
+  getDesignSettingsKeys,
+  normalizeHex,
+} from './designTheme'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
-type Tab = 'llm' | 'prompt'
+type Tab = 'llm' | 'prompt' | 'design'
 
 type ConnectionCheckState =
   | { kind: 'idle' }
@@ -20,6 +26,8 @@ interface FullSettingsSnapshot {
   model: string
   customSystemPrompt: string
   welcomeMessage: string
+  designLightBaseColor: string
+  designDarkBaseColor: string
 }
 
 function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
@@ -27,6 +35,8 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
     provider_type: s.providerType,
     custom_system_prompt: s.customSystemPrompt,
     welcome_message: s.welcomeMessage,
+    [getDesignSettingsKeys().light]: s.designLightBaseColor,
+    [getDesignSettingsKeys().dark]: s.designDarkBaseColor,
   }
 
   if (s.providerType === 'azure') {
@@ -159,6 +169,15 @@ export default function SettingsModal({
   // Prompt Settings
   const [customSystemPrompt, setCustomSystemPrompt] = useState('')
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
+  const [designLightBaseColor, setDesignLightBaseColor] = useState(getDesignPaletteFromSettings({}).lightBase)
+  const [designDarkBaseColor, setDesignDarkBaseColor] = useState(getDesignPaletteFromSettings({}).darkBase)
+  const [persistedDesignLightBaseColor, setPersistedDesignLightBaseColor] = useState(
+    getDesignPaletteFromSettings({}).lightBase
+  )
+  const [persistedDesignDarkBaseColor, setPersistedDesignDarkBaseColor] = useState(
+    getDesignPaletteFromSettings({}).darkBase
+  )
+  const designSettingsKeys = getDesignSettingsKeys()
 
   const snapshot = useMemo<FullSettingsSnapshot>(
     () => ({
@@ -171,6 +190,8 @@ export default function SettingsModal({
       model,
       customSystemPrompt,
       welcomeMessage,
+      designLightBaseColor,
+      designDarkBaseColor,
     }),
     [
       providerType,
@@ -182,6 +203,8 @@ export default function SettingsModal({
       model,
       customSystemPrompt,
       welcomeMessage,
+      designLightBaseColor,
+      designDarkBaseColor,
     ]
   )
 
@@ -201,6 +224,7 @@ export default function SettingsModal({
       const m = s.openai_model ?? 'gpt-4o'
       const csp = s.custom_system_prompt ?? ''
       const wm = s.welcome_message ?? DEFAULT_WELCOME_MESSAGE
+      const designPalette = getDesignPaletteFromSettings(s)
 
       setProviderType(pt)
       setEndpoint(ep)
@@ -212,6 +236,10 @@ export default function SettingsModal({
       setAuthenticated(auth)
       setCustomSystemPrompt(csp)
       setWelcomeMessage(wm)
+      setDesignLightBaseColor(designPalette.lightBase)
+      setDesignDarkBaseColor(designPalette.darkBase)
+      setPersistedDesignLightBaseColor(designPalette.lightBase)
+      setPersistedDesignDarkBaseColor(designPalette.darkBase)
 
       const fp = fingerprintFromSnapshot({
         providerType: pt,
@@ -223,6 +251,8 @@ export default function SettingsModal({
         model: m,
         customSystemPrompt: csp,
         welcomeMessage: wm,
+        designLightBaseColor: designPalette.lightBase,
+        designDarkBaseColor: designPalette.darkBase,
       })
       setLastPersistedFingerprint(fp)
       setConnectionCheck(connectionCheckFromStoredSettings(s, fp))
@@ -235,6 +265,13 @@ export default function SettingsModal({
       setConnectionCheck({ kind: 'idle' })
     }
   }, [hasUnsavedChanges, connectionCheck.kind])
+
+  useEffect(() => {
+    applyDesignPaletteToDocument({
+      lightBase: designLightBaseColor,
+      darkBase: designDarkBaseColor,
+    })
+  }, [designLightBaseColor, designDarkBaseColor])
 
   function buildProviderSettings(): Record<string, string> {
     const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo } =
@@ -263,10 +300,36 @@ export default function SettingsModal({
     await saveSettings(buildProviderSettings())
     await setSetting('custom_system_prompt', customSystemPrompt)
     await setSetting('welcome_message', welcomeMessage)
+    await setSetting(designSettingsKeys.light, designLightBaseColor)
+    await setSetting(designSettingsKeys.dark, designDarkBaseColor)
   }
 
   function markPersistedFromState() {
     setLastPersistedFingerprint(fingerprintFromSnapshot(snapshot))
+    setPersistedDesignLightBaseColor(designLightBaseColor)
+    setPersistedDesignDarkBaseColor(designDarkBaseColor)
+  }
+
+  function handleClose() {
+    applyDesignPaletteToDocument({
+      lightBase: persistedDesignLightBaseColor,
+      darkBase: persistedDesignDarkBaseColor,
+    })
+    onClose()
+  }
+
+  function updateDesignLightColor(rawValue: string) {
+    setDesignLightBaseColor(prev => normalizeHex(rawValue, prev))
+  }
+
+  function updateDesignDarkColor(rawValue: string) {
+    setDesignDarkBaseColor(prev => normalizeHex(rawValue, prev))
+  }
+
+  function resetDesignColors() {
+    const defaults = getDesignPaletteFromSettings({})
+    setDesignLightBaseColor(defaults.lightBase)
+    setDesignDarkBaseColor(defaults.darkBase)
   }
 
   async function syncConnectionCheckFromBackend() {
@@ -377,7 +440,7 @@ export default function SettingsModal({
             : 'Run Test connection to verify'
 
   return (
-    <div className="modal" onClick={onClose}>
+    <div className="modal" onClick={handleClose}>
       <div className="modal-content settings-modal" onClick={e => e.stopPropagation()}>
         <h2>Settings</h2>
 
@@ -394,6 +457,12 @@ export default function SettingsModal({
             onClick={() => setActiveTab('prompt')}
           >
             Prompt
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'design' ? 'active' : ''}`}
+            onClick={() => setActiveTab('design')}
+          >
+            Design
           </button>
         </div>
 
@@ -568,6 +637,53 @@ export default function SettingsModal({
               />
             </div>
           )}
+
+          {activeTab === 'design' && (
+            <div className="settings-panel">
+              <div className="design-color-row">
+                <label htmlFor="light-design-color">Light theme base color</label>
+                <div className="design-color-control-row">
+                  <input
+                    id="light-design-color"
+                    className="design-color-picker"
+                    type="color"
+                    value={designLightBaseColor}
+                    onChange={e => updateDesignLightColor(e.target.value)}
+                  />
+                  <span className="design-color-hex">{designLightBaseColor}</span>
+                </div>
+              </div>
+
+              <div className="design-color-row">
+                <label htmlFor="dark-design-color">Dark theme base color</label>
+                <div className="design-color-control-row">
+                  <input
+                    id="dark-design-color"
+                    className="design-color-picker"
+                    type="color"
+                    value={designDarkBaseColor}
+                    onChange={e => updateDesignDarkColor(e.target.value)}
+                  />
+                  <span className="design-color-hex">{designDarkBaseColor}</span>
+                </div>
+              </div>
+
+              <div className="design-preview-grid">
+                <div className="design-preview-tile">
+                  <span className="design-preview-label">Light preview</span>
+                  <span className="design-preview-swatch design-preview-swatch--light" />
+                </div>
+                <div className="design-preview-tile">
+                  <span className="design-preview-label">Dark preview</span>
+                  <span className="design-preview-swatch design-preview-swatch--dark" />
+                </div>
+              </div>
+
+              <button type="button" className="design-reset-btn" onClick={resetDesignColors}>
+                Reset to defaults
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer Buttons */}
@@ -575,7 +691,7 @@ export default function SettingsModal({
           <button className="save-btn" onClick={save} disabled={saving || !hasUnsavedChanges}>
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={handleClose}>
             {hasUnsavedChanges ? 'Cancel' : 'Close'}
           </button>
         </div>
