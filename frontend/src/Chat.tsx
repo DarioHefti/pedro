@@ -84,6 +84,7 @@ export default function Chat({
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const attachWrapRef = useRef<HTMLDivElement>(null)
   /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
   const suppressStickBreakRef = useRef(false)
@@ -98,6 +99,14 @@ export default function Chat({
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior })
+  }, [])
+
+  /** Focus composer on mount so the user can type without clicking (Wails: defer one frame after paint). */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(id)
   }, [])
 
   /** User scrolled away from the tail → stop following. Following only resumes on Send or “jump to bottom”. */
@@ -525,6 +534,7 @@ export default function Chat({
           )}
         </div>
         <textarea
+          ref={inputRef}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
