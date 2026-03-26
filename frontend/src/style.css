@@ -430,6 +430,8 @@ body {
   flex: 1;
   padding: var(--chat-thread-pad);
   overflow-y: auto;
+  /* Avoid browser scroll anchoring fighting manual scroll when content height changes (e.g. mermaid). */
+  overflow-anchor: none;
   display: flex;
   flex-direction: column;
   gap: var(--chat-thread-gap);

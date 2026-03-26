@@ -87,6 +87,14 @@ export default function Chat({
   const attachWrapRef = useRef<HTMLDivElement>(null)
   /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
   const suppressStickBreakRef = useRef(false)
+  /**
+   * Physical scrollTop while loading with !stickToBottom — synced each layout pass so we still have
+   * the right value when the stream ends between chunks (no scroll event). Used to restore after the
+   * streaming row is replaced (preserve scrollTop, not distance-from-bottom — the latter scrolls down
+   * when the final bubble is taller than the stream, which feels like a jump).
+   */
+  const lastScrollTopWhileReadingRef = useRef(0)
+  const prevLoadingRef = useRef(loading)
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior })
@@ -99,6 +107,7 @@ export default function Chat({
 
     const onScroll = () => {
       if (suppressStickBreakRef.current) return
+      lastScrollTopWhileReadingRef.current = el.scrollTop
       const distance = el.scrollHeight - el.scrollTop - el.clientHeight
       const away = distance > SCROLL_STICK_THRESHOLD_PX
       setShowJumpButton(away)
@@ -115,9 +124,23 @@ export default function Chat({
   useLayoutEffect(() => {
     const el = messagesRef.current
     if (!el) return
+
+    if (loading && !stickToBottom) {
+      lastScrollTopWhileReadingRef.current = el.scrollTop
+    }
+
+    const prevLoading = prevLoadingRef.current
+    prevLoadingRef.current = loading
+    const loadingEnded = prevLoading && !loading
+
     if (stickToBottom) {
       scrollMessagesToBottom('auto')
+    } else if (loadingEnded) {
+      // Keep viewport stable: only clamp if the thread shrank (browser would clamp scrollTop).
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+      el.scrollTop = Math.min(Math.max(0, lastScrollTopWhileReadingRef.current), maxScroll)
     }
+
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     setShowJumpButton(distance > SCROLL_STICK_THRESHOLD_PX)
   }, [messages, toolCalls, loading, streamingContent, stickToBottom, scrollMessagesToBottom])
