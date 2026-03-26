@@ -23,8 +23,12 @@
   --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
   --font-main: var(--font-sans);
-  /* Root size: scales rem and inherited body text (browser default is 16px) */
-  --font-size-root: 14px;
+  /* Sidebar, buttons, inputs, modals — Settings → Design → Interface font size */
+  --font-size-ui: var(--custom-ui-font-size, 12px);
+  /* Slightly smaller labels / secondary UI (derived from UI size) */
+  --font-size-ui-secondary: max(10px, calc(var(--font-size-ui) * 0.92));
+  /* Root rem base follows interface size */
+  --font-size-root: var(--font-size-ui);
   /* Chat bubble prose — overridable in Settings → Design */
   --font-size-message-body: var(--custom-message-font-size, 12px);
   /* Tool rows — smaller than message text */
@@ -64,8 +68,11 @@
   --app-footer-pad-bottom: var(--space-4);
   /* Space between messages/attachments strip and input (matches sidebar footer row breathing room) */
   --composer-stack-gap: var(--space-2);
-  /* Distance from main bottom to top of input-area (footer pad + input height) */
-  --composer-outer-height: calc(var(--app-footer-pad-bottom) + var(--control-height));
+  /* Full height of .composer-row; Chat sets this from ResizeObserver when the composer grows. */
+  --composer-body-height: var(--control-height);
+  /* Distance from main bottom to top of composer (footer pad + composer row). */
+  --composer-outer-height: calc(var(--app-footer-pad-bottom) + var(--composer-body-height));
+  --composer-textarea-max-height: 150px;
 }
 
 /* Dark — shades of #242f62 */
@@ -223,7 +230,7 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   font-family: var(--font-main);
 }
@@ -251,7 +258,7 @@ body {
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   font-family: var(--font-main);
   box-shadow: none;
@@ -294,7 +301,7 @@ body {
   padding: 16px;
   color: var(--text-secondary);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
 }
 
 .conversation-item {
@@ -323,7 +330,7 @@ body {
 }
 
 .conversation-title {
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -340,7 +347,7 @@ body {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 18px;
+  font-size: max(14px, calc(var(--font-size-ui) * 1.35));
   cursor: pointer;
   opacity: 0;
   padding: 0 4px;
@@ -375,7 +382,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   transition: background 0.15s ease, border-color 0.15s ease;
   font-family: var(--font-main);
@@ -397,7 +404,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 16px;
+  font-size: max(14px, calc(var(--font-size-ui) * 1.2));
   line-height: 1;
   transition: background 0.15s ease, border-color 0.15s ease;
   display: flex;
@@ -459,7 +466,7 @@ body {
 }
 
 .empty-state-eyebrow {
-  font-size: 12px;
+  font-size: var(--font-size-ui-secondary);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -655,77 +662,88 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.input-area {
+/* Attach + Send sit outside the bordered field; same start height as --control-height. */
+.composer-row {
   margin: var(--composer-stack-gap) var(--app-footer-pad-x) var(--app-footer-pad-bottom);
-  min-height: var(--control-height);
-  box-sizing: border-box;
-  background: var(--input-bg);
   display: flex;
-  gap: 10px;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  align-items: flex-end;
+  gap: var(--space-2);
+  box-sizing: border-box;
   position: relative;
   z-index: 2;
 }
 
-.input-area:focus-within {
+.composer-input-shell {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-height);
+  height: auto;
+  box-sizing: border-box;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.composer-input-shell:focus-within {
   border-color: var(--input-focus-border);
   box-shadow: var(--input-focus-shadow);
 }
 
-.input-area textarea {
-  flex: 1;
-  padding: 12px 8px;
+.composer-input-shell textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
   min-height: var(--control-height-inner);
-  max-height: 150px;
+  max-height: var(--composer-textarea-max-height);
   background: transparent;
   color: var(--text-primary);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-md) - 1px);
   resize: none;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   font-family: var(--font-main);
   overflow-y: auto;
   transition: color 0.15s ease;
+  box-sizing: border-box;
 }
 
-.input-area textarea::-webkit-scrollbar {
+.composer-input-shell textarea::-webkit-scrollbar {
   width: 8px;
 }
 
-.input-area textarea::-webkit-scrollbar-thumb {
+.composer-input-shell textarea::-webkit-scrollbar-thumb {
   background-color: var(--border);
   border-radius: 4px;
 }
 
-.input-area textarea:not(:hover)::-webkit-scrollbar-thumb {
+.composer-input-shell textarea:not(:hover)::-webkit-scrollbar-thumb {
   background-color: transparent;
 }
 
-.input-area textarea::placeholder {
+.composer-input-shell textarea::placeholder {
   color: var(--text-secondary);
 }
 
-.input-area textarea:focus {
+.composer-input-shell textarea:focus {
   outline: none;
 }
 
-.input-area .send-btn {
-  margin-right: 2px;
+.composer-row .send-btn {
+  flex-shrink: 0;
   padding: 0 14px;
-  min-height: var(--control-height-inner);
-  height: var(--control-height-inner);
+  min-height: var(--control-height);
+  height: var(--control-height);
   box-sizing: border-box;
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   font-family: var(--font-main);
   line-height: 1;
@@ -736,15 +754,15 @@ body {
   box-shadow: none;
 }
 
-.input-area .send-btn:hover:not(:disabled) {
+.composer-row .send-btn:hover:not(:disabled) {
   filter: brightness(1.05);
 }
 
-.input-area .send-btn:active:not(:disabled) {
+.composer-row .send-btn:active:not(:disabled) {
   filter: brightness(0.97);
 }
 
-.input-area button:disabled {
+.composer-row button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -791,7 +809,7 @@ body {
 .modal-content label {
   display: block;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -806,7 +824,7 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   transition: border-color 0.15s ease;
   font-family: var(--font-main);
 }
@@ -843,7 +861,7 @@ body {
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
@@ -874,7 +892,7 @@ body {
 }
 
 .settings-description {
-  font-size: 12px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
   margin-bottom: 12px;
   margin-top: -4px;
@@ -915,7 +933,7 @@ body {
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   font-weight: 500;
   font-family: var(--font-main);
   max-width: 100%;
@@ -951,14 +969,14 @@ body {
 }
 
 .settings-connection-error {
-  font-size: 12px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--error);
   margin: -8px 0 12px;
   line-height: 1.4;
 }
 
 .settings-save-hint {
-  font-size: 12px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
   margin: -4px 0 12px;
   line-height: 1.4;
@@ -973,7 +991,7 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-main);
   cursor: pointer;
   transition: border-color 0.15s ease;
@@ -993,7 +1011,7 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-main);
   line-height: 1.5;
   resize: vertical;
@@ -1046,7 +1064,7 @@ body {
   border: 1px solid var(--border);
   background: var(--bg-chat-user);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   font-family: var(--font-main);
   letter-spacing: 0.02em;
 }
@@ -1067,7 +1085,7 @@ body {
 
 .design-preview-label {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
   margin-bottom: 8px;
 }
@@ -1105,9 +1123,23 @@ body {
   background: transparent;
   color: var(--btn-ghost-text);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-main);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.design-ui-font-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.design-ui-font-row label {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .design-message-font-row {
@@ -1143,7 +1175,7 @@ body {
   min-width: 3.25rem;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
 }
 
 .design-reset-btn:hover {
@@ -1164,7 +1196,7 @@ body {
   gap: 8px;
   margin-top: 12px;
   margin-bottom: 4px;
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
 }
 
@@ -1197,7 +1229,7 @@ body {
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-main);
   transition: filter 0.15s ease, background 0.15s ease;
   flex-shrink: 0;
@@ -1263,7 +1295,7 @@ body {
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   background: var(--bg-chat-user);
   color: var(--text-primary);
   transition: background 0.15s ease;
@@ -1292,7 +1324,7 @@ body {
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   transition: filter 0.15s ease;
   font-family: var(--font-main);
   display: inline-flex;
@@ -1572,14 +1604,14 @@ body {
 }
 
 .code-language {
-  font-size: 12px;
+  font-size: max(10px, calc(var(--font-size-message-body) * 0.88));
   color: var(--text-secondary);
   text-transform: uppercase;
 }
 
 .copy-code-btn {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: max(10px, calc(var(--font-size-message-body) * 0.82));
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border);
@@ -1603,7 +1635,7 @@ body {
 
 .code-block code {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: max(10px, calc(var(--font-size-message-body) * 0.92));
   line-height: 1.5;
   color: var(--text-primary);
 }
@@ -1826,7 +1858,6 @@ body {
 /* ===== Input Area Buttons ===== */
 .composer-attach-wrap {
   position: relative;
-  margin-left: 2px;
   flex-shrink: 0;
 }
 
@@ -1873,8 +1904,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--control-height-inner);
-  height: var(--control-height-inner);
+  width: var(--control-height);
+  height: var(--control-height);
   flex-shrink: 0;
   padding: 0;
   background: var(--btn-primary-bg) !important;
@@ -1963,7 +1994,7 @@ body {
   gap: 10px;
   padding: 10px 14px;
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--font-size-ui-secondary);
   font-weight: 500;
   max-width: 360px;
   box-shadow: var(--shadow-md);
@@ -2004,7 +2035,7 @@ body {
   background: none;
   border: none;
   color: inherit;
-  font-size: 16px;
+  font-size: max(14px, calc(var(--font-size-ui) * 1.2));
   cursor: pointer;
   opacity: 0.7;
   padding: 0 2px;

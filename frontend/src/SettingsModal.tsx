@@ -3,13 +3,18 @@ import { useToast } from './context/ToastContext'
 import {
   applyDesignPaletteToDocument,
   applyMessageFontSizeToDocument,
+  applyUiFontSizeToDocument,
   DEFAULT_MESSAGE_FONT_SIZE_PX,
+  DEFAULT_UI_FONT_SIZE_PX,
   getDesignPaletteFromSettings,
   getDesignSettingsKeys,
   getMessageFontSizePxFromSettings,
+  getUiFontSizePxFromSettings,
   MESSAGE_FONT_SIZE_SLIDER_MAX_PX,
   MESSAGE_FONT_SIZE_SLIDER_MIN_PX,
   normalizeHex,
+  UI_FONT_SIZE_SLIDER_MAX_PX,
+  UI_FONT_SIZE_SLIDER_MIN_PX,
 } from './designTheme'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
@@ -33,6 +38,7 @@ interface FullSettingsSnapshot {
   welcomeMessage: string
   designLightBaseColor: string
   designDarkBaseColor: string
+  uiFontSizePx: number
   messageFontSizePx: number
 }
 
@@ -43,6 +49,7 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
     welcome_message: s.welcomeMessage,
     [getDesignSettingsKeys().light]: s.designLightBaseColor,
     [getDesignSettingsKeys().dark]: s.designDarkBaseColor,
+    [getDesignSettingsKeys().uiFontSizePx]: String(s.uiFontSizePx),
     [getDesignSettingsKeys().messageFontSizePx]: String(s.messageFontSizePx),
   }
 
@@ -184,6 +191,8 @@ export default function SettingsModal({
   const [persistedDesignDarkBaseColor, setPersistedDesignDarkBaseColor] = useState(
     getDesignPaletteFromSettings({}).darkBase
   )
+  const [uiFontSizePx, setUiFontSizePx] = useState(() => getUiFontSizePxFromSettings({}))
+  const [persistedUiFontSizePx, setPersistedUiFontSizePx] = useState(() => getUiFontSizePxFromSettings({}))
   const [messageFontSizePx, setMessageFontSizePx] = useState(() =>
     getMessageFontSizePxFromSettings({}),
   )
@@ -205,6 +214,7 @@ export default function SettingsModal({
       welcomeMessage,
       designLightBaseColor,
       designDarkBaseColor,
+      uiFontSizePx,
       messageFontSizePx,
     }),
     [
@@ -219,6 +229,7 @@ export default function SettingsModal({
       welcomeMessage,
       designLightBaseColor,
       designDarkBaseColor,
+      uiFontSizePx,
       messageFontSizePx,
     ]
   )
@@ -240,6 +251,7 @@ export default function SettingsModal({
       const csp = s.custom_system_prompt ?? ''
       const wm = s.welcome_message ?? DEFAULT_WELCOME_MESSAGE
       const designPalette = getDesignPaletteFromSettings(s)
+      const uiPx = getUiFontSizePxFromSettings(s)
       const msgPx = getMessageFontSizePxFromSettings(s)
 
       setProviderType(pt)
@@ -256,6 +268,8 @@ export default function SettingsModal({
       setDesignDarkBaseColor(designPalette.darkBase)
       setPersistedDesignLightBaseColor(designPalette.lightBase)
       setPersistedDesignDarkBaseColor(designPalette.darkBase)
+      setUiFontSizePx(uiPx)
+      setPersistedUiFontSizePx(uiPx)
       setMessageFontSizePx(msgPx)
       setPersistedMessageFontSizePx(msgPx)
 
@@ -271,6 +285,7 @@ export default function SettingsModal({
         welcomeMessage: wm,
         designLightBaseColor: designPalette.lightBase,
         designDarkBaseColor: designPalette.darkBase,
+        uiFontSizePx: uiPx,
         messageFontSizePx: msgPx,
       })
       setLastPersistedFingerprint(fp)
@@ -290,8 +305,9 @@ export default function SettingsModal({
       lightBase: designLightBaseColor,
       darkBase: designDarkBaseColor,
     })
+    applyUiFontSizeToDocument(uiFontSizePx)
     applyMessageFontSizeToDocument(messageFontSizePx)
-  }, [designLightBaseColor, designDarkBaseColor, messageFontSizePx])
+  }, [designLightBaseColor, designDarkBaseColor, uiFontSizePx, messageFontSizePx])
 
   function buildProviderSettings(): Record<string, string> {
     const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo } =
@@ -322,6 +338,7 @@ export default function SettingsModal({
     await setSetting('welcome_message', welcomeMessage)
     await setSetting(designSettingsKeys.light, designLightBaseColor)
     await setSetting(designSettingsKeys.dark, designDarkBaseColor)
+    await setSetting(designSettingsKeys.uiFontSizePx, String(uiFontSizePx))
     await setSetting(designSettingsKeys.messageFontSizePx, String(messageFontSizePx))
   }
 
@@ -329,6 +346,7 @@ export default function SettingsModal({
     setLastPersistedFingerprint(fingerprintFromSnapshot(snapshot))
     setPersistedDesignLightBaseColor(designLightBaseColor)
     setPersistedDesignDarkBaseColor(designDarkBaseColor)
+    setPersistedUiFontSizePx(uiFontSizePx)
     setPersistedMessageFontSizePx(messageFontSizePx)
   }
 
@@ -337,6 +355,7 @@ export default function SettingsModal({
       lightBase: persistedDesignLightBaseColor,
       darkBase: persistedDesignDarkBaseColor,
     })
+    applyUiFontSizeToDocument(persistedUiFontSizePx)
     applyMessageFontSizeToDocument(persistedMessageFontSizePx)
     onClose()
   }
@@ -353,6 +372,7 @@ export default function SettingsModal({
     const defaults = getDesignPaletteFromSettings({})
     setDesignLightBaseColor(defaults.lightBase)
     setDesignDarkBaseColor(defaults.darkBase)
+    setUiFontSizePx(DEFAULT_UI_FONT_SIZE_PX)
     setMessageFontSizePx(DEFAULT_MESSAGE_FONT_SIZE_PX)
   }
 
@@ -700,6 +720,29 @@ export default function SettingsModal({
                 <div className="design-preview-tile">
                   <span className="design-preview-label">Dark preview</span>
                   <span className="design-preview-swatch design-preview-swatch--dark" />
+                </div>
+              </div>
+
+              <div className="design-ui-font-row">
+                <label htmlFor="design-ui-font-size">Interface font size</label>
+                <p className="settings-description">
+                  Sidebar, buttons, composer, settings, and other controls — not chat message text.
+                </p>
+                <div className="design-message-font-control">
+                  <input
+                    id="design-ui-font-size"
+                    type="range"
+                    className="design-message-font-slider"
+                    min={UI_FONT_SIZE_SLIDER_MIN_PX}
+                    max={UI_FONT_SIZE_SLIDER_MAX_PX}
+                    step={1}
+                    value={uiFontSizePx}
+                    onChange={e => setUiFontSizePx(Number(e.target.value))}
+                    aria-valuemin={UI_FONT_SIZE_SLIDER_MIN_PX}
+                    aria-valuemax={UI_FONT_SIZE_SLIDER_MAX_PX}
+                    aria-valuenow={uiFontSizePx}
+                  />
+                  <span className="design-message-font-value">{uiFontSizePx}px</span>
                 </div>
               </div>
 

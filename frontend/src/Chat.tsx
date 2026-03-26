@@ -85,6 +85,7 @@ export default function Chat({
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inputAreaRef = useRef<HTMLDivElement>(null)
   const attachWrapRef = useRef<HTMLDivElement>(null)
   /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
   const suppressStickBreakRef = useRef(false)
@@ -99,6 +100,45 @@ export default function Chat({
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior })
+  }, [])
+
+  /** Match textarea height to content (min from CSS, max --composer-textarea-max-height). Grows upward; buttons sit outside .composer-input-shell. */
+  const syncComposerTextareaHeight = useCallback(() => {
+    const ta = inputRef.current
+    if (!ta) return
+    // Collapse first so scrollHeight reflects content, not the browser default (2 rows when rows is omitted).
+    ta.style.height = '0px'
+    const cs = getComputedStyle(ta)
+    const minPx = parseFloat(cs.minHeight) || 0
+    const maxRaw = cs.maxHeight
+    const maxPx =
+      maxRaw && maxRaw !== 'none' && !Number.isNaN(parseFloat(maxRaw))
+        ? parseFloat(maxRaw)
+        : Number.POSITIVE_INFINITY
+    const next = Math.min(Math.max(ta.scrollHeight, minPx), maxPx)
+    ta.style.height = `${next}px`
+  }, [])
+
+  useLayoutEffect(() => {
+    syncComposerTextareaHeight()
+  }, [input, syncComposerTextareaHeight])
+
+  /** Keep jump-to-bottom offset in sync when the composer grows (uses --composer-body-height on :root). */
+  useEffect(() => {
+    const root = document.documentElement
+    const el = inputAreaRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    const apply = () => {
+      root.style.setProperty('--composer-body-height', `${el.offsetHeight}px`)
+    }
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--composer-body-height')
+    }
   }, [])
 
   /** Focus composer on mount so the user can type without clicking (Wails: defer one frame after paint). */
@@ -492,7 +532,7 @@ export default function Chat({
         </div>
       )}
 
-      <div className="input-area">
+      <div className="composer-row" ref={inputAreaRef}>
         <div className="composer-attach-wrap" ref={attachWrapRef}>
           <button
             type="button"
@@ -533,15 +573,17 @@ export default function Chat({
             </div>
           )}
         </div>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          rows={1}
-          disabled={loading}
-        />
+        <div className="composer-input-shell">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message..."
+            rows={1}
+            disabled={loading}
+          />
+        </div>
         <button
           type="button"
           className="send-btn"
