@@ -1,6 +1,7 @@
 package openaiutil
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -91,5 +92,45 @@ func TestToolDefinitionsFromRegistry(t *testing.T) {
 	}
 	if !seen["web_search"] || !seen["fetch_url"] {
 		t.Fatalf("missing expected tools: %+v", seen)
+	}
+}
+
+func TestMaybeUnlockDirectTool(t *testing.T) {
+	r := tools.New()
+	unlocked := map[string]struct{}{}
+
+	payload, err := json.Marshal(map[string]any{
+		"action":    "describe",
+		"tool_name": "read_file",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	maybeUnlockDirectTool(string(payload), r, unlocked)
+	if _, ok := unlocked["read_file"]; !ok {
+		t.Fatalf("expected read_file to be unlocked, got %+v", unlocked)
+	}
+}
+
+func TestMaybeUnlockDirectToolListUnlocksAll(t *testing.T) {
+	r := tools.New()
+	unlocked := map[string]struct{}{}
+
+	payload, err := json.Marshal(map[string]any{
+		"action": "list",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	maybeUnlockDirectTool(string(payload), r, unlocked)
+
+	if len(unlocked) == 0 {
+		t.Fatal("expected tools to be unlocked after list")
+	}
+	if _, ok := unlocked["show_file_tree"]; !ok {
+		t.Fatalf("expected show_file_tree unlocked, got %+v", unlocked)
+	}
+	if _, ok := unlocked["tool_discovery"]; ok {
+		t.Fatalf("tool_discovery must not be unlocked as a direct tool")
 	}
 }

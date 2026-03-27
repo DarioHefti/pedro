@@ -2,7 +2,10 @@ package openaiutil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/openai/openai-go"
 	"pedro/shared"
@@ -28,8 +31,12 @@ func ToolDefinitions(registry *tools.Registry) []openai.ChatCompletionToolParam 
 	if registry == nil {
 		return nil
 	}
+	return toOpenAIToolDefinitions(registry.Definitions())
+}
+
+func toOpenAIToolDefinitions(defs []tools.Definition) []openai.ChatCompletionToolParam {
 	var result []openai.ChatCompletionToolParam
-	for _, def := range registry.Definitions() {
+	for _, def := range defs {
 		result = append(result, openai.ChatCompletionToolParam{
 			Function: openai.FunctionDefinitionParam{
 				Name:        def.Name,
@@ -99,6 +106,7 @@ func StreamingChat(
 ) error {
 	apiMessages := BuildMessages(messages, imageDataURLs, systemPrompt)
 	toolDefs := ToolDefinitions(registry)
+	unlockedTools := map[string]struct{}{}
 
 	for {
 		params := openai.ChatCompletionNewParams{
@@ -142,10 +150,57 @@ func StreamingChat(
 			if onToolCall != nil {
 				onToolCall(tc.Function.Name, tc.Function.Arguments)
 			}
+			if tc.Function.Name == "tool_discovery" {
+				maybeUnlockDirectTool(tc.Function.Arguments, registry, unlockedTools)
+			}
 			result := registry.Execute(tc.Function.Name, tc.Function.Arguments)
 			apiMessages = append(apiMessages, openai.ToolMessage(result, tc.ID))
+		}
+
+		toolDefs = append([]openai.ChatCompletionToolParam{}, ToolDefinitions(registry)...)
+		if len(unlockedTools) > 0 {
+			names := make([]string, 0, len(unlockedTools))
+			for name := range unlockedTools {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			toolDefs = append(toolDefs, toOpenAIToolDefinitions(registry.DefinitionsByName(names))...)
 		}
 	}
 
 	return nil
+}
+
+func maybeUnlockDirectTool(argsJSON string, registry *tools.Registry, unlocked map[string]struct{}) {
+	if registry == nil || unlocked == nil {
+		return
+	}
+	var args struct {
+		Action   string `json:"action"`
+		ToolName string `json:"tool_name"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(args.Action))
+	if action == "list" {
+		for _, def := range registry.AllDefinitions() {
+			if def.Name == "tool_discovery" {
+				continue
+			}
+			unlocked[def.Name] = struct{}{}
+		}
+		return
+	}
+	if action != "describe" && action != "execute" {
+		return
+	}
+	name := strings.TrimSpace(args.ToolName)
+	if name == "" || name == "tool_discovery" {
+		return
+	}
+	if _, ok := registry.DefinitionByName(name); !ok {
+		return
+	}
+	unlocked[name] = struct{}{}
 }

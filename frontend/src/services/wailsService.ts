@@ -216,8 +216,8 @@ export const messageService = {
     useDevStub
       ? Promise.resolve('')
       : SendMessageWithImages(convID, content, images, selectedPersonaID, attachmentsJSON),
-  regenerate: (convID: number, selectedPersonaID: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, selectedPersonaID),
+  regenerate: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex, selectedPersonaID),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
 }
 

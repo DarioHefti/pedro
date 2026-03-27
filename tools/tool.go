@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -36,18 +37,38 @@ type Tool interface {
 
 // Registry holds all registered tools and dispatches calls to them.
 type Registry struct {
-	tools map[string]Tool
-	order []string // preserves registration order for tool definitions
+	tools   map[string]Tool
+	visible map[string]bool
+	order   []string // preserves registration order for tool definitions
 }
 
 func NewRegistry() *Registry {
-	return &Registry{tools: make(map[string]Tool)}
+	return &Registry{
+		tools:   make(map[string]Tool),
+		visible: make(map[string]bool),
+	}
 }
 
 // Register adds a tool to the registry.
 func (r *Registry) Register(t Tool) {
+	r.registerWithVisibility(t, true)
+}
+
+// RegisterHidden adds a tool that can be executed but is not exposed directly
+// to the model tool list.
+func (r *Registry) RegisterHidden(t Tool) {
+	r.registerWithVisibility(t, false)
+}
+
+func (r *Registry) registerWithVisibility(t Tool, visible bool) {
 	name := t.Definition().Name
 	r.tools[name] = t
+	r.visible[name] = visible
+	for _, existing := range r.order {
+		if existing == name {
+			return
+		}
+	}
 	r.order = append(r.order, name)
 }
 
@@ -70,19 +91,66 @@ func (r *Registry) Execute(name, argsJSON string) string {
 func (r *Registry) Definitions() []Definition {
 	defs := make([]Definition, 0, len(r.order))
 	for _, name := range r.order {
+		if !r.visible[name] {
+			continue
+		}
 		defs = append(defs, r.tools[name].Definition())
 	}
 	return defs
+}
+
+// AllDefinitions returns all tool definitions (including hidden tools) in
+// registration order.
+func (r *Registry) AllDefinitions() []Definition {
+	defs := make([]Definition, 0, len(r.order))
+	for _, name := range r.order {
+		defs = append(defs, r.tools[name].Definition())
+	}
+	return defs
+}
+
+// DefinitionByName returns a single tool definition by tool name.
+func (r *Registry) DefinitionByName(name string) (Definition, bool) {
+	t, ok := r.tools[name]
+	if !ok {
+		return Definition{}, false
+	}
+	return t.Definition(), true
+}
+
+// DefinitionsByName returns definitions for known names in deterministic order.
+func (r *Registry) DefinitionsByName(names []string) []Definition {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		set[n] = struct{}{}
+	}
+	out := make([]Definition, 0, len(set))
+	for _, n := range r.order {
+		if _, ok := set[n]; !ok {
+			continue
+		}
+		if def, exists := r.DefinitionByName(n); exists {
+			out = append(out, def)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
+	return out
 }
 
 // New builds and returns a Registry pre-loaded with all available tools.
 // Add or remove Register calls here to enable/disable tools at runtime.
 func New() *Registry {
 	r := NewRegistry()
-	r.Register(NewSearchTool())
-	r.Register(NewFetchURLTool())
-	r.Register(NewReadFileTool())
-	r.Register(NewParseDocumentTool())
-	r.Register(NewShowFileTreeTool())
+	r.RegisterHidden(NewSearchTool())
+	r.RegisterHidden(NewFetchURLTool())
+	r.RegisterHidden(NewReadFileTool())
+	r.RegisterHidden(NewParseDocumentTool())
+	r.RegisterHidden(NewShowFileTreeTool())
+	r.Register(NewToolDiscoveryTool(r))
 	return r
 }

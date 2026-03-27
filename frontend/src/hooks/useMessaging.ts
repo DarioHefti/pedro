@@ -274,14 +274,26 @@ export function useMessaging({
       const msg = messages[index]
       if (msg?.Role !== 'assistant') return
 
+      if (currentConvIDRef.current === convID) {
+        setMessages(prev => prev.filter((_, i) => i !== index))
+        setMessageImages(prev => reindexMapWithoutIndex(prev, index))
+        setMessageFiles(prev => reindexMapWithoutIndex(prev, index))
+      }
+
       prepareStreaming(convID)
       let streamClosed = false
 
       try {
-        const response = await messageService.regenerate(convID, selectedPersonaId)
+        const response = await messageService.regenerate(convID, index, selectedPersonaId)
         if (currentConvIDRef.current === convID) {
           if (response?.startsWith('Error:')) {
             showError(response)
+            ++msgSeqRef.current
+            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
+            const { images, files } = buildAttachmentMaps(dbMsgs)
+            setMessageImages(images)
+            setMessageFiles(files)
+            setMessages(dbMsgs)
           } else {
             // Same handoff fix as send(): remove stream row first, then render final DB row.
             cleanupStreaming(convID)
@@ -399,4 +411,13 @@ function buildAttachmentMaps(msgs: Message[]): {
   })
 
   return { images, files }
+}
+
+function reindexMapWithoutIndex<T>(input: Map<number, T>, removedIndex: number): Map<number, T> {
+  const out = new Map<number, T>()
+  for (const [idx, value] of input.entries()) {
+    if (idx === removedIndex) continue
+    out.set(idx > removedIndex ? idx - 1 : idx, value)
+  }
+  return out
 }

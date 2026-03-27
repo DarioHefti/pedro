@@ -279,7 +279,7 @@ func (a *App) SendMessageWithImages(conversationID int64, content string, imageD
 	return a.sendMessage(conversationID, content, imageDataURLs, selectedPersonaID, attachmentsJSON)
 }
 
-func (a *App) RegenerateMessage(conversationID int64, selectedPersonaID string) string {
+func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selectedPersonaID string) string {
 	if a.store == nil {
 		return "Error: Database not initialized"
 	}
@@ -289,20 +289,19 @@ func (a *App) RegenerateMessage(conversationID int64, selectedPersonaID string) 
 		return "Error: Failed to get messages: " + err.Error()
 	}
 
-	lastAssistantIdx := -1
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "assistant" {
-			lastAssistantIdx = i
-			break
-		}
+	if messageIndex < 0 || messageIndex >= len(messages) {
+		return "Error: Invalid message index"
 	}
-
-	if lastAssistantIdx == -1 {
+	if messages[messageIndex].Role != "assistant" {
 		return "Error: No assistant message to regenerate"
 	}
 
-	if err := a.store.DeleteMessage(conversationID, lastAssistantIdx); err != nil {
-		return "Error: Failed to delete message: " + err.Error()
+	// Regenerate from the selected assistant turn by truncating that turn and all
+	// later turns, then streaming a replacement response from the preserved prefix.
+	for i := len(messages) - 1; i >= messageIndex; i-- {
+		if err := a.store.DeleteMessage(conversationID, i); err != nil {
+			return "Error: Failed to delete message: " + err.Error()
+		}
 	}
 
 	messages, err = a.store.GetMessages(conversationID)
