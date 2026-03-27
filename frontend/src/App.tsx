@@ -28,8 +28,12 @@ export default function App() {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [activePersonaId, setActivePersonaId] = useState<string>('')
 
-  const { conversations, load: loadConversations, remove: removeConversation } =
-    useConversations()
+  const {
+    conversations,
+    load: loadConversations,
+    remove: removeConversation,
+    removeAll: removeAllConversations,
+  } = useConversations()
 
   async function reloadSettings() {
     const s = await settingsService.get()
@@ -89,6 +93,16 @@ export default function App() {
     }
   }
 
+  async function deleteAllChats() {
+    try {
+      await removeAllConversations()
+      setCurrentConvID(null)
+      messaging.clear()
+    } catch (err) {
+      toast.error('Failed to delete all chats: ' + String(err))
+    }
+  }
+
   function handleSettingsClose() {
     setSettingsOpen(false)
     // Reload app-level values that can be changed in settings.
@@ -103,6 +117,8 @@ export default function App() {
         onSelect={selectConversation}
         onNew={newConversation}
         onDelete={deleteConversation}
+        onDeleteAllChats={deleteAllChats}
+        streamingBusy={messaging.streamingBusy}
         onOpenSettings={() => setSettingsOpen(true)}
         onSearch={conversationService.search}
       />

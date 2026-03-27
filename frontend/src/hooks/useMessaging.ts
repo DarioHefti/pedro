@@ -6,8 +6,9 @@ import {
   uiConversationService,
   isWailsDevStub,
   type Conversation,
-  type Message,
 } from '../services/wailsService'
+export type { Message } from '../services/wailsService'
+import type { Message } from '../services/wailsService'
 
 // ---------------------------------------------------------------------------
 // Public types shared with components
@@ -109,13 +110,25 @@ export function useMessaging({
       setStreamingStreams(new Map(streamingBuffersRef.current))
     }
 
+    const onConversationUpdated = (...args: unknown[]) => {
+      if (args.length < 1) return
+      const convId = Number(args[0])
+      if (Number.isNaN(convId)) return
+      void refreshConversations()
+    }
+
     const unsubChunk = eventService.on('stream_chunk', onChunk)
     const unsubTool = eventService.on('tool_call', onTool)
+    const unsubConversationUpdated = eventService.on(
+      'conversation_updated',
+      onConversationUpdated,
+    )
     return () => {
       unsubChunk?.()
       unsubTool?.()
+      unsubConversationUpdated?.()
     }
-  }, [])
+  }, [refreshConversations])
 
   const streamingForCurrent =
     currentConvID != null && streamingStreams.has(currentConvID)
@@ -130,7 +143,7 @@ export function useMessaging({
   const toolCalls = streamingForCurrent.toolCalls
   const streamingContent = streamingForCurrent.content
 
-  /** Load messages for a conversation and clear any in-session attachment maps.
+  /** Load messages for a conversation and rebuild attachment maps from DB data.
    *  Clears state synchronously (before the async DB fetch) so React batches
    *  the clear with the caller's setCurrentConvID — no render frame shows
    *  the old conversation's messages under the new conversation's ID. */
@@ -141,7 +154,11 @@ export function useMessaging({
     setMessageFiles(new Map())
     const msgs = await conversationService.getMessages(convID)
     if (msgSeqRef.current !== seq) return
-    setMessages(msgs ?? [])
+    const list = msgs ?? []
+    setMessages(list)
+    const { images, files } = buildAttachmentMaps(list)
+    setMessageImages(images)
+    setMessageFiles(files)
   }, [])
 
   /** Clear all message state (e.g. when "New Chat" is selected). */
@@ -183,6 +200,8 @@ export function useMessaging({
         const conv = await createConversation()
         convID = conv.ID
         onConversationCreated(convID)
+        // Keep local ref in sync immediately so optimistic updates can run in this tick.
+        currentConvIDRef.current = convID
         await refreshConversations()
       }
 
@@ -199,10 +218,7 @@ export function useMessaging({
         }))
 
       const llmContent = buildLLMContent(content, attachments)
-
-      const prevUserRankToImages = extractUserRankMap(messages, messageImages)
-      const prevUserRankToFiles = extractUserRankMap(messages, messageFiles)
-      const newUserRank = messages.filter(m => m.Role === 'user').length
+      const attachmentsJSON = JSON.stringify(attachments ?? [])
 
       const optimisticIdx = messages.length
       if (currentConvIDRef.current === convID) {
@@ -216,33 +232,25 @@ export function useMessaging({
       }
 
       prepareStreaming(convID)
+      let streamClosed = false
 
       try {
         const response =
           imageDataURLs.length > 0
-            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, selectedPersonaId)
-            : await messageService.send(convID, llmContent, selectedPersonaId)
+            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, selectedPersonaId, attachmentsJSON)
+            : await messageService.send(convID, llmContent, selectedPersonaId, attachmentsJSON)
 
         const dbMsgs = (await conversationService.getMessages(convID)) ?? []
 
-        const dbUserIndices = dbMsgs
-          .map((m, i) => (m.Role === 'user' ? i : -1))
-          .filter(i => i >= 0)
-
-        const newImgMap = remapByRank(prevUserRankToImages, dbUserIndices)
-        if (imageDataURLs.length > 0 && newUserRank < dbUserIndices.length) {
-          newImgMap.set(dbUserIndices[newUserRank], imageDataURLs)
-        }
-
-        const newFilesMap = remapByRank(prevUserRankToFiles, dbUserIndices)
-        if (fileAttachments.length > 0 && newUserRank < dbUserIndices.length) {
-          newFilesMap.set(dbUserIndices[newUserRank], fileAttachments)
-        }
-
         if (currentConvIDRef.current === convID) {
+          // Close the stream before committing final DB messages to avoid a one-frame duplicate
+          // assistant bubble (stream row + finalized assistant row).
+          cleanupStreaming(convID)
+          streamClosed = true
           ++msgSeqRef.current
-          setMessageImages(newImgMap)
-          setMessageFiles(newFilesMap)
+          const { images, files } = buildAttachmentMaps(dbMsgs)
+          setMessageImages(images)
+          setMessageFiles(files)
           setMessages(dbMsgs)
         }
 
@@ -252,11 +260,11 @@ export function useMessaging({
           showError(response)
         }
       } finally {
-        cleanupStreaming(convID)
+        if (!streamClosed) cleanupStreaming(convID)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentConvID, messages, messageImages, messageFiles, createConversation, onConversationCreated, refreshConversations, showError],
+    [currentConvID, messages, createConversation, onConversationCreated, refreshConversations, showError],
   )
 
   const regenerate = useCallback(
@@ -267,6 +275,7 @@ export function useMessaging({
       if (msg?.Role !== 'assistant') return
 
       prepareStreaming(convID)
+      let streamClosed = false
 
       try {
         const response = await messageService.regenerate(convID, selectedPersonaId)
@@ -274,15 +283,21 @@ export function useMessaging({
           if (response?.startsWith('Error:')) {
             showError(response)
           } else {
+            // Same handoff fix as send(): remove stream row first, then render final DB row.
+            cleanupStreaming(convID)
+            streamClosed = true
             ++msgSeqRef.current
             const dbMsgs = (await conversationService.getMessages(convID)) ?? []
+            const { images, files } = buildAttachmentMaps(dbMsgs)
+            setMessageImages(images)
+            setMessageFiles(files)
             setMessages(dbMsgs)
           }
         } else if (!response?.startsWith('Error:')) {
           await refreshConversations()
         }
       } finally {
-        cleanupStreaming(convID)
+        if (!streamClosed) cleanupStreaming(convID)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,31 +357,34 @@ function buildLLMContent(content: string, attachments?: Attachment[]): string {
   return fileText ? `${content}\n\n${fileText}` : content
 }
 
-function extractUserRankMap<T>(
-  messages: Message[],
-  indexMap: Map<number, T>,
-): Map<number, T> {
-  const result = new Map<number, T>()
-  let rank = 0
-  messages.forEach((m, i) => {
-    if (m.Role === 'user') {
-      const value = indexMap.get(i)
-      if (value !== undefined) result.set(rank, value)
-      rank++
-    }
-  })
-  return result
-}
+/** Parse each message's persisted Attachments JSON into index-keyed maps
+ *  that Chat.tsx already consumes (messageImages, messageFiles). */
+function buildAttachmentMaps(msgs: Message[]): {
+  images: Map<number, string[]>
+  files: Map<number, FileAttachment[]>
+} {
+  const images = new Map<number, string[]>()
+  const files = new Map<number, FileAttachment[]>()
 
-function remapByRank<T>(
-  rankMap: Map<number, T>,
-  dbUserIndices: number[],
-): Map<number, T> {
-  const result = new Map<number, T>()
-  rankMap.forEach((value, rank) => {
-    if (rank < dbUserIndices.length) {
-      result.set(dbUserIndices[rank], value)
+  msgs.forEach((msg, idx) => {
+    if (!msg.Attachments) return
+    try {
+      const atts = JSON.parse(msg.Attachments) as Attachment[]
+      const imgUrls = atts.filter(a => a.type === 'image').map(a => a.content)
+      if (imgUrls.length > 0) images.set(idx, imgUrls)
+
+      const fileAtts: FileAttachment[] = atts
+        .filter(a => a.type === 'file-ref' || a.type === 'folder-ref')
+        .map(a => ({
+          name: a.name,
+          path: a.content,
+          type: a.type === 'folder-ref' ? 'folder' : 'file',
+        }))
+      if (fileAtts.length > 0) files.set(idx, fileAtts)
+    } catch {
+      /* ignore malformed JSON */
     }
   })
-  return result
+
+  return { images, files }
 }

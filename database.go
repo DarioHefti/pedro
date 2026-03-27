@@ -3,6 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
@@ -36,6 +38,7 @@ func NewDatabase() (*Database, error) {
 	if err := d.init(); err != nil {
 		return nil, err
 	}
+	d.migrate()
 	return d, nil
 }
 
@@ -70,6 +73,41 @@ func (d *Database) init() error {
 	return err
 }
 
+func (d *Database) migrate() {
+	// Add attachments column (idempotent — ALTER fails silently if column exists).
+	d.db.Exec("ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT ''")
+	d.sanitizeExistingConversationTitles()
+}
+
+func (d *Database) sanitizeExistingConversationTitles() {
+	rows, err := d.db.Query("SELECT id, title FROM conversations")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type row struct {
+		id    int64
+		title string
+	}
+	var updates []row
+
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.title); err != nil {
+			return
+		}
+		clean := sanitizeConversationTitle(r.title)
+		if clean != r.title && clean != "" {
+			updates = append(updates, row{id: r.id, title: clean})
+		}
+	}
+
+	for _, u := range updates {
+		d.db.Exec("UPDATE conversations SET title = ? WHERE id = ?", u.title, u.id)
+	}
+}
+
 func (d *Database) CreateConversation() (*Conversation, error) {
 	res, err := d.db.Exec("INSERT INTO conversations (title) VALUES (?)", "New Chat")
 	if err != nil {
@@ -98,7 +136,7 @@ func (d *Database) GetConversations() ([]Conversation, error) {
 }
 
 func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +145,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
@@ -116,7 +154,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 }
 
 func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +163,7 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	result := make(map[int64][]Message)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		result[m.ConversationID] = append(result[m.ConversationID], m)
@@ -133,8 +171,8 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	return result, nil
 }
 
-func (d *Database) AddMessage(conversationID int64, role, content string) (*Message, error) {
-	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)", conversationID, role, content)
+func (d *Database) AddMessage(conversationID int64, role, content, attachments string) (*Message, error) {
+	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content, attachments) VALUES (?, ?, ?, ?)", conversationID, role, content, attachments)
 	if err != nil {
 		return nil, err
 	}
@@ -142,14 +180,38 @@ func (d *Database) AddMessage(conversationID int64, role, content string) (*Mess
 	d.db.Exec("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", conversationID)
 
 	if role == "user" {
-		firstMsg := content
+		firstMsg := sanitizeConversationTitle(content)
 		if len(firstMsg) > 50 {
 			firstMsg = firstMsg[:50] + "..."
 		}
-		d.db.Exec("UPDATE conversations SET title = ? WHERE id = ? AND title = 'New Chat'", firstMsg, conversationID)
+		if firstMsg != "" {
+			d.db.Exec("UPDATE conversations SET title = ? WHERE id = ? AND title = 'New Chat'", firstMsg, conversationID)
+		}
 	}
 
-	return &Message{ConversationID: conversationID, Role: role, Content: content}, nil
+	return &Message{ConversationID: conversationID, Role: role, Content: content, Attachments: attachments}, nil
+}
+
+func sanitizeConversationTitle(raw string) string {
+	title := raw
+	markers := []string{
+		"\n\n[File:",
+		"\n\n[Folder:",
+		"\n\n[Path:",
+		" [File:",
+		" [Folder:",
+		" [Path:",
+	}
+	cut := len(title)
+	for _, m := range markers {
+		if idx := strings.Index(title, m); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	if cut < len(title) {
+		title = title[:cut]
+	}
+	return strings.TrimSpace(title)
 }
 
 func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
@@ -176,6 +238,11 @@ func (d *Database) DeleteConversation(id int64) error {
 	// ON DELETE CASCADE (enforced via _foreign_keys=on DSN option) handles
 	// the child messages rows automatically.
 	_, err := d.db.Exec("DELETE FROM conversations WHERE id = ?", id)
+	return err
+}
+
+func (d *Database) DeleteAllConversations() error {
+	_, err := d.db.Exec("DELETE FROM conversations")
 	return err
 }
 

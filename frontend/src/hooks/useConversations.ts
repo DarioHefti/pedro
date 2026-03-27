@@ -22,9 +22,14 @@ export function useConversations() {
     [load],
   )
 
+  const removeAll = useCallback(async (): Promise<void> => {
+    await conversationService.deleteAll()
+    await load()
+  }, [load])
+
   useEffect(() => {
     load()
   }, [load])
 
-  return { conversations, load, remove }
+  return { conversations, load, remove, removeAll }
 }

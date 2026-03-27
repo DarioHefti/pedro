@@ -8,6 +8,8 @@ export function CreateConversation():Promise<main.Conversation>;
 
 export function CreatePersona(arg1:string,arg2:string):Promise<main.Persona>;
 
+export function DeleteAllConversations():Promise<void>;
+
 export function DeleteConversation(arg1:number):Promise<void>;
 
 export function DeletePersona(arg1:number):Promise<void>;
@@ -38,9 +40,9 @@ export function SelectFile():Promise<string>;
 
 export function SelectFolder():Promise<string>;
 
-export function SendMessage(arg1:number,arg2:string,arg3:string):Promise<string>;
+export function SendMessage(arg1:number,arg2:string,arg3:string,arg4:string):Promise<string>;
 
-export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>,arg4:string):Promise<string>;
+export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>,arg4:string,arg5:string):Promise<string>;
 
 export function SetActivePersonaID(arg1:string):Promise<void>;
 

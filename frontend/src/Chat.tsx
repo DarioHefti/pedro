@@ -439,7 +439,7 @@ export default function Chat({
         {files && files.length > 0 && (
           <div className="message-file-previews">
             {files.map((file, j) => (
-              <div key={j} className="message-file-chip" title={file.path}>
+              <div key={j} className="message-file-chip">
                 <span className="message-file-icon">
                   {file.type === 'folder' ? '📁' : '📄'}
                 </span>

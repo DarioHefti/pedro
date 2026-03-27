@@ -9,6 +9,10 @@ interface SidebarProps {
   onSelect: (id: number) => void
   onNew: () => void
   onDelete: (id: number) => void
+  /** Deletes every stored chat; resolves when the list has been refreshed. */
+  onDeleteAllChats: () => Promise<void>
+  /** When true, bulk delete controls are disabled and any confirm step is cancelled. */
+  streamingBusy: boolean
   onOpenSettings: () => void
   /** Called with the search query; returns a map of convID → matching messages. */
   onSearch: (query: string) => Promise<Record<number, Message[]>>
@@ -20,12 +24,16 @@ export default function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  onDeleteAllChats,
+  streamingBusy,
   onOpenSettings,
   onSearch,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchConvIDs, setSearchConvIDs] = useState<Set<number>>(new Set())
+  const [deleteAllStep, setDeleteAllStep] = useState<'idle' | 'confirm'>('idle')
+  const [deleteAllPending, setDeleteAllPending] = useState(false)
 
   useEffect(() => {
     async function search() {
@@ -39,6 +47,14 @@ export default function Sidebar({
     search()
   }, [searchQuery, onSearch])
 
+  useEffect(() => {
+    if (streamingBusy) setDeleteAllStep('idle')
+  }, [streamingBusy])
+
+  useEffect(() => {
+    if (conversations.length === 0) setDeleteAllStep('idle')
+  }, [conversations.length])
+
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(
         c =>
@@ -46,6 +62,20 @@ export default function Sidebar({
           searchConvIDs.has(c.ID),
       )
     : conversations
+
+  const chatCount = conversations.length
+  const chatsLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`
+  const deleteAllDisabled = streamingBusy || deleteAllPending
+
+  async function handleConfirmDeleteAll() {
+    setDeleteAllPending(true)
+    try {
+      await onDeleteAllChats()
+      setDeleteAllStep('idle')
+    } finally {
+      setDeleteAllPending(false)
+    }
+  }
 
   return (
     <div className="sidebar">
@@ -92,6 +122,53 @@ export default function Sidebar({
           ))
         )}
       </div>
+
+      {chatCount > 0 && (
+        <>
+          {deleteAllStep === 'idle' ? (
+            <div className="sidebar-bulk-delete-strip">
+              <span className="sidebar-bulk-delete-count">{chatsLabel}</span>
+              <button
+                type="button"
+                className="sidebar-bulk-delete-trigger"
+                disabled={deleteAllDisabled}
+                onClick={() => setDeleteAllStep('confirm')}
+              >
+                Delete all
+              </button>
+            </div>
+          ) : (
+            <div
+              className="sidebar-bulk-delete-confirm"
+              role="group"
+              aria-label="Confirm delete all chats"
+            >
+              <p className="sidebar-bulk-delete-confirm-text">
+                Remove every chat from the list? This can&apos;t be undone.
+              </p>
+              <div className="sidebar-bulk-delete-actions">
+                <button
+                  type="button"
+                  className="sidebar-bulk-delete-btn-cancel"
+                  disabled={deleteAllPending}
+                  onClick={() => setDeleteAllStep('idle')}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-bulk-delete-btn-confirm"
+                  disabled={deleteAllDisabled}
+                  onClick={() => void handleConfirmDeleteAll()}
+                >
+                  Delete all chats
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       <div className="sidebar-footer">
         <button className="settings-btn" onClick={onOpenSettings}>
           ⚙ Settings

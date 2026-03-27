@@ -12,6 +12,7 @@ import {
   GetConversations,
   GetMessages,
   CreateConversation,
+  DeleteAllConversations,
   DeleteConversation,
   SearchMessages,
   SendMessage,
@@ -173,6 +174,9 @@ export const conversationService = {
     }
     return useDevStub ? Promise.resolve() : DeleteConversation(id)
   },
+  /** Removes every stored conversation (and messages). UI-only mock rows are not in the DB. */
+  deleteAll: (): Promise<void> =>
+    useDevStub ? Promise.resolve() : DeleteAllConversations(),
   search: async (query: string): Promise<Record<number, main.Message[]>> => {
     const base = useDevStub ? {} : await SearchMessages(query)
     const out: Record<number, main.Message[]> = { ...(base ?? {}) }
@@ -199,17 +203,18 @@ export const conversationService = {
 // ---------------------------------------------------------------------------
 export const messageService = {
   /** selectedPersonaID: DB row id; backend loads prompt text from SQLite. */
-  send: (convID: number, content: string, selectedPersonaID: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SendMessage(convID, content, selectedPersonaID),
+  send: (convID: number, content: string, selectedPersonaID: string, attachmentsJSON: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : SendMessage(convID, content, selectedPersonaID, attachmentsJSON),
   sendWithImages: (
     convID: number,
     content: string,
     images: string[],
     selectedPersonaID: string,
+    attachmentsJSON: string,
   ): Promise<string> =>
     useDevStub
       ? Promise.resolve('')
-      : SendMessageWithImages(convID, content, images, selectedPersonaID),
+      : SendMessageWithImages(convID, content, images, selectedPersonaID, attachmentsJSON),
   regenerate: (convID: number, selectedPersonaID: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : RegenerateMessage(convID, selectedPersonaID),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),

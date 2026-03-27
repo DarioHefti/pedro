@@ -146,14 +146,15 @@ func (a *App) requireLLMConfigured() error {
 	return nil
 }
 
-func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string) string {
+func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string, attachmentsJSON string) string {
 	if err := a.requireStore(); err != nil {
 		return "Error: " + err.Error()
 	}
 
-	if _, err := a.store.AddMessage(conversationID, "user", content); err != nil {
+	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON); err != nil {
 		return "Error: Failed to save message: " + err.Error()
 	}
+	runtime.EventsEmit(a.ctx, "conversation_updated", conversationID)
 
 	messages, err := a.store.GetMessages(conversationID)
 	if err != nil {
@@ -170,7 +171,7 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 		return "Error: " + err.Error()
 	}
 
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp); saveErr != nil {
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, ""); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 	return resp
@@ -257,12 +258,19 @@ func (a *App) DeleteConversation(id int64) error {
 	return a.store.DeleteConversation(id)
 }
 
-func (a *App) SendMessage(conversationID int64, content string, selectedPersonaID string) string {
-	return a.sendMessage(conversationID, content, nil, selectedPersonaID)
+func (a *App) DeleteAllConversations() error {
+	if a.store == nil {
+		return nil
+	}
+	return a.store.DeleteAllConversations()
 }
 
-func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string) string {
-	return a.sendMessage(conversationID, content, imageDataURLs, selectedPersonaID)
+func (a *App) SendMessage(conversationID int64, content string, selectedPersonaID string, attachmentsJSON string) string {
+	return a.sendMessage(conversationID, content, nil, selectedPersonaID, attachmentsJSON)
+}
+
+func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string, attachmentsJSON string) string {
+	return a.sendMessage(conversationID, content, imageDataURLs, selectedPersonaID, attachmentsJSON)
 }
 
 func (a *App) RegenerateMessage(conversationID int64, selectedPersonaID string) string {
@@ -306,7 +314,7 @@ func (a *App) RegenerateMessage(conversationID int64, selectedPersonaID string) 
 		return "Error: " + err.Error()
 	}
 
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp); saveErr != nil {
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, ""); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 	return resp

@@ -2447,3 +2447,101 @@ body {
     animation: none !important;
   }
 }
+
+/* Sidebar: delete all chats (inline strip + confirm) */
+.sidebar-bulk-delete-strip,
+.sidebar-bulk-delete-confirm {
+  flex-shrink: 0;
+}
+
+.sidebar-bulk-delete-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+
+.sidebar-bulk-delete-count {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-secondary);
+}
+
+.sidebar-bulk-delete-trigger {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: var(--font-size-ui-secondary);
+  font-weight: 600;
+  font-family: var(--font-main);
+  color: var(--error);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sidebar-bulk-delete-trigger:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--error) 85%, var(--text-primary));
+}
+
+.sidebar-bulk-delete-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.sidebar-bulk-delete-confirm {
+  padding: var(--space-3) 16px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--error) 6%, var(--bg-sidebar));
+}
+
+.sidebar-bulk-delete-confirm-text {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  line-height: 1.45;
+}
+
+.sidebar-bulk-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.sidebar-bulk-delete-btn-cancel {
+  height: var(--control-height-inner);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--btn-ghost-border);
+  background: transparent;
+  color: var(--btn-ghost-text);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-main);
+  cursor: pointer;
+}
+
+.sidebar-bulk-delete-btn-cancel:hover:not(:disabled) {
+  background: var(--btn-ghost-hover-bg);
+}
+
+.sidebar-bulk-delete-btn-confirm {
+  height: var(--control-height-inner);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--error) 50%, var(--border));
+  background: color-mix(in srgb, var(--error) 18%, var(--bg-surface));
+  color: var(--error);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  font-family: var(--font-main);
+  cursor: pointer;
+}
+
+.sidebar-bulk-delete-btn-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 28%, var(--bg-surface));
+}

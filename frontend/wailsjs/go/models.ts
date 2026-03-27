@@ -43,6 +43,7 @@ export namespace main {
 	    ConversationID: number;
 	    Role: string;
 	    Content: string;
+	    Attachments: string;
 	    // Go type: time
 	    CreatedAt: any;
 	
@@ -56,6 +57,7 @@ export namespace main {
 	        this.ConversationID = source["ConversationID"];
 	        this.Role = source["Role"];
 	        this.Content = source["Content"];
+	        this.Attachments = source["Attachments"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	    }
 	

@@ -16,6 +16,7 @@ type Message struct {
 	ConversationID int64
 	Role           string
 	Content        string
+	Attachments    string
 	CreatedAt      time.Time
 }
 
@@ -32,9 +33,10 @@ type Store interface {
 	GetConversations() ([]Conversation, error)
 	CreateConversation() (*Conversation, error)
 	DeleteConversation(id int64) error
+	DeleteAllConversations() error
 	GetMessages(conversationID int64) ([]Message, error)
 	SearchMessages(query string) (map[int64][]Message, error)
-	AddMessage(conversationID int64, role, content string) (*Message, error)
+	AddMessage(conversationID int64, role, content, attachments string) (*Message, error)
 	DeleteMessage(conversationID int64, messageIndex int) error
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error

@@ -14,6 +14,10 @@ export function CreatePersona(arg1, arg2) {
   return window['go']['main']['App']['CreatePersona'](arg1, arg2);
 }
 
+export function DeleteAllConversations() {
+  return window['go']['main']['App']['DeleteAllConversations']();
+}
+
 export function DeleteConversation(arg1) {
   return window['go']['main']['App']['DeleteConversation'](arg1);
 }
@@ -74,12 +78,12 @@ export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
 }
 
-export function SendMessage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SendMessage'](arg1, arg2, arg3);
+export function SendMessage(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SendMessage'](arg1, arg2, arg3, arg4);
 }
 
-export function SendMessageWithImages(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3, arg4);
+export function SendMessageWithImages(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SetActivePersonaID(arg1) {
