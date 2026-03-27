@@ -332,11 +332,23 @@ export function useMessaging({
 // Pure helpers
 // ---------------------------------------------------------------------------
 
+/** Matches raster image paths for file-ref attachments (aligned with backend image_file_refs.go). */
+function isRasterImageFilePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(path.trim())
+}
+
 function buildLLMContent(content: string, attachments?: Attachment[]): string {
   const fileText = (attachments ?? [])
     .filter(a => a.type !== 'image')
     .map(a => {
       if (a.type === 'file-ref') {
+        if (isRasterImageFilePath(a.content)) {
+          return (
+            `[File: ${a.name}]\n` +
+            `[Path: ${a.content}]\n` +
+            `[Raster image attached by path; the image pixels are also included in this message for vision.]`
+          )
+        }
         return (
           `[File: ${a.name}]\n` +
           `[Path: ${a.content}]\n` +

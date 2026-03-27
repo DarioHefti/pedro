@@ -62,6 +62,10 @@ func (r ReadFileTool) Execute(argsJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
+	args.Path = filepath.Clean(strings.TrimSpace(args.Path))
+	if !filepath.IsAbs(args.Path) {
+		return "File read error: path must be absolute", nil
+	}
 	result, err := r.read(args.Path, args.Offset, args.Limit, args.Sheet)
 	if err != nil {
 		return fmt.Sprintf("File read error: %v", err), nil

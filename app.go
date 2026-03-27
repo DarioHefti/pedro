@@ -171,7 +171,8 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 	}
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
-	resp, err := a.runChat(conversationID, messages, imageDataURLs)
+	mergedImages := mergeImageDataURLsFromFileRefs(imageDataURLs, attachmentsJSON, content)
+	resp, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
@@ -414,7 +415,8 @@ func (a *App) OpenPath(path string) string {
 	var cmd *exec.Cmd
 	switch goruntime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		// Avoid cmd parsing edge cases (&, |, etc.) by using the shell file handler directly.
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	case "darwin":
 		cmd = exec.Command("open", path)
 	default:

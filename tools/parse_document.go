@@ -55,6 +55,10 @@ func (ParseDocumentTool) Execute(argsJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
+	args.Path = filepath.Clean(strings.TrimSpace(args.Path))
+	if !filepath.IsAbs(args.Path) {
+		return "Document parse error: path must be absolute", nil
+	}
 	if args.Offset < 1 {
 		args.Offset = 1
 	}
