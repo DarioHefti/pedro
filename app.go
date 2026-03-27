@@ -127,6 +127,49 @@ func (a *App) AbortMessage() {
 	}
 }
 
+func (a *App) requireStore() error {
+	if a.store == nil {
+		return errors.New("database not initialized")
+	}
+	return nil
+}
+
+func (a *App) requireLLMConfigured() error {
+	if a.llm == nil {
+		return errors.New("please configure LLM provider settings first")
+	}
+	return nil
+}
+
+func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []string) string {
+	if err := a.requireStore(); err != nil {
+		return "Error: " + err.Error()
+	}
+
+	if _, err := a.store.AddMessage(conversationID, "user", content); err != nil {
+		return "Error: Failed to save message: " + err.Error()
+	}
+
+	messages, err := a.store.GetMessages(conversationID)
+	if err != nil {
+		return "Error: Failed to get messages: " + err.Error()
+	}
+
+	if err := a.requireLLMConfigured(); err != nil {
+		return "Error: " + err.Error()
+	}
+
+	resp, err := a.runChat(messages, imageDataURLs)
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp); saveErr != nil {
+		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
+	}
+	return resp
+}
+
 func (a *App) SignIn() string {
 	if a.llm == nil {
 		return "Error: No LLM provider configured – save your settings first"
@@ -209,61 +252,11 @@ func (a *App) DeleteConversation(id int64) error {
 }
 
 func (a *App) SendMessage(conversationID int64, content string) string {
-	if a.store == nil {
-		return "Error: Database not initialized"
-	}
-
-	if _, err := a.store.AddMessage(conversationID, "user", content); err != nil {
-		return "Error: Failed to save message: " + err.Error()
-	}
-
-	messages, err := a.store.GetMessages(conversationID)
-	if err != nil {
-		return "Error: Failed to get messages: " + err.Error()
-	}
-
-	if a.llm == nil {
-		return "Error: Please configure LLM provider settings first"
-	}
-
-	resp, err := a.runChat(messages, nil)
-	if err != nil {
-		return "Error: " + err.Error()
-	}
-
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp); saveErr != nil {
-		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
-	}
-	return resp
+	return a.sendMessage(conversationID, content, nil)
 }
 
 func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string) string {
-	if a.store == nil {
-		return "Error: Database not initialized"
-	}
-
-	if _, err := a.store.AddMessage(conversationID, "user", content); err != nil {
-		return "Error: Failed to save message: " + err.Error()
-	}
-
-	messages, err := a.store.GetMessages(conversationID)
-	if err != nil {
-		return "Error: Failed to get messages: " + err.Error()
-	}
-
-	if a.llm == nil {
-		return "Error: Please configure LLM provider settings first"
-	}
-
-	resp, err := a.runChat(messages, imageDataURLs)
-	if err != nil {
-		return "Error: " + err.Error()
-	}
-
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp); saveErr != nil {
-		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
-	}
-	return resp
+	return a.sendMessage(conversationID, content, imageDataURLs)
 }
 
 func (a *App) RegenerateMessage(conversationID int64) string {

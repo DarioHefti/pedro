@@ -10,8 +10,7 @@ import {
   conversationService,
   settingsService,
   fileService,
-  MOCK_EMPTY_CHAT_UI,
-  MOCK_UI_CONVERSATION_ID,
+  uiConversationService,
 } from './services/wailsService'
 import { applyDesignAndTypographyFromSettings } from './designTheme'
 
@@ -20,13 +19,19 @@ const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 export default function App() {
   const toast = useToast()
   const [currentConvID, setCurrentConvID] = useState<number | null>(() =>
-    MOCK_EMPTY_CHAT_UI ? MOCK_UI_CONVERSATION_ID : null,
+    uiConversationService.initialConversationID(),
   )
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
 
   const { conversations, load: loadConversations, remove: removeConversation } =
     useConversations()
+
+  async function reloadSettings() {
+    const s = await settingsService.get()
+    setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
+    applyDesignAndTypographyFromSettings(s)
+  }
 
   const messaging = useMessaging({
     currentConvID,
@@ -37,16 +42,13 @@ export default function App() {
   })
 
   useEffect(() => {
-    settingsService.get().then(s => {
-      setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-      applyDesignAndTypographyFromSettings(s)
-    })
+    void reloadSettings()
   }, [])
 
   useEffect(() => {
-    if (!MOCK_EMPTY_CHAT_UI) return
-    if (currentConvID !== MOCK_UI_CONVERSATION_ID) return
-    void messaging.load(MOCK_UI_CONVERSATION_ID)
+    if (!uiConversationService.isVirtualConversation(currentConvID)) return
+    if (currentConvID === null) return
+    void messaging.load(currentConvID)
     // Bootstrap sample thread once when opening on the virtual conversation.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [])
@@ -74,11 +76,8 @@ export default function App() {
 
   function handleSettingsClose() {
     setSettingsOpen(false)
-    // Reload welcome message in case it was changed
-    settingsService.get().then(s => {
-      setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-      applyDesignAndTypographyFromSettings(s)
-    })
+    // Reload app-level values that can be changed in settings.
+    void reloadSettings()
   }
 
   return (
@@ -110,10 +109,7 @@ export default function App() {
         <SettingsModal
           onClose={handleSettingsClose}
           onSaved={() => {
-            settingsService.get().then(s => {
-              setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
-              applyDesignAndTypographyFromSettings(s)
-            })
+            void reloadSettings()
           }}
           getSettings={settingsService.get}
           saveSettings={settingsService.save}

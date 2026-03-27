@@ -165,11 +165,6 @@ func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
 	return err
 }
 
-func (d *Database) UpdateMessageContent(id int64, content string) error {
-	_, err := d.db.Exec("UPDATE messages SET content = ? WHERE id = ?", content, id)
-	return err
-}
-
 func (d *Database) DeleteConversation(id int64) error {
 	// ON DELETE CASCADE (enforced via _foreign_keys=on DSN option) handles
 	// the child messages rows automatically.
@@ -216,13 +211,4 @@ func (d *Database) GetSettings() (map[string]string, error) {
 
 func (d *Database) Close() error {
 	return d.db.Close()
-}
-
-func (d *Database) GetConversation(id int64) (*Conversation, error) {
-	var c Conversation
-	err := d.db.QueryRow("SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?", id).Scan(&c.ID, &c.Title, &c.CreatedAt, &c.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
 }

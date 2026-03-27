@@ -4,15 +4,10 @@ export type Theme = 'light' | 'dark'
 
 interface ThemeContextValue {
   theme: Theme
-  setTheme: (theme: Theme) => void
   toggleTheme: () => void
 }
 
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'light',
-  setTheme: () => {},
-  toggleTheme: () => {},
-})
+const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme') as Theme | null
@@ -38,21 +33,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  function setTheme(newTheme: Theme) {
-    setThemeState(newTheme)
-  }
-
   function toggleTheme() {
     setThemeState(prev => (prev === 'light' ? 'dark' : 'light'))
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   )
 }
 
 export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext)
+  const context = useContext(ThemeContext)
+  if (!context) {
+    throw new Error('useTheme must be used within ThemeProvider')
+  }
+  return context
 }

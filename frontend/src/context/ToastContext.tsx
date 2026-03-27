@@ -18,17 +18,10 @@ interface ToastContextValue {
   toasts: Toast[]
   success: (message: string) => void
   error: (message: string) => void
-  info: (message: string) => void
   dismiss: (id: string) => void
 }
 
-const ToastContext = createContext<ToastContextValue>({
-  toasts: [],
-  success: () => {},
-  error: () => {},
-  info: () => {},
-  dismiss: () => {},
-})
+const ToastContext = createContext<ToastContextValue | null>(null)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -48,7 +41,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         toasts,
         success: msg => add(msg, 'success'),
         error: msg => add(msg, 'error'),
-        info: msg => add(msg, 'info'),
         dismiss,
       }}
     >
@@ -58,5 +50,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export function useToast(): ToastContextValue {
-  return useContext(ToastContext)
+  const context = useContext(ToastContext)
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider')
+  }
+  return context
 }

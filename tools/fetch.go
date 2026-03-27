@@ -14,6 +14,8 @@ import (
 )
 
 const maxFetchChars = 30000
+const headlessRenderWait = 1200 * time.Millisecond
+const headlessOpTimeout = 20 * time.Second
 
 // botChallengeSignals are substrings that indicate the server blocked the request.
 var botChallengeSignals = []string{
@@ -241,7 +243,7 @@ func fetchWithHeadlessBrowser(rawURL string) (string, error) {
 		return fmt.Sprintf("[Failed to launch browser: %v]", err), nil
 	}
 
-	browser := rod.New().ControlURL(u).MustConnect()
+	browser := rod.New().ControlURL(u).MustConnect().Timeout(headlessOpTimeout)
 	defer browser.MustClose()
 
 	return fetchPageContent(browser, rawURL)
@@ -249,20 +251,18 @@ func fetchWithHeadlessBrowser(rawURL string) (string, error) {
 
 // fetchPageContent extracts and converts page content using an existing browser instance
 func fetchPageContent(browser *rod.Browser, rawURL string) (string, error) {
-	page := browser.MustPage(rawURL)
+	page := browser.MustPage(rawURL).Timeout(headlessOpTimeout)
 	defer page.MustClose()
 
-	// Wait for page to be fully loaded (network idle)
+	// Wait for initial load with timeout.
 	err := page.WaitLoad()
 	if err != nil {
 		return fmt.Sprintf("[Headless browser error: %v]", err), nil
 	}
 
-	// Wait a bit more for JS to render dynamic content
-	time.Sleep(2 * time.Second)
-
-	// Wait for body to be present
-	page.MustWaitStable()
+	// Give JS apps a short render window, but avoid waiting for "stable" pages.
+	// Some live status pages never become stable and would otherwise block forever.
+	time.Sleep(headlessRenderWait)
 
 	// Get the rendered HTML
 	html, err := page.Evaluate(rod.Eval(`() => document.documentElement.outerHTML`))

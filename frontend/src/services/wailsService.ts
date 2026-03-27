@@ -59,10 +59,10 @@ function stubConversation(): main.Conversation {
 // ---------------------------------------------------------------------------
 
 /** Dev-only sample thread in sidebar. Keep `false` for production builds. */
-export const MOCK_EMPTY_CHAT_UI = false
+const MOCK_EMPTY_CHAT_UI = false
 
 /** Reserved ID for the in-memory-only sample conversation (not stored in DB). */
-export const MOCK_UI_CONVERSATION_ID = -9_001
+const MOCK_UI_CONVERSATION_ID = -9_001
 
 const MOCK_SAMPLE_TITLE = 'Sample chat'
 
@@ -103,12 +103,12 @@ function buildMockMessagesForConversation(conversationID: number): main.Message[
 }
 
 /** Sample tool rows paired with `isSeededEmptyChatMock` for the mock thread. */
-export const mockEmptyChatToolCalls: { name: string; argsJSON: string }[] = [
+const mockEmptyChatToolCalls: { name: string; argsJSON: string }[] = [
   { name: 'websearch', argsJSON: JSON.stringify({ query: 'Wails v2 desktop Go bindings' }) },
   { name: 'grep', argsJSON: JSON.stringify({ pattern: 'wails', path: 'frontend' }) },
 ]
 
-export function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
+function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
   if (!MOCK_EMPTY_CHAT_UI || msgs.length !== 2) return false
   return (
     msgs[0]?.Role === 'user' &&
@@ -116,6 +116,25 @@ export function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
     msgs[1]?.Role === 'assistant' &&
     msgs[1]?.Content === MOCK_SAMPLE_ASSISTANT_CONTENT
   )
+}
+
+export const uiConversationService = {
+  initialConversationID(): number | null {
+    return MOCK_EMPTY_CHAT_UI ? MOCK_UI_CONVERSATION_ID : null
+  },
+  isVirtualConversation(id: number | null): boolean {
+    return MOCK_EMPTY_CHAT_UI && id === MOCK_UI_CONVERSATION_ID
+  },
+  canDeleteConversation(id: number): boolean {
+    return !this.isVirtualConversation(id)
+  },
+  getMockToolCallsForMessages(
+    msgs: main.Message[],
+  ): { name: string; argsJSON: string }[] {
+    return isSeededEmptyChatMock(msgs)
+      ? mockEmptyChatToolCalls.map(tc => ({ ...tc }))
+      : []
+  },
 }
 
 // ---------------------------------------------------------------------------

@@ -32,9 +32,13 @@ func connectionSettingsFingerprint(settings map[string]string) string {
 	}
 
 	rec := map[string]string{
-		"provider_type":        pt,
-		"custom_system_prompt": settings["custom_system_prompt"],
-		"welcome_message":      wm,
+		"provider_type":               pt,
+		"custom_system_prompt":        settings["custom_system_prompt"],
+		"welcome_message":             wm,
+		"design_light_base_color":     settings["design_light_base_color"],
+		"design_dark_base_color":      settings["design_dark_base_color"],
+		"design_ui_font_size_px":      settings["design_ui_font_size_px"],
+		"design_message_font_size_px": settings["design_message_font_size_px"],
 	}
 
 	switch pt {
@@ -103,7 +107,11 @@ func settingsKeyInvalidatesConnectionTest(key string) bool {
 		"openai_api_key",
 		"openai_model",
 		"custom_system_prompt",
-		"welcome_message":
+		"welcome_message",
+		"design_light_base_color",
+		"design_dark_base_color",
+		"design_ui_font_size_px",
+		"design_message_font_size_px":
 		return true
 	default:
 		return false
