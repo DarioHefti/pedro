@@ -55,6 +55,8 @@ func (d *Database) init() error {
 			conversation_id INTEGER NOT NULL,
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
+			attachments TEXT NOT NULL DEFAULT '',
+			tool_calls TEXT NOT NULL DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		);
@@ -76,6 +78,8 @@ func (d *Database) init() error {
 func (d *Database) migrate() {
 	// Add attachments column (idempotent — ALTER fails silently if column exists).
 	d.db.Exec("ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT ''")
+	// Add tool_calls column (idempotent — ALTER fails silently if column exists).
+	d.db.Exec("ALTER TABLE messages ADD COLUMN tool_calls TEXT NOT NULL DEFAULT ''")
 	d.sanitizeExistingConversationTitles()
 }
 
@@ -136,7 +140,7 @@ func (d *Database) GetConversations() ([]Conversation, error) {
 }
 
 func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
@@ -154,7 +158,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 }
 
 func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +167,7 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	result := make(map[int64][]Message)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		result[m.ConversationID] = append(result[m.ConversationID], m)
@@ -171,8 +175,8 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	return result, nil
 }
 
-func (d *Database) AddMessage(conversationID int64, role, content, attachments string) (*Message, error) {
-	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content, attachments) VALUES (?, ?, ?, ?)", conversationID, role, content, attachments)
+func (d *Database) AddMessage(conversationID int64, role, content, attachments, toolCalls string) (*Message, error) {
+	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content, attachments, tool_calls) VALUES (?, ?, ?, ?, ?)", conversationID, role, content, attachments, toolCalls)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +193,13 @@ func (d *Database) AddMessage(conversationID int64, role, content, attachments s
 		}
 	}
 
-	return &Message{ConversationID: conversationID, Role: role, Content: content, Attachments: attachments}, nil
+	return &Message{
+		ConversationID: conversationID,
+		Role:           role,
+		Content:        content,
+		Attachments:    attachments,
+		ToolCalls:      toolCalls,
+	}, nil
 }
 
 func sanitizeConversationTitle(raw string) string {

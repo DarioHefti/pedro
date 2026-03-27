@@ -127,6 +127,7 @@ export default function App() {
         loading={messaging.loading}
         streamingBusy={messaging.streamingBusy}
         toolCalls={messaging.toolCalls}
+        messageToolCalls={messaging.messageToolCalls}
         streamingContent={messaging.streamingContent}
         messageImages={messaging.messageImages}
         messageFiles={messaging.messageFiles}

@@ -572,7 +572,7 @@ body {
   padding: var(--chat-tool-pad-y) var(--chat-tool-pad-x);
   border-left: 3px solid var(--warning);
   align-self: flex-start;
-  font-size: var(--font-size-chat-tool-call);
+  font-size: var(--font-size-message-body);
   line-height: 1.45;
   background: var(--bg-surface);
 }
@@ -626,8 +626,8 @@ body {
 /* ===== Tool Call Card ===== */
 .tool-call-card {
   display: inline-flex;
-  align-items: center;
-  gap: 3px;
+  align-items: flex-start;
+  gap: 4px;
   padding: 1px 3px;
   border-radius: 20px;
   background: transparent;
@@ -639,11 +639,54 @@ body {
 .tool-call-icon {
   font-size: 1.12em;
   line-height: 1;
+  margin-top: 1px;
 }
 
 .tool-call-label {
   font-weight: 600;
   white-space: nowrap;
+}
+
+.tool-call-summary-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+}
+
+.tool-call-summary-btn:hover .tool-call-label,
+.tool-call-summary-btn:focus-visible .tool-call-label {
+  text-decoration: underline;
+}
+
+.tool-call-lines-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-call-lines {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-call-line {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.tool-call-chevron {
+  color: var(--text-secondary);
+  line-height: 1;
 }
 
 .tool-call-arg {

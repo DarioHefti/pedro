@@ -68,6 +68,7 @@ export function useMessaging({
   const [streamingStreams, setStreamingStreams] = useState<Map<number, StreamBuffer>>(() => new Map())
   const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
   const [messageFiles, setMessageFiles] = useState<Map<number, FileAttachment[]>>(new Map())
+  const [messageToolCalls, setMessageToolCalls] = useState<Map<number, ToolCall[]>>(new Map())
 
   const streamingBuffersRef = useRef<Map<number, StreamBuffer>>(new Map())
   /** Conv IDs that are allowed to accept stream events (set in prepareStreaming, cleared in cleanup). */
@@ -152,13 +153,16 @@ export function useMessaging({
     setMessages([])
     setMessageImages(new Map())
     setMessageFiles(new Map())
+    setMessageToolCalls(new Map())
     const msgs = await conversationService.getMessages(convID)
     if (msgSeqRef.current !== seq) return
     const list = msgs ?? []
     setMessages(list)
     const { images, files } = buildAttachmentMaps(list)
+    const toolCallsByMessageIndex = buildToolCallMaps(list)
     setMessageImages(images)
     setMessageFiles(files)
+    setMessageToolCalls(toolCallsByMessageIndex)
   }, [])
 
   /** Clear all message state (e.g. when "New Chat" is selected). */
@@ -167,6 +171,7 @@ export function useMessaging({
     setMessages([])
     setMessageImages(new Map())
     setMessageFiles(new Map())
+    setMessageToolCalls(new Map())
   }, [])
 
   function prepareStreaming(convId: number) {
@@ -249,8 +254,10 @@ export function useMessaging({
           streamClosed = true
           ++msgSeqRef.current
           const { images, files } = buildAttachmentMaps(dbMsgs)
+          const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
           setMessageImages(images)
           setMessageFiles(files)
+          setMessageToolCalls(toolCallsByMessageIndex)
           setMessages(dbMsgs)
         }
 
@@ -278,6 +285,7 @@ export function useMessaging({
         setMessages(prev => prev.filter((_, i) => i !== index))
         setMessageImages(prev => reindexMapWithoutIndex(prev, index))
         setMessageFiles(prev => reindexMapWithoutIndex(prev, index))
+        setMessageToolCalls(prev => reindexMapWithoutIndex(prev, index))
       }
 
       prepareStreaming(convID)
@@ -291,8 +299,10 @@ export function useMessaging({
             ++msgSeqRef.current
             const dbMsgs = (await conversationService.getMessages(convID)) ?? []
             const { images, files } = buildAttachmentMaps(dbMsgs)
+            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
             setMessageImages(images)
             setMessageFiles(files)
+            setMessageToolCalls(toolCallsByMessageIndex)
             setMessages(dbMsgs)
           } else {
             // Same handoff fix as send(): remove stream row first, then render final DB row.
@@ -301,8 +311,10 @@ export function useMessaging({
             ++msgSeqRef.current
             const dbMsgs = (await conversationService.getMessages(convID)) ?? []
             const { images, files } = buildAttachmentMaps(dbMsgs)
+            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
             setMessageImages(images)
             setMessageFiles(files)
+            setMessageToolCalls(toolCallsByMessageIndex)
             setMessages(dbMsgs)
           }
         } else if (!response?.startsWith('Error:')) {
@@ -329,6 +341,7 @@ export function useMessaging({
     loading,
     streamingBusy,
     toolCalls,
+    messageToolCalls,
     streamingContent,
     messageImages,
     messageFiles,
@@ -411,6 +424,27 @@ function buildAttachmentMaps(msgs: Message[]): {
   })
 
   return { images, files }
+}
+
+/** Parse each message's persisted ToolCalls JSON into an index-keyed map. */
+function buildToolCallMaps(msgs: Message[]): Map<number, ToolCall[]> {
+  const out = new Map<number, ToolCall[]>()
+
+  msgs.forEach((msg, idx) => {
+    const persisted = msg.ToolCalls
+    if (!persisted) return
+    try {
+      const parsed = JSON.parse(persisted) as ToolCall[]
+      const clean = parsed.filter(
+        tc => tc && typeof tc.name === 'string' && typeof tc.argsJSON === 'string',
+      )
+      if (clean.length > 0) out.set(idx, clean)
+    } catch {
+      /* ignore malformed JSON */
+    }
+  })
+
+  return out
 }
 
 function reindexMapWithoutIndex<T>(input: Map<number, T>, removedIndex: number): Map<number, T> {

@@ -44,6 +44,7 @@ export namespace main {
 	    Role: string;
 	    Content: string;
 	    Attachments: string;
+	    ToolCalls: string;
 	    // Go type: time
 	    CreatedAt: any;
 	
@@ -58,6 +59,7 @@ export namespace main {
 	        this.Role = source["Role"];
 	        this.Content = source["Content"];
 	        this.Attachments = source["Attachments"];
+	        this.ToolCalls = source["ToolCalls"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	    }
 	

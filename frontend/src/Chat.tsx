@@ -10,6 +10,7 @@ import AssistantMessageActions from './AssistantMessageActions'
 interface ChatProps {
   messages: Message[]
   toolCalls: ToolCall[]
+  messageToolCalls: Map<number, ToolCall[]>
   /** True when this thread is showing an in-flight assistant stream. */
   loading: boolean
   /** True when any conversation has an active LLM stream (blocks sending elsewhere). */
@@ -72,6 +73,7 @@ const SCROLL_STICK_THRESHOLD_PX = 80
 export default function Chat({
   messages,
   toolCalls,
+  messageToolCalls,
   loading,
   streamingBusy,
   streamingContent,
@@ -95,6 +97,9 @@ export default function Chat({
   const [showJumpButton, setShowJumpButton] = useState(false)
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
   const [personaMenuOpen, setPersonaMenuOpen] = useState(false)
+  const [expandedToolCallSummaries, setExpandedToolCallSummaries] = useState<Set<number>>(
+    () => new Set(),
+  )
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -400,6 +405,11 @@ export default function Chat({
     }, 400)
   }
 
+  useEffect(() => {
+    // Reset expanded summary state when thread content changes.
+    setExpandedToolCallSummaries(new Set())
+  }, [messages])
+
   const lastUserMessageIndex = messages.reduce(
     (acc, m, idx) => (m.Role === 'user' ? idx : acc),
     -1,
@@ -407,9 +417,6 @@ export default function Chat({
   /** Tool rows belong after the latest user turn and before its assistant reply (incl. streaming). */
   const splitMessagesForToolCalls =
     toolCalls.length > 0 && lastUserMessageIndex >= 0
-  const messageHeadCount = splitMessagesForToolCalls
-    ? lastUserMessageIndex + 1
-    : messages.length
 
   function renderMessageRow(i: number) {
     const msg = messages[i]
@@ -492,20 +499,60 @@ export default function Chat({
     )
   }
 
-  function renderToolCallRows() {
-    return toolCalls.map((tc, i) => {
-      const argsDisplay = toolCallArgDisplay(tc)
-      return (
-        <div key={`tc-${i}`} className="message tool">
-          <div className="tool-call-card">
-            <span className="tool-call-icon">🔧</span>
-            <span className="tool-call-label">{tc.name}</span>
-            {argsDisplay ? <span className="tool-call-arg">{argsDisplay}</span> : null}
-          </div>
+  function renderToolCallsBubble(
+    calls: ToolCall[],
+    collapsed: boolean,
+    key?: string,
+    onToggleCollapsed?: () => void,
+  ) {
+    if (calls.length === 0) return null
+    return (
+      <div className="message tool" key={key}>
+        <div className="tool-call-card">
+          <span className="tool-call-icon">🔧</span>
+          {collapsed ? (
+            <button
+              type="button"
+              className="tool-call-summary-btn"
+              aria-expanded="false"
+              onClick={onToggleCollapsed}
+            >
+              <span className="tool-call-label">tools used</span>
+              {onToggleCollapsed ? <span className="tool-call-chevron" aria-hidden>▾</span> : null}
+            </button>
+          ) : (
+            <div className="tool-call-lines-wrap">
+              {onToggleCollapsed ? (
+                <button
+                  type="button"
+                  className="tool-call-summary-btn"
+                  aria-expanded="true"
+                  onClick={onToggleCollapsed}
+                >
+                  <span className="tool-call-label">tools used</span>
+                  <span className="tool-call-chevron tool-call-chevron--open" aria-hidden>▴</span>
+                </button>
+              ) : null}
+              <div className="tool-call-lines">
+                {calls.map((tc, i) => {
+                  const argsDisplay = toolCallArgDisplay(tc)
+                  return (
+                    <div key={`tc-${i}`} className="tool-call-line">
+                      <span className="tool-call-label">{tc.name}</span>
+                      {argsDisplay ? <span className="tool-call-arg">{argsDisplay}</span> : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
-      )
-    })
+      </div>
+    )
   }
+
+  const inFlightToolCallsRow =
+    toolCalls.length > 0 ? renderToolCallsBubble(toolCalls, false, 'tool-calls-in-flight') : null
 
   return (
     <div
@@ -541,12 +588,32 @@ export default function Chat({
             </div>
           </div>
         )}
-        {Array.from({ length: messageHeadCount }, (_, i) => renderMessageRow(i))}
-        {splitMessagesForToolCalls ? renderToolCallRows() : null}
-        {splitMessagesForToolCalls
-          ? messages.slice(messageHeadCount).map((_, j) => renderMessageRow(messageHeadCount + j))
-          : null}
-        {!splitMessagesForToolCalls && toolCalls.length > 0 ? renderToolCallRows() : null}
+        {messages.map((msg, i) => {
+          const rows: JSX.Element[] = []
+          const persistedToolCalls = messageToolCalls.get(i)
+          if (msg.Role === 'assistant' && persistedToolCalls && persistedToolCalls.length > 0) {
+            const isExpanded = expandedToolCallSummaries.has(i)
+            const summaryRow = renderToolCallsBubble(
+              persistedToolCalls,
+              !isExpanded,
+              `tool-calls-summary-${i}`,
+              () =>
+                setExpandedToolCallSummaries(prev => {
+                  const next = new Set(prev)
+                  if (next.has(i)) next.delete(i)
+                  else next.add(i)
+                  return next
+                }),
+            )
+            if (summaryRow) rows.push(summaryRow)
+          }
+          rows.push(renderMessageRow(i))
+          if (splitMessagesForToolCalls && i === lastUserMessageIndex && inFlightToolCallsRow) {
+            rows.push(inFlightToolCallsRow)
+          }
+          return rows
+        })}
+        {!splitMessagesForToolCalls && inFlightToolCallsRow ? inFlightToolCallsRow : null}
 
         {loading && (
           <div className="message-wrapper assistant">

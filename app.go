@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,11 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type toolCallRecord struct {
+	Name     string `json:"name"`
+	ArgsJSON string `json:"argsJSON"`
+}
 
 type App struct {
 	ctx        context.Context
@@ -89,7 +95,7 @@ func (a *App) initLLM() {
 	a.llm = llm
 }
 
-func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, error) {
+func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancelMu.Lock()
 	a.cancelFunc = cancel
@@ -108,6 +114,8 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 	}
 
 	var response []byte
+	var toolCalls []toolCallRecord
+	var toolCallsMu sync.Mutex
 	err := a.llm.Chat(
 		ctx,
 		llmMessages,
@@ -117,16 +125,25 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 			runtime.EventsEmit(a.ctx, "stream_chunk", conversationID, chunk)
 		},
 		func(name, argsJSON string) {
+			toolCallsMu.Lock()
+			toolCalls = append(toolCalls, toolCallRecord{Name: name, ArgsJSON: argsJSON})
+			toolCallsMu.Unlock()
 			runtime.EventsEmit(a.ctx, "tool_call", conversationID, name, argsJSON)
 		},
 	)
+	toolCallsJSON := ""
+	if len(toolCalls) > 0 {
+		if b, mErr := json.Marshal(toolCalls); mErr == nil {
+			toolCallsJSON = string(b)
+		}
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			return string(response), nil
+			return string(response), toolCallsJSON, nil
 		}
-		return "", err
+		return "", "", err
 	}
-	return string(response), nil
+	return string(response), toolCallsJSON, nil
 }
 
 func (a *App) AbortMessage() {
@@ -156,7 +173,7 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 		return "Error: " + err.Error()
 	}
 
-	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON); err != nil {
+	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON, ""); err != nil {
 		return "Error: Failed to save message: " + err.Error()
 	}
 	runtime.EventsEmit(a.ctx, "conversation_updated", conversationID)
@@ -172,12 +189,12 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
 	mergedImages := mergeImageDataURLsFromFileRefs(imageDataURLs, attachmentsJSON, content)
-	resp, err := a.runChat(conversationID, messages, mergedImages)
+	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
 
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, ""); saveErr != nil {
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 	return resp
@@ -314,12 +331,12 @@ func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selected
 	}
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
-	resp, err := a.runChat(conversationID, messages, nil)
+	resp, toolCallsJSON, err := a.runChat(conversationID, messages, nil)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
 
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, ""); saveErr != nil {
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 	return resp
