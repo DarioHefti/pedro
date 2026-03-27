@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/ledongthuc/pdf"
 	"github.com/xuri/excelize/v2"
+
+	"pedro/documentparser"
 )
 
 const (
@@ -67,6 +69,9 @@ func (r ReadFileTool) Execute(argsJSON string) (string, error) {
 	return result, nil
 }
 
+// read routes the read_file tool by extension. PDF uses documentparser (same extraction as
+// parse_document). Excel uses readExcel (sheet-scoped rows + read_file-specific formatting).
+// Other extensions use line-oriented text; for docx/pptx/etc. the model should prefer parse_document.
 func (ReadFileTool) read(path string, offset, limit int, sheet string) (string, error) {
 	if offset < 1 {
 		offset = 1
@@ -75,15 +80,15 @@ func (ReadFileTool) read(path string, offset, limit int, sheet string) (string, 
 		limit = readDefaultLimit
 	}
 
-	ext := strings.ToLower(path)
-	if strings.HasSuffix(ext, ".pdf") {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".pdf":
 		return readPDF(path, offset, limit)
-	}
-	if strings.HasSuffix(ext, ".xlsx") || strings.HasSuffix(ext, ".xls") || strings.HasSuffix(ext, ".xlsm") {
+	case ".xlsx", ".xls", ".xlsm":
 		return readExcel(path, offset, limit, sheet)
+	default:
+		return readTextFile(path, offset, limit)
 	}
-
-	return readTextFile(path, offset, limit)
 }
 
 func readTextFile(path string, offset, limit int) (string, error) {
@@ -270,7 +275,7 @@ func readExcel(path string, offset, limit int, sheetName string) (string, error)
 
 	for i := offset - 1; i < end; i++ {
 		row := rows[i]
-		csvLine := formatRowAsCSV(row)
+		csvLine := documentparser.FormatRowAsCSV(row)
 		entry := fmt.Sprintf("%d: %s", i+1, csvLine)
 
 		if len(entry) > readMaxLineLen {
@@ -305,60 +310,14 @@ func readExcel(path string, offset, limit int, sheetName string) (string, error)
 	return sb.String(), nil
 }
 
-// formatRowAsCSV converts a row to CSV format with proper quoting
-func formatRowAsCSV(row []string) string {
-	var parts []string
-	for _, cell := range row {
-		// Quote if contains comma, quote, or newline
-		if strings.ContainsAny(cell, ",\"\n\r") {
-			cell = "\"" + strings.ReplaceAll(cell, "\"", "\"\"") + "\""
-		}
-		parts = append(parts, cell)
-	}
-	return strings.Join(parts, ",")
-}
-
 func readPDF(path string, offset, limit int) (string, error) {
-	f, err := os.Open(path)
+	res, err := (documentparser.Native{}).Parse(path)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return "", err
-	}
-	fileSizeMB := float64(stat.Size()) / (1024 * 1024)
-
-	pdfReader, err := pdf.NewReader(f, stat.Size())
-	if err != nil {
-		return "", fmt.Errorf("failed to open PDF: %v", err)
-	}
-
-	numPages := pdfReader.NumPage()
-	var allLines []string
-
-	for i := 1; i <= numPages; i++ {
-		page := pdfReader.Page(i)
-		if page.V.IsNull() {
-			continue
-		}
-
-		text, err := page.GetPlainText(nil)
-		if err != nil {
-			continue
-		}
-
-		allLines = append(allLines, fmt.Sprintf("--- Page %d ---", i))
-		lines := strings.Split(text, "\n")
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" {
-				allLines = append(allLines, trimmed)
-			}
-		}
-	}
+	allLines := res.Lines
+	fileSizeMB := res.FileSizeMB
+	numPages := res.Pages
 
 	totalLines := len(allLines)
 	if offset > totalLines {

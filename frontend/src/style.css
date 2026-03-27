@@ -1896,6 +1896,28 @@ body {
   color: var(--accent-primary);
 }
 
+a.inline-code.local-path-link {
+  display: inline;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: inherit;
+  color: var(--accent-primary);
+  background: var(--bg-chat-user);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  vertical-align: baseline;
+}
+
+a.inline-code.local-path-link:hover {
+  color: var(--accent-primary);
+  filter: brightness(1.06);
+}
+
 /* ===== Mermaid Diagrams ===== */
 .mermaid-diagram {
   margin: 1em 0;
@@ -2006,7 +2028,8 @@ body {
   margin-bottom: var(--chat-inbubble-preview-gap);
 }
 
-.message-file-chip {
+.message-file-chip,
+button.message-file-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--chat-file-chip-gap);
@@ -2017,14 +2040,26 @@ body {
   font-size: var(--font-size-chat-attachment-info);
   line-height: 1.4;
   color: var(--text-primary);
-  cursor: default;
+  cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   max-width: 100%;
   min-width: 0;
 }
 
+button.message-file-chip {
+  font: inherit;
+  font-family: inherit;
+  margin: 0;
+  appearance: none;
+}
+
 .message-file-chip:hover {
   border-color: var(--accent-primary);
+}
+
+button.message-file-chip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .message-file-icon {
@@ -2086,6 +2121,30 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.attachment-name.attachment-name--open {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-size: inherit;
+  color: var(--text-primary);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.attachment-name.attachment-name--open:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+button.attachment-name.attachment-name--open:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .remove-attachment {

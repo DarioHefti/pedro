@@ -29,6 +29,7 @@ import {
   IsAuthenticated,
   SelectFile,
   SelectFolder,
+  OpenPath,
   GetPersonas,
   CreatePersona,
   UpdatePersona,
@@ -275,6 +276,9 @@ export const personaService = {
 export const fileService = {
   selectFile: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFile()),
   selectFolder: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFolder()),
+  /** Opens with the OS default app (WebView blocks file:// links). */
+  openPath: (path: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : OpenPath(path),
 }
 
 // ---------------------------------------------------------------------------

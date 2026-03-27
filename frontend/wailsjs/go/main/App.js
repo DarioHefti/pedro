@@ -58,6 +58,10 @@ export function IsAuthenticated() {
   return window['go']['main']['App']['IsAuthenticated']();
 }
 
+export function OpenPath(arg1) {
+  return window['go']['main']['App']['OpenPath'](arg1);
+}
+
 export function RegenerateMessage(arg1, arg2) {
   return window['go']['main']['App']['RegenerateMessage'](arg1, arg2);
 }

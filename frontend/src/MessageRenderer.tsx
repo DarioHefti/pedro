@@ -4,6 +4,8 @@ import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import mermaid from 'mermaid'
 import { useTheme } from './ThemeContext'
+import { fileService } from './services/wailsService'
+import { looksLikeLocalFilesystemPath } from './utils/localPath'
 
 interface MessageRendererProps {
   content: string
@@ -94,6 +96,27 @@ export default function MessageRenderer({
               </code>
             </pre>
           </div>
+        )
+      }
+
+      const inline = String(children).replace(/\n$/, '')
+      if (looksLikeLocalFilesystemPath(inline)) {
+        return (
+          <a
+            href="#"
+            className="inline-code local-path-link"
+            title="Open file or folder"
+            onClick={e => {
+              e.preventDefault()
+              void fileService.openPath(inline).then(err => {
+                if (err) {
+                  console.warn('[OpenPath]', err)
+                }
+              })
+            }}
+          >
+            {children}
+          </a>
         )
       }
 

@@ -30,6 +30,8 @@ export function GetSettings():Promise<Record<string, string>>;
 
 export function IsAuthenticated():Promise<boolean>;
 
+export function OpenPath(arg1:string):Promise<string>;
+
 export function RegenerateMessage(arg1:number,arg2:string):Promise<string>;
 
 export function SaveSettings(arg1:Record<string, string>):Promise<void>;

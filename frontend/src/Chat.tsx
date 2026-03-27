@@ -3,7 +3,7 @@ import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
-import type { Persona } from './services/wailsService'
+import { fileService, type Persona } from './services/wailsService'
 import MessageRenderer from './MessageRenderer'
 import AssistantMessageActions from './AssistantMessageActions'
 
@@ -439,12 +439,25 @@ export default function Chat({
         {files && files.length > 0 && (
           <div className="message-file-previews">
             {files.map((file, j) => (
-              <div key={j} className="message-file-chip">
-                <span className="message-file-icon">
+              <button
+                key={j}
+                type="button"
+                className="message-file-chip"
+                title={file.path}
+                aria-label={`Open ${file.type === 'folder' ? 'folder' : 'file'}: ${file.name}`}
+                onClick={() => {
+                  void fileService.openPath(file.path).then(err => {
+                    if (err) {
+                      console.warn('[OpenPath]', err)
+                    }
+                  })
+                }}
+              >
+                <span className="message-file-icon" aria-hidden>
                   {file.type === 'folder' ? '📁' : '📄'}
                 </span>
                 <span className="message-file-name">{file.name}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -560,13 +573,35 @@ export default function Chat({
               {att.type === 'image' ? (
                 <img src={att.content} alt={att.name} className="attachment-thumb" />
               ) : att.type === 'folder-ref' ? (
-                <span className="attachment-name" title={att.content}>
+                <button
+                  type="button"
+                  className="attachment-name attachment-name--open"
+                  title={att.content}
+                  onClick={() => {
+                    void fileService.openPath(att.content).then(err => {
+                      if (err) {
+                        console.warn('[OpenPath]', err)
+                      }
+                    })
+                  }}
+                >
                   📁 {att.name}
-                </span>
+                </button>
               ) : att.type === 'file-ref' ? (
-                <span className="attachment-name" title={att.content}>
+                <button
+                  type="button"
+                  className="attachment-name attachment-name--open"
+                  title={att.content}
+                  onClick={() => {
+                    void fileService.openPath(att.content).then(err => {
+                      if (err) {
+                        console.warn('[OpenPath]', err)
+                      }
+                    })
+                  }}
+                >
                   📄 {att.name}
-                </span>
+                </button>
               ) : (
                 <span className="attachment-name">📄 {att.name}</span>
               )}

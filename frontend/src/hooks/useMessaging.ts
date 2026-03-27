@@ -340,14 +340,14 @@ function buildLLMContent(content: string, attachments?: Attachment[]): string {
         return (
           `[File: ${a.name}]\n` +
           `[Path: ${a.content}]\n` +
-          `[Large file attached by path. Use the read_file tool with this path to read it in chunks.]`
+          `[Large file attached by path. For PDF or Office files use parse_document; for source code, logs, and plain text use read_file — always paginate with offset/limit.]`
         )
       }
       if (a.type === 'folder-ref') {
         return (
           `[Folder: ${a.name}]\n` +
           `[Path: ${a.content}]\n` +
-          `[Folder attached by path. Use the show_file_tree tool with this path (depth as needed; paginate with offset if truncated), then read_file for specific files.]`
+          `[Folder attached by path. Use the show_file_tree tool with this path (depth as needed; paginate with offset if truncated), then parse_document for PDF/Office files or read_file for text/code files.]`
         )
       }
       return `[File: ${a.name}]\n${a.content}`

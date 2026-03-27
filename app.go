@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	goruntime "runtime"
 	"sync"
 
 	"pedro/providers"
@@ -392,6 +397,35 @@ func (a *App) SelectFolder() string {
 		return ""
 	}
 	return path
+}
+
+// OpenPath opens a file or folder with the OS default handler. Returns "" on success, else an error message.
+func (a *App) OpenPath(path string) string {
+	if path == "" {
+		return "empty path"
+	}
+	path = filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		return "path must be absolute"
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Sprintf("cannot access path: %v", err)
+	}
+	var cmd *exec.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", path)
+	case "darwin":
+		cmd = exec.Command("open", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func (a *App) SetSetting(key, value string) error {
