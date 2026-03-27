@@ -19,6 +19,7 @@ import {
   RegenerateMessage,
   AbortMessage,
   GetSettings,
+  GetDefaultSystemPrompt,
   SaveSettings,
   SetSetting,
   TestConnection,
@@ -27,6 +28,12 @@ import {
   IsAuthenticated,
   SelectFile,
   SelectFolder,
+  GetPersonas,
+  CreatePersona,
+  UpdatePersona,
+  DeletePersona,
+  GetActivePersonaID,
+  SetActivePersonaID,
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { main } from '../../wailsjs/go/models'
@@ -34,6 +41,7 @@ import { main } from '../../wailsjs/go/models'
 // Re-export generated types so the rest of the app never imports from wailsjs.
 export type Conversation = main.Conversation
 export type Message = main.Message
+export type Persona = main.Persona
 
 function hasWailsBridge(): boolean {
   if (typeof window === 'undefined') return false
@@ -43,6 +51,9 @@ function hasWailsBridge(): boolean {
 
 const useDevStub =
   import.meta.env.DEV && typeof import.meta.env !== 'undefined' && !hasWailsBridge()
+
+/** True when the app runs without the Wails bridge (e.g. Vite in a normal browser). */
+export const isWailsDevStub = useDevStub
 
 function stubConversation(): main.Conversation {
   return new main.Conversation({
@@ -187,16 +198,20 @@ export const conversationService = {
 // Message service
 // ---------------------------------------------------------------------------
 export const messageService = {
-  send: (convID: number, content: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SendMessage(convID, content),
+  /** selectedPersonaID: DB row id; backend loads prompt text from SQLite. */
+  send: (convID: number, content: string, selectedPersonaID: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : SendMessage(convID, content, selectedPersonaID),
   sendWithImages: (
     convID: number,
     content: string,
     images: string[],
+    selectedPersonaID: string,
   ): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SendMessageWithImages(convID, content, images),
-  regenerate: (convID: number): Promise<string> =>
-    useDevStub ? Promise.resolve('') : RegenerateMessage(convID),
+    useDevStub
+      ? Promise.resolve('')
+      : SendMessageWithImages(convID, content, images, selectedPersonaID),
+  regenerate: (convID: number, selectedPersonaID: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, selectedPersonaID),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
 }
 
@@ -206,6 +221,8 @@ export const messageService = {
 export const settingsService = {
   get: (): Promise<Record<string, string>> =>
     useDevStub ? Promise.resolve({}) : GetSettings(),
+  getDefaultSystemPrompt: (): Promise<string> =>
+    useDevStub ? Promise.resolve('') : GetDefaultSystemPrompt(),
   save: (settings: Record<string, string>): Promise<void> =>
     useDevStub ? Promise.resolve() : SaveSettings(settings),
   setSetting: (key: string, value: string): Promise<void> =>
@@ -215,6 +232,36 @@ export const settingsService = {
   signOut: (): Promise<void> => (useDevStub ? Promise.resolve() : SignOut()),
   isAuthenticated: (): Promise<boolean> =>
     useDevStub ? Promise.resolve(false) : IsAuthenticated(),
+}
+
+// ---------------------------------------------------------------------------
+// Personas (SQLite-backed)
+// ---------------------------------------------------------------------------
+export const personaService = {
+  getAll: async (): Promise<main.Persona[]> => {
+    const raw = useDevStub ? [] : await GetPersonas()
+    return raw ?? []
+  },
+  create: (name: string, prompt: string): Promise<main.Persona> =>
+    useDevStub
+      ? Promise.resolve(
+          new main.Persona({
+            ID: Date.now(),
+            Name: name,
+            Prompt: prompt,
+            CreatedAt: new Date().toISOString(),
+            UpdatedAt: new Date().toISOString(),
+          }),
+        )
+      : CreatePersona(name, prompt),
+  update: (id: number, name: string, prompt: string): Promise<void> =>
+    useDevStub ? Promise.resolve() : UpdatePersona(id, name, prompt),
+  delete: (id: number): Promise<void> =>
+    useDevStub ? Promise.resolve() : DeletePersona(id),
+  getActiveId: (): Promise<string> =>
+    useDevStub ? Promise.resolve('') : GetActivePersonaID(),
+  setActive: (id: string): Promise<void> =>
+    useDevStub ? Promise.resolve() : SetActivePersonaID(id),
 }
 
 // ---------------------------------------------------------------------------

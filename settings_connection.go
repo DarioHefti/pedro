@@ -33,6 +33,7 @@ func connectionSettingsFingerprint(settings map[string]string) string {
 
 	rec := map[string]string{
 		"provider_type":               pt,
+		"system_prompt":               settings["system_prompt"],
 		"custom_system_prompt":        settings["custom_system_prompt"],
 		"welcome_message":             wm,
 		"design_light_base_color":     settings["design_light_base_color"],
@@ -106,6 +107,7 @@ func settingsKeyInvalidatesConnectionTest(key string) bool {
 		"azure_api_key",
 		"openai_api_key",
 		"openai_model",
+		"system_prompt",
 		"custom_system_prompt",
 		"welcome_message",
 		"design_light_base_color",

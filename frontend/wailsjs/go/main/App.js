@@ -10,8 +10,20 @@ export function CreateConversation() {
   return window['go']['main']['App']['CreateConversation']();
 }
 
+export function CreatePersona(arg1, arg2) {
+  return window['go']['main']['App']['CreatePersona'](arg1, arg2);
+}
+
 export function DeleteConversation(arg1) {
   return window['go']['main']['App']['DeleteConversation'](arg1);
+}
+
+export function DeletePersona(arg1) {
+  return window['go']['main']['App']['DeletePersona'](arg1);
+}
+
+export function GetActivePersonaID() {
+  return window['go']['main']['App']['GetActivePersonaID']();
 }
 
 export function GetAvailableProviders() {
@@ -22,8 +34,16 @@ export function GetConversations() {
   return window['go']['main']['App']['GetConversations']();
 }
 
+export function GetDefaultSystemPrompt() {
+  return window['go']['main']['App']['GetDefaultSystemPrompt']();
+}
+
 export function GetMessages(arg1) {
   return window['go']['main']['App']['GetMessages'](arg1);
+}
+
+export function GetPersonas() {
+  return window['go']['main']['App']['GetPersonas']();
 }
 
 export function GetSettings() {
@@ -34,8 +54,8 @@ export function IsAuthenticated() {
   return window['go']['main']['App']['IsAuthenticated']();
 }
 
-export function RegenerateMessage(arg1) {
-  return window['go']['main']['App']['RegenerateMessage'](arg1);
+export function RegenerateMessage(arg1, arg2) {
+  return window['go']['main']['App']['RegenerateMessage'](arg1, arg2);
 }
 
 export function SaveSettings(arg1) {
@@ -54,12 +74,16 @@ export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
 }
 
-export function SendMessage(arg1, arg2) {
-  return window['go']['main']['App']['SendMessage'](arg1, arg2);
+export function SendMessage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SendMessage'](arg1, arg2, arg3);
 }
 
-export function SendMessageWithImages(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3);
+export function SendMessageWithImages(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3, arg4);
+}
+
+export function SetActivePersonaID(arg1) {
+  return window['go']['main']['App']['SetActivePersonaID'](arg1);
 }
 
 export function SetSetting(arg1, arg2) {
@@ -76,4 +100,8 @@ export function SignOut() {
 
 export function TestConnection() {
   return window['go']['main']['App']['TestConnection']();
+}
+
+export function UpdatePersona(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdatePersona'](arg1, arg2, arg3);
 }

@@ -30,14 +30,18 @@ type Provider struct {
 	client             openai.Client
 	config             OpenAIConfig
 	registry           *tools.Registry
+	baseSystemPrompt   string
 	customSystemPrompt string
+	personaPrompt      string
 	authenticated      bool
 }
 
-func (p *Provider) Name() string            { return "openai" }
-func (p *Provider) IsAuthenticated() bool    { return p.authenticated }
-func (p *Provider) SetAuthenticated(a bool)  { p.authenticated = a }
-func (p *Provider) SetCustomSystemPrompt(s string) { p.customSystemPrompt = s }
+func (p *Provider) Name() string                    { return "openai" }
+func (p *Provider) IsAuthenticated() bool            { return p.authenticated }
+func (p *Provider) SetAuthenticated(a bool)          { p.authenticated = a }
+func (p *Provider) SetBaseSystemPrompt(s string)     { p.baseSystemPrompt = s }
+func (p *Provider) SetCustomSystemPrompt(s string)   { p.customSystemPrompt = s }
+func (p *Provider) SetPersonaPrompt(s string)        { p.personaPrompt = s }
 
 func ParseConfig(settings map[string]string) (shared.Config, error) {
 	return OpenAIConfig{
@@ -81,6 +85,10 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 		model = "gpt-4o"
 	}
 
-	prompt := openaiutil.FullSystemPrompt(shared.SystemPrompt, p.customSystemPrompt)
+	base := p.baseSystemPrompt
+	if base == "" {
+		base = shared.DefaultSystemPrompt
+	}
+	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt)
 	return openaiutil.StreamingChat(ctx, p.client, model, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
 }

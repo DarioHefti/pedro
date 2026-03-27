@@ -59,6 +59,13 @@ func (d *Database) init() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS personas (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			prompt TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 	`)
 	return err
 }
@@ -211,4 +218,75 @@ func (d *Database) GetSettings() (map[string]string, error) {
 
 func (d *Database) Close() error {
 	return d.db.Close()
+}
+
+func (d *Database) GetPersonas() ([]Persona, error) {
+	rows, err := d.db.Query("SELECT id, name, prompt, created_at, updated_at FROM personas ORDER BY name COLLATE NOCASE ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Persona
+	for rows.Next() {
+		var p Persona
+		if err := rows.Scan(&p.ID, &p.Name, &p.Prompt, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
+func (d *Database) CreatePersona(name, prompt string) (*Persona, error) {
+	res, err := d.db.Exec("INSERT INTO personas (name, prompt) VALUES (?, ?)", name, prompt)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	var p Persona
+	err = d.db.QueryRow(
+		"SELECT id, name, prompt, created_at, updated_at FROM personas WHERE id = ?",
+		id,
+	).Scan(&p.ID, &p.Name, &p.Prompt, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (d *Database) UpdatePersona(id int64, name, prompt string) error {
+	res, err := d.db.Exec(
+		"UPDATE personas SET name = ?, prompt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		name, prompt, id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("persona not found: %d", id)
+	}
+	return nil
+}
+
+func (d *Database) DeletePersona(id int64) error {
+	res, err := d.db.Exec("DELETE FROM personas WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("persona not found: %d", id)
+	}
+	return nil
 }

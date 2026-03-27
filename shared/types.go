@@ -13,7 +13,9 @@ type SettingsStore interface {
 
 type LLMClient interface {
 	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error
+	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
+	SetPersonaPrompt(prompt string)
 	SignIn(ctx context.Context) error
 	SignOut() error
 	IsAuthenticated() bool
@@ -31,10 +33,10 @@ type Message struct {
 	Content string
 }
 
-const SystemPrompt = `You are Pedro, a helpful assistant with access to web search, web fetching, file reading, and directory listing tools.
+const DefaultSystemPrompt = `You are Pedro, a helpful assistant with access to web search, web fetching, file reading, and directory listing tools.
 
 # Task
-Your task is to help the user with their request and answer in a short but friendly manner. Try to keep the answer short, concise and to the point.
+Your task is to help the user with their request and answer in a short but friendly manner. Answer in a short and concise manner.
 
 ## Tool usage guidelines
 

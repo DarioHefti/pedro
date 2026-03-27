@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useToast } from './context/ToastContext'
 import {
   applyDesignPaletteToDocument,
@@ -16,10 +16,11 @@ import {
   UI_FONT_SIZE_SLIDER_MAX_PX,
   UI_FONT_SIZE_SLIDER_MIN_PX,
 } from './designTheme'
+import type { Persona } from './services/wailsService'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
-type Tab = 'llm' | 'prompt' | 'design'
+type Tab = 'llm' | 'prompt' | 'personas' | 'design'
 
 type ConnectionCheckState =
   | { kind: 'idle' }
@@ -34,6 +35,7 @@ interface FullSettingsSnapshot {
   azureTenantId: string
   apiKey: string
   model: string
+  systemPrompt: string
   customSystemPrompt: string
   welcomeMessage: string
   designLightBaseColor: string
@@ -45,6 +47,7 @@ interface FullSettingsSnapshot {
 function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
   const settings: Record<string, string> = {
     provider_type: s.providerType,
+    system_prompt: s.systemPrompt,
     custom_system_prompt: s.customSystemPrompt,
     welcome_message: s.welcomeMessage,
     [getDesignSettingsKeys().light]: s.designLightBaseColor,
@@ -140,24 +143,34 @@ interface SettingsModalProps {
   onClose: () => void
   onSaved?: () => void
   getSettings: () => Promise<Record<string, string>>
+  getDefaultSystemPrompt: () => Promise<string>
   saveSettings: (settings: Record<string, string>) => Promise<void>
   setSetting: (key: string, value: string) => Promise<void>
   testConnection: () => Promise<string>
   signIn: () => Promise<string>
   signOut: () => Promise<void>
   isAuthenticated: () => Promise<boolean>
+  getPersonas: () => Promise<Persona[]>
+  createPersona: (name: string, prompt: string) => Promise<Persona>
+  updatePersona: (id: number, name: string, prompt: string) => Promise<void>
+  deletePersona: (id: number) => Promise<void>
 }
 
 export default function SettingsModal({
   onClose,
   onSaved,
   getSettings,
+  getDefaultSystemPrompt,
   saveSettings,
   setSetting,
   testConnection,
   signIn,
   signOut,
   isAuthenticated,
+  getPersonas,
+  createPersona,
+  updatePersona,
+  deletePersona,
 }: SettingsModalProps) {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('llm')
@@ -181,6 +194,8 @@ export default function SettingsModal({
   const [connectionCheck, setConnectionCheck] = useState<ConnectionCheckState>({ kind: 'idle' })
 
   // Prompt Settings
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('')
   const [customSystemPrompt, setCustomSystemPrompt] = useState('')
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
   const [designLightBaseColor, setDesignLightBaseColor] = useState(getDesignPaletteFromSettings({}).lightBase)
@@ -201,6 +216,15 @@ export default function SettingsModal({
   )
   const designSettingsKeys = getDesignSettingsKeys()
 
+  // Personas (persisted immediately; not part of main Save fingerprint)
+  const [personasList, setPersonasList] = useState<Persona[]>([])
+  const [personaBusy, setPersonaBusy] = useState(false)
+  const [newPersonaName, setNewPersonaName] = useState('')
+  const [newPersonaPrompt, setNewPersonaPrompt] = useState('')
+  const [editDraft, setEditDraft] = useState<{ id: number; name: string; prompt: string } | null>(
+    null,
+  )
+
   const snapshot = useMemo<FullSettingsSnapshot>(
     () => ({
       providerType,
@@ -210,6 +234,7 @@ export default function SettingsModal({
       azureTenantId,
       apiKey,
       model,
+      systemPrompt,
       customSystemPrompt,
       welcomeMessage,
       designLightBaseColor,
@@ -225,6 +250,7 @@ export default function SettingsModal({
       azureTenantId,
       apiKey,
       model,
+      systemPrompt,
       customSystemPrompt,
       welcomeMessage,
       designLightBaseColor,
@@ -240,7 +266,7 @@ export default function SettingsModal({
   const canTestConnection = hydrated && !hasUnsavedChanges
 
   useEffect(() => {
-    Promise.all([getSettings(), isAuthenticated()]).then(([s, auth]) => {
+    Promise.all([getSettings(), isAuthenticated(), getDefaultSystemPrompt()]).then(([s, auth, defPrompt]) => {
       const pt = s.provider_type ?? 'azure'
       const ep = s.azure_endpoint ?? ''
       const dep = s.azure_deployment ?? ''
@@ -248,8 +274,10 @@ export default function SettingsModal({
       const tid = s.azure_tenant_id ?? ''
       const ok = s.openai_api_key ?? ''
       const m = s.openai_model ?? 'gpt-4o'
+      const sp = s.system_prompt ?? ''
       const csp = s.custom_system_prompt ?? ''
       const wm = s.welcome_message ?? DEFAULT_WELCOME_MESSAGE
+      setDefaultSystemPrompt(defPrompt)
       const designPalette = getDesignPaletteFromSettings(s)
       const uiPx = getUiFontSizePxFromSettings(s)
       const msgPx = getMessageFontSizePxFromSettings(s)
@@ -262,6 +290,7 @@ export default function SettingsModal({
       setApiKey(ok)
       setModel(m)
       setAuthenticated(auth)
+      setSystemPrompt(sp)
       setCustomSystemPrompt(csp)
       setWelcomeMessage(wm)
       setDesignLightBaseColor(designPalette.lightBase)
@@ -281,6 +310,7 @@ export default function SettingsModal({
         azureTenantId: tid,
         apiKey: ok,
         model: m,
+        systemPrompt: sp,
         customSystemPrompt: csp,
         welcomeMessage: wm,
         designLightBaseColor: designPalette.lightBase,
@@ -334,6 +364,7 @@ export default function SettingsModal({
 
   async function applyProviderSettings() {
     await saveSettings(buildProviderSettings())
+    await setSetting('system_prompt', systemPrompt)
     await setSetting('custom_system_prompt', customSystemPrompt)
     await setSetting('welcome_message', welcomeMessage)
     await setSetting(designSettingsKeys.light, designLightBaseColor)
@@ -456,6 +487,75 @@ export default function SettingsModal({
     }
   }
 
+  const loadPersonas = useCallback(async () => {
+    try {
+      const list = await getPersonas()
+      setPersonasList(list)
+    } catch (e) {
+      toast.error('Failed to load personas: ' + String(e))
+    }
+  }, [getPersonas])
+
+  useEffect(() => {
+    if (activeTab !== 'personas') return
+    void loadPersonas()
+  }, [activeTab, loadPersonas])
+
+  async function handleAddPersona() {
+    const name = newPersonaName.trim()
+    if (!name) {
+      toast.error('Persona name is required')
+      return
+    }
+    setPersonaBusy(true)
+    try {
+      await createPersona(name, newPersonaPrompt)
+      setNewPersonaName('')
+      setNewPersonaPrompt('')
+      await loadPersonas()
+      onSaved?.()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setPersonaBusy(false)
+    }
+  }
+
+  async function handleSaveEditPersona() {
+    if (!editDraft) return
+    const name = editDraft.name.trim()
+    if (!name) {
+      toast.error('Persona name is required')
+      return
+    }
+    setPersonaBusy(true)
+    try {
+      await updatePersona(editDraft.id, name, editDraft.prompt)
+      setEditDraft(null)
+      await loadPersonas()
+      onSaved?.()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setPersonaBusy(false)
+    }
+  }
+
+  async function handleDeletePersona(id: number) {
+    if (!window.confirm('Delete this persona?')) return
+    setPersonaBusy(true)
+    try {
+      await deletePersona(id)
+      if (editDraft?.id === id) setEditDraft(null)
+      await loadPersonas()
+      onSaved?.()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setPersonaBusy(false)
+    }
+  }
+
   const connectionBadgeDotClass =
     connectionCheck.kind === 'ok'
       ? 'connection-dot connection-dot--ok'
@@ -501,6 +601,12 @@ export default function SettingsModal({
             onClick={() => setActiveTab('prompt')}
           >
             Prompt
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'personas' ? 'active' : ''}`}
+            onClick={() => setActiveTab('personas')}
+          >
+            Personas
           </button>
           <button
             className={`settings-tab ${activeTab === 'design' ? 'active' : ''}`}
@@ -660,18 +766,175 @@ export default function SettingsModal({
 
           {activeTab === 'prompt' && (
             <div className="settings-panel">
-              <label>Custom System Prompt</label>
+              <label>Additional Instructions</label>
               <p className="settings-description">
-                Add additional instructions or rules that will be appended to the base system prompt.
+                Extra rules appended after the system prompt (e.g. tone, preferred sources).
               </p>
               <textarea
                 className="system-prompt-textarea"
                 value={customSystemPrompt}
                 onChange={e => setCustomSystemPrompt(e.target.value)}
                 placeholder="Enter your custom instructions here...&#10;&#10;Examples:&#10;- Always respond in a formal tone&#10;- Prioritize Swiss sources when available&#10;- Use bullet points for lists"
-                rows={10}
+                rows={6}
               />
 
+              <details className="settings-collapsible">
+                <summary className="settings-collapsible-summary">System Prompt</summary>
+                <div className="settings-collapsible-body">
+                  <div className="settings-label-row">
+                    <p className="settings-description" style={{ margin: 0 }}>
+                      The base instructions that define the assistant's identity and behavior.
+                    </p>
+                    <button
+                      type="button"
+                      className="settings-inline-btn"
+                      onClick={() => setSystemPrompt(defaultSystemPrompt)}
+                      disabled={systemPrompt === defaultSystemPrompt || (!systemPrompt && !defaultSystemPrompt)}
+                      title="Restore the built-in default system prompt"
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    className="system-prompt-textarea system-prompt-textarea--large"
+                    value={systemPrompt || defaultSystemPrompt}
+                    onChange={e => setSystemPrompt(e.target.value)}
+                    rows={14}
+                  />
+                </div>
+              </details>
+            </div>
+          )}
+
+          {activeTab === 'personas' && (
+            <div className="settings-panel settings-panel--personas">
+              <p className="settings-description">
+                Personas add instruction text at the top of your message when you send. With two or more
+                personas, you can choose which one to use next to the attachment button in the chat.
+              </p>
+
+              <div className="persona-add-block">
+                <label htmlFor="new-persona-name">Name</label>
+                <input
+                  id="new-persona-name"
+                  type="text"
+                  value={newPersonaName}
+                  onChange={e => setNewPersonaName(e.target.value)}
+                  placeholder="e.g. Software architect"
+                  disabled={personaBusy}
+                />
+                <label htmlFor="new-persona-prompt">Instruction text</label>
+                <p className="settings-description">
+                  This text is prepended to your outgoing message (not shown in the chat bubble).
+                </p>
+                <textarea
+                  id="new-persona-prompt"
+                  className="persona-prompt-textarea"
+                  value={newPersonaPrompt}
+                  onChange={e => setNewPersonaPrompt(e.target.value)}
+                  placeholder="You are an expert software architect. Prefer clear tradeoffs and diagrams in prose."
+                  rows={4}
+                  disabled={personaBusy}
+                />
+                <button
+                  type="button"
+                  className="persona-add-btn"
+                  onClick={() => void handleAddPersona()}
+                  disabled={personaBusy}
+                >
+                  {personaBusy ? 'Saving…' : 'Add persona'}
+                </button>
+              </div>
+
+              <div className="persona-list-header">Saved personas</div>
+              {personasList.length === 0 ? (
+                <p className="settings-description persona-list-empty">No personas yet.</p>
+              ) : (
+                <ul className="persona-list">
+                  {personasList.map(p => {
+                    const isEditing = editDraft?.id === p.ID
+                    return (
+                      <li key={p.ID} className="persona-list-item">
+                        {isEditing && editDraft ? (
+                          <div className="persona-edit-form">
+                            <label>Name</label>
+                            <input
+                              type="text"
+                              value={editDraft.name}
+                              onChange={e =>
+                                setEditDraft({ ...editDraft, name: e.target.value })
+                              }
+                              disabled={personaBusy}
+                            />
+                            <label>Instruction text</label>
+                            <textarea
+                              className="persona-prompt-textarea"
+                              value={editDraft.prompt}
+                              onChange={e =>
+                                setEditDraft({ ...editDraft, prompt: e.target.value })
+                              }
+                              rows={4}
+                              disabled={personaBusy}
+                            />
+                            <div className="persona-edit-actions">
+                              <button
+                                type="button"
+                                className="persona-save-btn"
+                                onClick={() => void handleSaveEditPersona()}
+                                disabled={personaBusy}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                className="persona-cancel-btn"
+                                onClick={() => setEditDraft(null)}
+                                disabled={personaBusy}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="persona-row-summary">
+                            <div className="persona-row-text">
+                              <span className="persona-row-name">{p.Name}</span>
+                              <span className="persona-row-preview" title={p.Prompt}>
+                                {p.Prompt.length > 120 ? `${p.Prompt.slice(0, 120)}…` : p.Prompt}
+                              </span>
+                            </div>
+                            <div className="persona-row-actions">
+                              <button
+                                type="button"
+                                className="persona-edit-link"
+                                onClick={() =>
+                                  setEditDraft({ id: p.ID, name: p.Name, prompt: p.Prompt })
+                                }
+                                disabled={personaBusy}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="persona-delete-link"
+                                onClick={() => void handleDeletePersona(p.ID)}
+                                disabled={personaBusy}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'design' && (
+            <div className="settings-panel">
               <label className="welcome-message-label">Welcome Message</label>
               <input
                 type="text"
@@ -679,11 +942,7 @@ export default function SettingsModal({
                 onChange={e => setWelcomeMessage(e.target.value)}
                 placeholder={DEFAULT_WELCOME_MESSAGE}
               />
-            </div>
-          )}
 
-          {activeTab === 'design' && (
-            <div className="settings-panel">
               <div className="design-color-row">
                 <label htmlFor="light-design-color">Light theme base color</label>
                 <div className="design-color-control-row">

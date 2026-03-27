@@ -1,26 +1,35 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
+import type { Persona } from './services/wailsService'
 import MessageRenderer from './MessageRenderer'
 import AssistantMessageActions from './AssistantMessageActions'
 
 interface ChatProps {
   messages: Message[]
   toolCalls: ToolCall[]
+  /** True when this thread is showing an in-flight assistant stream. */
   loading: boolean
+  /** True when any conversation has an active LLM stream (blocks sending elsewhere). */
+  streamingBusy: boolean
   streamingContent: string
   messageImages: Map<number, string[]>
   messageFiles: Map<number, FileAttachment[]>
-  onSend: (content: string, attachments?: Attachment[]) => void
+  /** selectedPersonaId is the DB persona id for this send (empty = none when 2+ personas). */
+  onSend: (content: string, attachments: Attachment[] | undefined, selectedPersonaId: string) => void
   onStop: () => void
-  onRegenerate: (index: number) => void
+  /** selectedPersonaId is the DB persona id for this regeneration (read prompt from DB on backend). */
+  onRegenerate: (index: number, selectedPersonaId: string) => void
   /** Opens the native OS file picker; resolves to the selected path or "". */
   onSelectFile: () => Promise<string>
   /** Opens the native folder picker; resolves to the selected path or "". */
   onSelectFolder: () => Promise<string>
   welcomeMessage: string
+  personas: Persona[]
+  activePersonaId: string
+  onPersonaChange: (id: string) => void
 }
 
 /**
@@ -64,6 +73,7 @@ export default function Chat({
   messages,
   toolCalls,
   loading,
+  streamingBusy,
   streamingContent,
   messageImages,
   messageFiles,
@@ -73,6 +83,9 @@ export default function Chat({
   onSelectFile,
   onSelectFolder,
   welcomeMessage,
+  personas,
+  activePersonaId,
+  onPersonaChange,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -81,12 +94,14 @@ export default function Chat({
   const [stickToBottom, setStickToBottom] = useState(true)
   const [showJumpButton, setShowJumpButton] = useState(false)
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const [personaMenuOpen, setPersonaMenuOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const inputAreaRef = useRef<HTMLDivElement>(null)
   const attachWrapRef = useRef<HTMLDivElement>(null)
+  const personaWrapRef = useRef<HTMLDivElement>(null)
   /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
   const suppressStickBreakRef = useRef(false)
   /**
@@ -219,7 +234,7 @@ export default function Chat({
     setStickToBottom(true)
     setInput('')
     setAttachments([])
-    onSend(content, attachments)
+    onSend(content, attachments, activePersonaId)
   }
 
   const processFile = useCallback((file: File) => {
@@ -278,6 +293,37 @@ export default function Chat({
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [attachMenuOpen])
+
+  const personaDisplayLabel = useMemo(() => {
+    if (!activePersonaId) return 'None'
+    const p = personas.find(x => String(x.ID) === activePersonaId)
+    return p?.Name ?? 'None'
+  }, [activePersonaId, personas])
+
+  useEffect(() => {
+    if (!personaMenuOpen) return
+    const onDocMouseDown = (ev: MouseEvent) => {
+      const el = personaWrapRef.current
+      if (el && !el.contains(ev.target as Node)) setPersonaMenuOpen(false)
+    }
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setPersonaMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [personaMenuOpen])
+
+  const selectPersona = useCallback(
+    (id: string) => {
+      onPersonaChange(id)
+      setPersonaMenuOpen(false)
+    },
+    [onPersonaChange],
+  )
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -417,9 +463,9 @@ export default function Chat({
             <AssistantMessageActions
               visible
               onCopy={() => void navigator.clipboard.writeText(msg.Content || '')}
-              onRegenerate={() => void onRegenerate(i)}
+              onRegenerate={() => void onRegenerate(i, activePersonaId)}
               copyDisabled={!(msg.Content || '').trim()}
-              regenerateDisabled={loading}
+              regenerateDisabled={streamingBusy}
             />
           </div>
         </div>
@@ -541,7 +587,7 @@ export default function Chat({
             aria-label="Attach file or folder"
             aria-expanded={attachMenuOpen}
             aria-haspopup="menu"
-            disabled={loading}
+            disabled={streamingBusy}
             onClick={() => setAttachMenuOpen(o => !o)}
           >
             <img src={attachmentIcon} alt="" width={18} height={18} />
@@ -573,6 +619,67 @@ export default function Chat({
             </div>
           )}
         </div>
+        {personas.length >= 2 && (
+          <div className="composer-persona-wrap" ref={personaWrapRef}>
+            <button
+              type="button"
+              className={`composer-persona-trigger${personaMenuOpen ? ' composer-persona-trigger--open' : ''}`}
+              aria-label="Persona"
+              title="Persona"
+              aria-expanded={personaMenuOpen}
+              aria-haspopup="listbox"
+              disabled={streamingBusy}
+              onClick={() => setPersonaMenuOpen(o => !o)}
+            >
+              <span className="composer-persona-trigger-label">{personaDisplayLabel}</span>
+              <svg
+                className="composer-persona-trigger-chevron"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                aria-hidden
+              >
+                <path
+                  d="M2.5 4.25L6 7.75l3.5-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            {personaMenuOpen && (
+              <div className="composer-persona-menu" role="listbox" aria-label="Persona">
+                <button
+                  type="button"
+                  role="option"
+                  className={`composer-persona-option${activePersonaId === '' ? ' is-selected' : ''}`}
+                  aria-selected={activePersonaId === ''}
+                  onClick={() => selectPersona('')}
+                >
+                  None
+                </button>
+                {personas.map(p => {
+                  const idStr = String(p.ID)
+                  const selected = idStr === activePersonaId
+                  return (
+                    <button
+                      key={p.ID}
+                      type="button"
+                      role="option"
+                      className={`composer-persona-option${selected ? ' is-selected' : ''}`}
+                      aria-selected={selected}
+                      onClick={() => selectPersona(idStr)}
+                    >
+                      {p.Name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <div className="composer-input-shell">
           <textarea
             ref={inputRef}
@@ -581,15 +688,15 @@ export default function Chat({
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}
-            disabled={loading}
+            disabled={streamingBusy}
           />
         </div>
         <button
           type="button"
           className="send-btn"
-          onClick={loading ? onStop : handleSend}
+          onClick={streamingBusy ? onStop : handleSend}
         >
-          {loading ? 'Stop' : 'Send'}
+          {streamingBusy ? 'Stop' : 'Send'}
         </button>
       </div>
     </div>

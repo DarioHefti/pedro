@@ -9,12 +9,18 @@ import (
 	"pedro/tools"
 )
 
-// FullSystemPrompt appends optional custom instructions to the base prompt.
-func FullSystemPrompt(base, custom string) string {
-	if custom == "" {
-		return base
+// FullSystemPrompt builds the final system prompt from the base instructions,
+// an optional persona, and optional custom instructions.
+func FullSystemPrompt(base, persona, custom string) string {
+	out := base
+	if persona != "" {
+		out += "\n\n## Persona\nYou MUST adopt the following persona for ALL your responses. " +
+			"This overrides your default tone, style, and personality:\n" + persona
 	}
-	return base + "\n\n## Additional Instructions\n" + custom
+	if custom != "" {
+		out += "\n\n## Additional Instructions\n" + custom
+	}
+	return out
 }
 
 // ToolDefinitions converts the tool registry into OpenAI-compatible params.

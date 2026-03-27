@@ -10,8 +10,10 @@ import {
   conversationService,
   settingsService,
   fileService,
+  personaService,
   uiConversationService,
 } from './services/wailsService'
+import type { Persona } from './services/wailsService'
 import { applyDesignAndTypographyFromSettings } from './designTheme'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
@@ -23,6 +25,8 @@ export default function App() {
   )
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
+  const [personas, setPersonas] = useState<Persona[]>([])
+  const [activePersonaId, setActivePersonaId] = useState<string>('')
 
   const { conversations, load: loadConversations, remove: removeConversation } =
     useConversations()
@@ -31,6 +35,17 @@ export default function App() {
     const s = await settingsService.get()
     setWelcomeMessage(s.welcome_message ?? DEFAULT_WELCOME_MESSAGE)
     applyDesignAndTypographyFromSettings(s)
+    try {
+      const [list, active] = await Promise.all([
+        personaService.getAll(),
+        personaService.getActiveId(),
+      ])
+      setPersonas(list ?? [])
+      setActivePersonaId(active ?? '')
+    } catch {
+      setPersonas([])
+      setActivePersonaId('')
+    }
   }
 
   const messaging = useMessaging({
@@ -94,16 +109,31 @@ export default function App() {
       <Chat
         messages={messaging.messages}
         loading={messaging.loading}
+        streamingBusy={messaging.streamingBusy}
         toolCalls={messaging.toolCalls}
         streamingContent={messaging.streamingContent}
         messageImages={messaging.messageImages}
         messageFiles={messaging.messageFiles}
-        onSend={messaging.send}
+        onSend={(content, attachments, selectedPersonaId) =>
+          void messaging.send(content, attachments, selectedPersonaId)
+        }
         onStop={messaging.stop}
-        onRegenerate={messaging.regenerate}
+        onRegenerate={(index, selectedPersonaId) =>
+          void messaging.regenerate(index, selectedPersonaId)
+        }
         onSelectFile={fileService.selectFile}
         onSelectFolder={fileService.selectFolder}
         welcomeMessage={welcomeMessage}
+        personas={personas}
+        activePersonaId={activePersonaId}
+        onPersonaChange={async (id: string) => {
+          try {
+            await personaService.setActive(id)
+            setActivePersonaId(id)
+          } catch (err) {
+            toast.error('Failed to set persona: ' + String(err))
+          }
+        }}
       />
       {settingsOpen && (
         <SettingsModal
@@ -112,12 +142,17 @@ export default function App() {
             void reloadSettings()
           }}
           getSettings={settingsService.get}
+          getDefaultSystemPrompt={settingsService.getDefaultSystemPrompt}
           saveSettings={settingsService.save}
           setSetting={settingsService.setSetting}
           testConnection={settingsService.test}
           signIn={settingsService.signIn}
           signOut={settingsService.signOut}
           isAuthenticated={settingsService.isAuthenticated}
+          getPersonas={personaService.getAll}
+          createPersona={personaService.create}
+          updatePersona={personaService.update}
+          deletePersona={personaService.delete}
         />
       )}
       <Toaster />

@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   conversationService,
   messageService,
   eventService,
   uiConversationService,
+  isWailsDevStub,
   type Conversation,
   type Message,
 } from '../services/wailsService'
@@ -30,6 +31,8 @@ export interface FileAttachment {
   /** "file" | "folder" — drives LLM hints (read_file vs show_file_tree). */
   type: string
 }
+
+type StreamBuffer = { content: string; toolCalls: ToolCall[] }
 
 // ---------------------------------------------------------------------------
 // Hook options
@@ -60,42 +63,120 @@ export function useMessaging({
   showError,
 }: UseMessagingOptions) {
   const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading] = useState(false)
-  const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
-  const [streamingContent, setStreamingContent] = useState('')
-  // Keyed by the message array index of the associated user message.
+  /** Per-conversation streaming buffers while the LLM is responding (supports background streams). */
+  const [streamingStreams, setStreamingStreams] = useState<Map<number, StreamBuffer>>(() => new Map())
   const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
   const [messageFiles, setMessageFiles] = useState<Map<number, FileAttachment[]>>(new Map())
 
-  // Refs to accumulate streamed data outside of React state batching.
-  const toolCallsRef = useRef<ToolCall[]>([])
-  const streamingContentRef = useRef<string>('')
+  const streamingBuffersRef = useRef<Map<number, StreamBuffer>>(new Map())
+  /** Conv IDs that are allowed to accept stream events (set in prepareStreaming, cleared in cleanup). */
+  const activeStreamConvIdsRef = useRef<Set<number>>(new Set())
+  /** Which conversation the in-flight AbortMessage targets (single backend run). */
+  const activeStreamingConvRef = useRef<number | null>(null)
+  const currentConvIDRef = useRef(currentConvID)
+  /** Monotonic counter — incremented every time a new load/clear/send-completion writes messages.
+   *  Async DB fetches compare their captured value to skip stale responses. */
+  const msgSeqRef = useRef(0)
 
-  // ---------------------------------------------------------------------------
-  // Public actions
-  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    currentConvIDRef.current = currentConvID
+  }, [currentConvID])
 
-  /** Load messages for a conversation and clear any in-session attachment maps. */
+  // Route stream events by conversation id so switching chats does not mix streams.
+  useEffect(() => {
+    if (isWailsDevStub) return
+
+    const onChunk = (...args: unknown[]) => {
+      if (args.length < 2) return
+      const convId = Number(args[0])
+      const chunk = String(args[1])
+      if (Number.isNaN(convId) || !activeStreamConvIdsRef.current.has(convId)) return
+      const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
+      buf.content += chunk
+      streamingBuffersRef.current.set(convId, buf)
+      setStreamingStreams(new Map(streamingBuffersRef.current))
+    }
+
+    const onTool = (...args: unknown[]) => {
+      if (args.length < 3) return
+      const convId = Number(args[0])
+      const name = String(args[1])
+      const argsJSON = String(args[2])
+      if (Number.isNaN(convId) || !activeStreamConvIdsRef.current.has(convId)) return
+      const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
+      buf.toolCalls = [...buf.toolCalls, { name, argsJSON }]
+      streamingBuffersRef.current.set(convId, buf)
+      setStreamingStreams(new Map(streamingBuffersRef.current))
+    }
+
+    const unsubChunk = eventService.on('stream_chunk', onChunk)
+    const unsubTool = eventService.on('tool_call', onTool)
+    return () => {
+      unsubChunk?.()
+      unsubTool?.()
+    }
+  }, [])
+
+  const streamingForCurrent =
+    currentConvID != null && streamingStreams.has(currentConvID)
+      ? streamingStreams.get(currentConvID)!
+      : { content: '', toolCalls: [] }
+
+  /** True when the visible thread is showing an in-flight assistant stream. */
+  const loading = currentConvID != null && streamingStreams.has(currentConvID)
+  /** True when any conversation has an active stream (blocks new sends until done or stop). */
+  const streamingBusy = streamingStreams.size > 0
+
+  const toolCalls = streamingForCurrent.toolCalls
+  const streamingContent = streamingForCurrent.content
+
+  /** Load messages for a conversation and clear any in-session attachment maps.
+   *  Clears state synchronously (before the async DB fetch) so React batches
+   *  the clear with the caller's setCurrentConvID — no render frame shows
+   *  the old conversation's messages under the new conversation's ID. */
   const load = useCallback(async (convID: number): Promise<void> => {
-    const msgs = await conversationService.getMessages(convID)
-    const list = msgs ?? []
-    setMessages(list)
+    const seq = ++msgSeqRef.current
+    setMessages([])
     setMessageImages(new Map())
     setMessageFiles(new Map())
-    setToolCalls(uiConversationService.getMockToolCallsForMessages(list))
+    const msgs = await conversationService.getMessages(convID)
+    if (msgSeqRef.current !== seq) return
+    setMessages(msgs ?? [])
   }, [])
 
   /** Clear all message state (e.g. when "New Chat" is selected). */
   const clear = useCallback((): void => {
+    ++msgSeqRef.current
     setMessages([])
-    setToolCalls([])
     setMessageImages(new Map())
     setMessageFiles(new Map())
   }, [])
 
-  /** Send a user message, optionally with file/image attachments. */
+  function prepareStreaming(convId: number) {
+    activeStreamingConvRef.current = convId
+    activeStreamConvIdsRef.current.add(convId)
+    streamingBuffersRef.current.set(convId, { content: '', toolCalls: [] })
+    setStreamingStreams(new Map(streamingBuffersRef.current))
+  }
+
+  function cleanupStreaming(convId: number) {
+    activeStreamConvIdsRef.current.delete(convId)
+    streamingBuffersRef.current.delete(convId)
+    if (activeStreamingConvRef.current === convId) {
+      activeStreamingConvRef.current = null
+    }
+    setStreamingStreams(new Map(streamingBuffersRef.current))
+  }
+
+  /**
+   * Send a user message. selectedPersonaId is the chosen persona row id (backend loads prompt from DB).
+   */
   const send = useCallback(
-    async (content: string, attachments?: Attachment[]): Promise<void> => {
+    async (
+      content: string,
+      attachments: Attachment[] | undefined,
+      selectedPersonaId: string,
+    ): Promise<void> => {
       let convID = currentConvID
 
       if (!convID || uiConversationService.isVirtualConversation(convID)) {
@@ -119,40 +200,35 @@ export function useMessaging({
 
       const llmContent = buildLLMContent(content, attachments)
 
-      // -----------------------------------------------------------------------
-      // Snapshot current user-message ranks BEFORE the optimistic update.
-      // Used later to remap attachment indices after the DB reload.
-      // -----------------------------------------------------------------------
       const prevUserRankToImages = extractUserRankMap(messages, messageImages)
       const prevUserRankToFiles = extractUserRankMap(messages, messageFiles)
       const newUserRank = messages.filter(m => m.Role === 'user').length
 
-      // Optimistic UI update
       const optimisticIdx = messages.length
-      setMessages(prev => [...prev, { Role: 'user', Content: content } as Message])
-      if (imageDataURLs.length > 0) {
-        setMessageImages(m => new Map(m).set(optimisticIdx, imageDataURLs))
-      }
-      if (fileAttachments.length > 0) {
-        setMessageFiles(m => new Map(m).set(optimisticIdx, fileAttachments))
+      if (currentConvIDRef.current === convID) {
+        setMessages(prev => [...prev, { Role: 'user', Content: content } as Message])
+        if (imageDataURLs.length > 0) {
+          setMessageImages(m => new Map(m).set(optimisticIdx, imageDataURLs))
+        }
+        if (fileAttachments.length > 0) {
+          setMessageFiles(m => new Map(m).set(optimisticIdx, fileAttachments))
+        }
       }
 
-      prepareStreaming()
+      prepareStreaming(convID)
 
       try {
         const response =
           imageDataURLs.length > 0
-            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs)
-            : await messageService.send(convID, llmContent)
+            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, selectedPersonaId)
+            : await messageService.send(convID, llmContent, selectedPersonaId)
 
         const dbMsgs = (await conversationService.getMessages(convID)) ?? []
 
-        // Build DB user-index list for rank-based remapping.
         const dbUserIndices = dbMsgs
           .map((m, i) => (m.Role === 'user' ? i : -1))
           .filter(i => i >= 0)
 
-        // Rebuild attachment maps using rank (stable across reloads).
         const newImgMap = remapByRank(prevUserRankToImages, dbUserIndices)
         if (imageDataURLs.length > 0 && newUserRank < dbUserIndices.length) {
           newImgMap.set(dbUserIndices[newUserRank], imageDataURLs)
@@ -163,9 +239,12 @@ export function useMessaging({
           newFilesMap.set(dbUserIndices[newUserRank], fileAttachments)
         }
 
-        setMessageImages(newImgMap)
-        setMessageFiles(newFilesMap)
-        setMessages(dbMsgs)
+        if (currentConvIDRef.current === convID) {
+          ++msgSeqRef.current
+          setMessageImages(newImgMap)
+          setMessageFiles(newFilesMap)
+          setMessages(dbMsgs)
+        }
 
         await refreshConversations()
 
@@ -173,85 +252,55 @@ export function useMessaging({
           showError(response)
         }
       } finally {
-        cleanupStreaming()
+        cleanupStreaming(convID)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentConvID, messages, messageImages, messageFiles, createConversation, onConversationCreated, refreshConversations, showError],
   )
 
-  /** Remove the last assistant message and ask the LLM to regenerate it. */
   const regenerate = useCallback(
-    async (index: number): Promise<void> => {
+    async (index: number, selectedPersonaId: string): Promise<void> => {
+      const convID = currentConvID
+      if (!convID || uiConversationService.isVirtualConversation(convID)) return
       const msg = messages[index]
-      if (msg?.Role !== 'assistant' || !currentConvID) return
-      if (uiConversationService.isVirtualConversation(currentConvID)) return
+      if (msg?.Role !== 'assistant') return
 
-      setMessages(prev => prev.slice(0, index))
-      prepareStreaming()
+      prepareStreaming(convID)
 
       try {
-        const response = await messageService.regenerate(currentConvID)
-        if (response?.startsWith('Error:')) {
-          showError(response)
-        } else {
-          setMessages(prev => [
-            ...prev,
-            { Role: 'assistant', Content: response } as Message,
-          ])
+        const response = await messageService.regenerate(convID, selectedPersonaId)
+        if (currentConvIDRef.current === convID) {
+          if (response?.startsWith('Error:')) {
+            showError(response)
+          } else {
+            ++msgSeqRef.current
+            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
+            setMessages(dbMsgs)
+          }
+        } else if (!response?.startsWith('Error:')) {
+          await refreshConversations()
         }
       } finally {
-        cleanupStreaming()
+        cleanupStreaming(convID)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, currentConvID, showError],
+    [messages, currentConvID, showError, refreshConversations],
   )
-
-  // ---------------------------------------------------------------------------
-  // Streaming helpers (not exposed)
-  // ---------------------------------------------------------------------------
-
-  function prepareStreaming() {
-    toolCallsRef.current = []
-    streamingContentRef.current = ''
-    setToolCalls([])
-    setStreamingContent('')
-    setLoading(true)
-
-    // Defensively remove any lingering listeners before adding new ones to
-    // prevent handler stacking if a previous call skipped its finally block.
-    eventService.off('tool_call')
-    eventService.off('stream_chunk')
-
-    eventService.on('tool_call', (name: string, argsJSON: string) => {
-      const tc: ToolCall = { name, argsJSON }
-      toolCallsRef.current = [...toolCallsRef.current, tc]
-      setToolCalls([...toolCallsRef.current])
-    })
-
-    eventService.on('stream_chunk', (chunk: string) => {
-      streamingContentRef.current += chunk
-      setStreamingContent(streamingContentRef.current)
-    })
-  }
-
-  function cleanupStreaming() {
-    eventService.off('tool_call')
-    eventService.off('stream_chunk')
-    streamingContentRef.current = ''
-    setStreamingContent('')
-    setLoading(false)
-    setToolCalls([])
-  }
 
   const stop = useCallback(() => {
     messageService.abort()
+    const convId = activeStreamingConvRef.current
+    if (convId != null) {
+      cleanupStreaming(convId)
+    }
   }, [])
 
   return {
     messages,
     loading,
+    streamingBusy,
     toolCalls,
     streamingContent,
     messageImages,
@@ -268,11 +317,6 @@ export function useMessaging({
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Build the content string sent to the LLM. File attachments (non-image) are
- * appended as structured text; image data URLs are handled via a separate
- * multimodal API call and are NOT embedded here.
- */
 function buildLLMContent(content: string, attachments?: Attachment[]): string {
   const fileText = (attachments ?? [])
     .filter(a => a.type !== 'image')
@@ -298,11 +342,6 @@ function buildLLMContent(content: string, attachments?: Attachment[]): string {
   return fileText ? `${content}\n\n${fileText}` : content
 }
 
-/**
- * Extract a rank → attachment map from an index-keyed attachment map and the
- * current message list. "Rank" is the ordinal position among user messages
- * (0 = first user message, 1 = second, …).
- */
 function extractUserRankMap<T>(
   messages: Message[],
   indexMap: Map<number, T>,
@@ -319,10 +358,6 @@ function extractUserRankMap<T>(
   return result
 }
 
-/**
- * Rebuild an index-keyed attachment map from a rank-keyed one and the new
- * array of DB user-message indices.
- */
 function remapByRank<T>(
   rankMap: Map<number, T>,
   dbUserIndices: number[],

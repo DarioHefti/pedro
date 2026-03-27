@@ -8,6 +8,7 @@ func TestConnectionSettingsFingerprint_stable(t *testing.T) {
 		"azure_endpoint":         "https://x.openai.azure.com",
 		"azure_deployment":       "d",
 		"azure_tenant_id":        "  t  ",
+		"system_prompt":          "",
 		"custom_system_prompt":   "",
 		"welcome_message":        "Welcome to Pedro",
 		"ignored_extra":          "x",

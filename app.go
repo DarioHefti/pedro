@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"pedro/providers"
+	"pedro/shared"
 	"pedro/tools"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -72,6 +73,10 @@ func (a *App) initLLM() {
 		llm.SetAuthenticated(true)
 	}
 
+	if basePrompt, ok := settings["system_prompt"]; ok && basePrompt != "" {
+		llm.SetBaseSystemPrompt(basePrompt)
+	}
+
 	if customPrompt, ok := settings["custom_system_prompt"]; ok {
 		llm.SetCustomSystemPrompt(customPrompt)
 	}
@@ -79,7 +84,7 @@ func (a *App) initLLM() {
 	a.llm = llm
 }
 
-func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error) {
+func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancelMu.Lock()
 	a.cancelFunc = cancel
@@ -104,10 +109,10 @@ func (a *App) runChat(messages []Message, imageDataURLs []string) (string, error
 		imageDataURLs,
 		func(chunk string) {
 			response = append(response, chunk...)
-			runtime.EventsEmit(a.ctx, "stream_chunk", chunk)
+			runtime.EventsEmit(a.ctx, "stream_chunk", conversationID, chunk)
 		},
 		func(name, argsJSON string) {
-			runtime.EventsEmit(a.ctx, "tool_call", name, argsJSON)
+			runtime.EventsEmit(a.ctx, "tool_call", conversationID, name, argsJSON)
 		},
 	)
 	if err != nil {
@@ -141,7 +146,7 @@ func (a *App) requireLLMConfigured() error {
 	return nil
 }
 
-func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []string) string {
+func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string) string {
 	if err := a.requireStore(); err != nil {
 		return "Error: " + err.Error()
 	}
@@ -159,7 +164,8 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 		return "Error: " + err.Error()
 	}
 
-	resp, err := a.runChat(messages, imageDataURLs)
+	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	resp, err := a.runChat(conversationID, messages, imageDataURLs)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
@@ -251,15 +257,15 @@ func (a *App) DeleteConversation(id int64) error {
 	return a.store.DeleteConversation(id)
 }
 
-func (a *App) SendMessage(conversationID int64, content string) string {
-	return a.sendMessage(conversationID, content, nil)
+func (a *App) SendMessage(conversationID int64, content string, selectedPersonaID string) string {
+	return a.sendMessage(conversationID, content, nil, selectedPersonaID)
 }
 
-func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string) string {
-	return a.sendMessage(conversationID, content, imageDataURLs)
+func (a *App) SendMessageWithImages(conversationID int64, content string, imageDataURLs []string, selectedPersonaID string) string {
+	return a.sendMessage(conversationID, content, imageDataURLs, selectedPersonaID)
 }
 
-func (a *App) RegenerateMessage(conversationID int64) string {
+func (a *App) RegenerateMessage(conversationID int64, selectedPersonaID string) string {
 	if a.store == nil {
 		return "Error: Database not initialized"
 	}
@@ -294,7 +300,8 @@ func (a *App) RegenerateMessage(conversationID int64) string {
 		return "Error: Please configure LLM provider settings first"
 	}
 
-	resp, err := a.runChat(messages, nil)
+	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	resp, err := a.runChat(conversationID, messages, nil)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
@@ -315,6 +322,11 @@ func (a *App) GetSettings() map[string]string {
 		return map[string]string{}
 	}
 	return settings
+}
+
+// GetDefaultSystemPrompt returns the built-in default system prompt so the frontend can offer "Reset to Default".
+func (a *App) GetDefaultSystemPrompt() string {
+	return shared.DefaultSystemPrompt
 }
 
 func (a *App) SaveSettings(settings map[string]string) error {
@@ -384,6 +396,10 @@ func (a *App) SetSetting(key, value string) error {
 
 	if settingsKeyInvalidatesConnectionTest(key) {
 		a.clearPersistedConnectionTest()
+	}
+
+	if key == "system_prompt" && a.llm != nil {
+		a.llm.SetBaseSystemPrompt(value)
 	}
 
 	if key == "custom_system_prompt" && a.llm != nil {
