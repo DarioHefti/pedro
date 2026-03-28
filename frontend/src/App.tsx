@@ -27,6 +27,7 @@ export default function App() {
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [activePersonaId, setActivePersonaId] = useState<string>('')
+  const [focusTrigger, setFocusTrigger] = useState(0)
 
   const {
     conversations,
@@ -83,6 +84,7 @@ export default function App() {
   function newConversation() {
     setCurrentConvID(null)
     messaging.clear()
+    setFocusTrigger(n => n + 1)
   }
 
   async function deleteConversation(id: number) {
@@ -151,6 +153,7 @@ export default function App() {
             toast.error('Failed to set persona: ' + String(err))
           }
         }}
+        focusTrigger={focusTrigger}
       />
       {settingsOpen && (
         <SettingsModal

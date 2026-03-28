@@ -567,7 +567,8 @@ body {
 }
 
 .message.tool {
-  width: fit-content;
+  width: 100%;
+  max-width: 100%;
   margin-top: var(--chat-bubble-stack-gap);
   padding: var(--chat-tool-pad-y) var(--chat-tool-pad-x);
   border-left: 3px solid var(--warning);
@@ -575,6 +576,7 @@ body {
   font-size: var(--font-size-message-body);
   line-height: 1.45;
   background: var(--bg-surface);
+  box-sizing: border-box;
 }
 
 .message-content {
@@ -625,7 +627,7 @@ body {
 
 /* ===== Tool Call Card ===== */
 .tool-call-card {
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: 4px;
   padding: 1px 3px;
@@ -634,6 +636,8 @@ body {
   font-size: inherit;
   color: var(--warning);
   animation: tool-call-in 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tool-call-icon {
