@@ -628,7 +628,7 @@ body {
 /* ===== Tool Call Card ===== */
 .tool-call-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 4px;
   padding: 1px 3px;
   border-radius: 20px;
@@ -640,10 +640,15 @@ body {
   box-sizing: border-box;
 }
 
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .tool-call-icon {
   font-size: 1.12em;
   line-height: 1;
-  margin-top: 1px;
 }
 
 .tool-call-label {
@@ -651,7 +656,7 @@ body {
   white-space: nowrap;
 }
 
-.tool-call-summary-btn {
+.tool-call-chevron-btn {
   appearance: none;
   border: 0;
   background: transparent;
@@ -659,38 +664,33 @@ body {
   cursor: pointer;
   padding: 0;
   margin: 0;
-  display: inline-flex;
+  margin-left: auto;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font: inherit;
-}
-
-.tool-call-summary-btn:hover .tool-call-label,
-.tool-call-summary-btn:focus-visible .tool-call-label {
-  text-decoration: underline;
-}
-
-.tool-call-lines-wrap {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tool-call-lines {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tool-call-line {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
 }
 
 .tool-call-chevron {
   color: var(--text-secondary);
-  line-height: 1;
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+[aria-expanded="true"] .tool-call-chevron {
+  transform: rotate(180deg);
+}
+
+.tool-call-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: calc(1.12em + 6px);
+}
+
+.tool-call-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .tool-call-arg {
@@ -699,8 +699,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 300px;
-  display: inline-block;
-  vertical-align: middle;
   margin-left: 3px;
 }
 

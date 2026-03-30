@@ -521,41 +521,29 @@ export default function Chat({
     return (
       <div className="message tool" key={key}>
         <div className="tool-call-card">
-          <span className="tool-call-icon">🔧</span>
-          {collapsed ? (
+          <div className="tool-call-header">
+            <span className="tool-call-icon">🔧</span>
+            <span className="tool-call-label">tools used</span>
             <button
               type="button"
-              className="tool-call-summary-btn"
-              aria-expanded="false"
+              className="tool-call-chevron-btn"
+              aria-expanded={collapsed ? 'false' : 'true'}
               onClick={onToggleCollapsed}
             >
-              <span className="tool-call-label">tools used</span>
-              {onToggleCollapsed ? <span className="tool-call-chevron" aria-hidden>▾</span> : null}
+              <svg className="tool-call-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden><path fill="currentColor" d="M2 4l4 4 4-4"/></svg>
             </button>
-          ) : (
-            <div className="tool-call-lines-wrap">
-              {onToggleCollapsed ? (
-                <button
-                  type="button"
-                  className="tool-call-summary-btn"
-                  aria-expanded="true"
-                  onClick={onToggleCollapsed}
-                >
-                  <span className="tool-call-label">tools used</span>
-                  <span className="tool-call-chevron tool-call-chevron--open" aria-hidden>▴</span>
-                </button>
-              ) : null}
-              <div className="tool-call-lines">
-                {calls.map((tc, i) => {
-                  const argsDisplay = toolCallArgDisplay(tc)
-                  return (
-                    <div key={`tc-${i}`} className="tool-call-line">
-                      <span className="tool-call-label">{tc.name}</span>
-                      {argsDisplay ? <span className="tool-call-arg">{argsDisplay}</span> : null}
-                    </div>
-                  )
-                })}
-              </div>
+          </div>
+          {!collapsed && (
+            <div className="tool-call-lines">
+              {calls.map((tc, i) => {
+                const argsDisplay = toolCallArgDisplay(tc)
+                return (
+                  <div key={`tc-${i}`} className="tool-call-line">
+                    <span className="tool-call-label">{tc.name}</span>
+                    {argsDisplay ? <span className="tool-call-arg">{argsDisplay}</span> : null}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
