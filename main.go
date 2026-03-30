@@ -2,40 +2,64 @@ package main
 
 import (
 	"embed"
+	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
-	app := NewApp()
+	// Create the app service
+	appService := NewApp()
 
-	// Create application with options
-	err := wails.Run(&options.App{
+	// Create application
+	app := application.New(application.Options{
+		Name:        "Pedro",
+		Description: "Pedro AI Chat",
+		Services: []application.Service{
+			application.NewService(appService),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		OnShutdown: func() {
+			if appService.store != nil {
+				appService.store.Close()
+			}
+		},
+	})
+
+	// Store app reference in service for events
+	appService.app = app
+
+	// Initialize LLM after app is created
+	appService.initLLM()
+
+	// Create the main window
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Pedro",
 		Width:     840,
 		Height:    640,
 		MinWidth:  808,
 		MinHeight: 608,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop: true,
-		},
-		Bind: []interface{}{
-			app,
-		},
+		BackgroundColour: application.NewRGB(27, 38, 54),
+		URL:              "/",
+		EnableFileDrop:   true,
 	})
 
+	// Run the application
+	err := app.Run()
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }

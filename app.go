@@ -16,7 +16,7 @@ import (
 	"pedro/shared"
 	"pedro/tools"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type toolCallRecord struct {
@@ -25,7 +25,7 @@ type toolCallRecord struct {
 }
 
 type App struct {
-	ctx        context.Context
+	app        *application.App
 	store      Store
 	llm        providers.LLMClient
 	registry   *tools.Registry
@@ -51,12 +51,10 @@ func NewApp() *App {
 	}
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-	a.initLLM()
-}
-
 func (a *App) initLLM() {
+	if a.store == nil {
+		return
+	}
 	settings, err := a.store.GetSettings()
 	if err != nil {
 		fmt.Println("GetSettings error:", err.Error())
@@ -122,13 +120,13 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 		imageDataURLs,
 		func(chunk string) {
 			response = append(response, chunk...)
-			runtime.EventsEmit(a.ctx, "stream_chunk", conversationID, chunk)
+			a.app.Event.Emit("stream_chunk", conversationID, chunk)
 		},
 		func(name, argsJSON string) {
 			toolCallsMu.Lock()
 			toolCalls = append(toolCalls, toolCallRecord{Name: name, ArgsJSON: argsJSON})
 			toolCallsMu.Unlock()
-			runtime.EventsEmit(a.ctx, "tool_call", conversationID, name, argsJSON)
+			a.app.Event.Emit("tool_call", conversationID, name, argsJSON)
 		},
 	)
 	toolCallsJSON := ""
@@ -176,7 +174,7 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON, ""); err != nil {
 		return "Error: Failed to save message: " + err.Error()
 	}
-	runtime.EventsEmit(a.ctx, "conversation_updated", conversationID)
+	a.app.Event.Emit("conversation_updated", conversationID)
 
 	messages, err := a.store.GetMessages(conversationID)
 	if err != nil {
@@ -404,9 +402,12 @@ func (a *App) SaveSettings(settings map[string]string) error {
 }
 
 func (a *App) SelectFile() string {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select File",
-	})
+	if a.app == nil {
+		return ""
+	}
+	path, err := a.app.Dialog.OpenFile().
+		SetTitle("Select File").
+		PromptForSingleSelection()
 	if err != nil || path == "" {
 		return ""
 	}
@@ -414,9 +415,14 @@ func (a *App) SelectFile() string {
 }
 
 func (a *App) SelectFolder() string {
-	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Folder",
-	})
+	if a.app == nil {
+		return ""
+	}
+	path, err := a.app.Dialog.OpenFile().
+		SetTitle("Select Folder").
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		PromptForSingleSelection()
 	if err != nil || path == "" {
 		return ""
 	}

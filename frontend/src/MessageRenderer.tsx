@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import mermaid from 'mermaid'
-import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
+import { Browser } from '@wailsio/runtime'
 import { useTheme } from './ThemeContext'
 import { fileService, isWailsDevStub } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
@@ -206,7 +206,7 @@ export default function MessageRenderer({
       const handleClick = (e: React.MouseEvent) => {
         if (href && !isWailsDevStub) {
           e.preventDefault()
-          BrowserOpenURL(href)
+          Browser.OpenURL(href)
         }
         // In dev stub mode, let the browser handle it normally
       }

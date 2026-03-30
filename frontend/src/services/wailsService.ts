@@ -2,54 +2,48 @@
  * Central service layer wrapping all Wails bridge calls.
  *
  * This is the ONLY place in the frontend that imports from the auto-generated
- * wailsjs directory. All components and hooks must go through these services
+ * bindings or Wails runtime. All components and hooks must go through these services
  * so that the Wails coupling is isolated to a single, swappable boundary.
  *
- * In Vite dev, opening the app in a normal browser (e.g. Playwright) has no
- * `window.go` bridge; we return safe stubs so the UI still renders.
+ * Wails v3 uses a different API from v2:
+ * - Bindings are generated in frontend/bindings/
+ * - Events use @wailsio/runtime Events.On/Events.Emit
  */
-import {
-  GetConversations,
-  GetMessages,
-  CreateConversation,
-  DeleteAllConversations,
-  DeleteConversation,
-  DeleteMessage,
-  SearchMessages,
-  SendMessage,
-  SendMessageWithImages,
-  RegenerateMessage,
-  AbortMessage,
-  GetSettings,
-  GetDefaultSystemPrompt,
-  SaveSettings,
-  SetSetting,
-  TestConnection,
-  SignIn,
-  SignOut,
-  IsAuthenticated,
-  SelectFile,
-  SelectFolder,
-  OpenPath,
-  GetPersonas,
-  CreatePersona,
-  UpdatePersona,
-  DeletePersona,
-  GetActivePersonaID,
-  SetActivePersonaID,
-} from '../../wailsjs/go/main/App'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { main } from '../../wailsjs/go/models'
+import { Events, Call } from '@wailsio/runtime'
 
-// Re-export generated types so the rest of the app never imports from wailsjs.
-export type Conversation = main.Conversation
-export type Message = main.Message
-export type Persona = main.Persona
+// Conversation type
+export type Conversation = {
+  ID: number
+  Title: string
+  CreatedAt: string
+  UpdatedAt: string
+}
+
+// Message type
+export type Message = {
+  ID: number
+  ConversationID: number
+  Role: string
+  Content: string
+  Attachments?: string
+  ToolCalls?: string
+  CreatedAt: string
+}
+
+// Persona type
+export type Persona = {
+  ID: number
+  Name: string
+  Prompt: string
+  CreatedAt: string
+  UpdatedAt: string
+}
 
 function hasWailsBridge(): boolean {
   if (typeof window === 'undefined') return false
-  const w = window as Window & { go?: { main?: { App?: unknown } } }
-  return w.go?.main?.App !== undefined
+  // v3 injects wails object
+  const w = window as Window & { wails?: unknown }
+  return w.wails !== undefined
 }
 
 const useDevStub =
@@ -58,13 +52,13 @@ const useDevStub =
 /** True when the app runs without the Wails bridge (e.g. Vite in a normal browser). */
 export const isWailsDevStub = useDevStub
 
-function stubConversation(): main.Conversation {
-  return new main.Conversation({
+function stubConversation(): Conversation {
+  return {
     ID: Date.now(),
     Title: 'New Chat',
     CreatedAt: new Date().toISOString(),
     UpdatedAt: new Date().toISOString(),
-  })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -100,47 +94,47 @@ flowchart TD
     style H fill:#fbb
 \`\`\`
 
-I used web search to find the latest Wails v2 documentation and searched the codebase for existing auth implementations to ensure consistency.`
+I used web search to find the latest Wails v3 documentation and searched the codebase for existing auth implementations to ensure consistency.`
 
-function buildMockConversation(): main.Conversation {
+function buildMockConversation(): Conversation {
   const now = new Date().toISOString()
-  return new main.Conversation({
+  return {
     ID: MOCK_UI_CONVERSATION_ID,
     Title: MOCK_SAMPLE_TITLE,
     CreatedAt: now,
     UpdatedAt: now,
-  })
+  }
 }
 
-function buildMockMessagesForConversation(conversationID: number): main.Message[] {
+function buildMockMessagesForConversation(conversationID: number): Message[] {
   const now = new Date().toISOString()
   const mockToolCallsJSON = JSON.stringify(mockEmptyChatToolCalls)
   return [
-    new main.Message({
+    {
       ID: -1,
       ConversationID: conversationID,
       Role: 'user',
       Content: MOCK_SAMPLE_USER_CONTENT,
       CreatedAt: now,
-    }),
-    new main.Message({
+    },
+    {
       ID: -2,
       ConversationID: conversationID,
       Role: 'assistant',
       Content: MOCK_SAMPLE_ASSISTANT_CONTENT,
       ToolCalls: mockToolCallsJSON,
       CreatedAt: now,
-    }),
+    },
   ]
 }
 
 /** Sample tool rows paired with `isSeededEmptyChatMock` for the mock thread. */
 const mockEmptyChatToolCalls: { name: string; argsJSON: string }[] = [
-  { name: 'websearch', argsJSON: JSON.stringify({ query: 'Wails v2 desktop Go bindings' }) },
+  { name: 'websearch', argsJSON: JSON.stringify({ query: 'Wails v3 desktop Go bindings' }) },
   { name: 'grep', argsJSON: JSON.stringify({ pattern: 'wails', path: 'frontend' }) },
 ]
 
-function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
+function isSeededEmptyChatMock(msgs: Message[]): boolean {
   if (!MOCK_EMPTY_CHAT_UI || msgs.length !== 2) return false
   return (
     msgs[0]?.Role === 'user' &&
@@ -161,7 +155,7 @@ export const uiConversationService = {
     return !this.isVirtualConversation(id)
   },
   getMockToolCallsForMessages(
-    msgs: main.Message[],
+    msgs: Message[],
   ): { name: string; argsJSON: string }[] {
     return isSeededEmptyChatMock(msgs)
       ? mockEmptyChatToolCalls.map(tc => ({ ...tc }))
@@ -170,36 +164,49 @@ export const uiConversationService = {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Call Go method using Wails v3 Call API
+// Service name is "main.App" (package.structName)
+// ---------------------------------------------------------------------------
+async function callGo<T>(method: string, ...args: unknown[]): Promise<T> {
+  return Call.ByName(`main.App.${method}`, ...args) as Promise<T>
+}
+
+// ---------------------------------------------------------------------------
 // Conversation service
 // ---------------------------------------------------------------------------
 export const conversationService = {
-  getAll: async (): Promise<main.Conversation[]> => {
-    const raw = useDevStub ? [] : await GetConversations()
+  getAll: async (): Promise<Conversation[]> => {
+    const raw = useDevStub ? [] : await callGo<Conversation[]>('GetConversations')
     const list = raw ?? []
     if (!MOCK_EMPTY_CHAT_UI) return list
     return [buildMockConversation(), ...list]
   },
-  getMessages: async (id: number): Promise<main.Message[]> => {
+  getMessages: async (id: number): Promise<Message[]> => {
     if (MOCK_EMPTY_CHAT_UI && id === MOCK_UI_CONVERSATION_ID) {
       return buildMockMessagesForConversation(MOCK_UI_CONVERSATION_ID)
     }
-    const raw = useDevStub ? [] : await GetMessages(id)
+    const raw = useDevStub ? [] : await callGo<Message[]>('GetMessages', id)
     return raw ?? []
   },
-  create: (): Promise<main.Conversation> =>
-    useDevStub ? Promise.resolve(stubConversation()) : CreateConversation(),
-  delete: (id: number): Promise<void> => {
+  create: async (): Promise<Conversation> =>
+    useDevStub ? stubConversation() : await callGo<Conversation>('CreateConversation'),
+  delete: async (id: number): Promise<void> => {
     if (MOCK_EMPTY_CHAT_UI && id === MOCK_UI_CONVERSATION_ID) {
-      return Promise.resolve()
+      return
     }
-    return useDevStub ? Promise.resolve() : DeleteConversation(id)
+    if (!useDevStub) {
+      await callGo('DeleteConversation', id)
+    }
   },
   /** Removes every stored conversation (and messages). UI-only mock rows are not in the DB. */
-  deleteAll: (): Promise<void> =>
-    useDevStub ? Promise.resolve() : DeleteAllConversations(),
-  search: async (query: string): Promise<Record<number, main.Message[]>> => {
-    const base = useDevStub ? {} : await SearchMessages(query)
-    const out: Record<number, main.Message[]> = { ...(base ?? {}) }
+  deleteAll: async (): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('DeleteAllConversations')
+    }
+  },
+  search: async (query: string): Promise<Record<number, Message[]>> => {
+    const base = useDevStub ? {} : await callGo<Record<number, Message[]>>('SearchMessages', query)
+    const out: Record<number, Message[]> = { ...(base ?? {}) }
     if (MOCK_EMPTY_CHAT_UI && query.trim()) {
       const q = query.trim().toLowerCase()
       const mockMsgs = buildMockMessagesForConversation(MOCK_UI_CONVERSATION_ID)
@@ -223,9 +230,9 @@ export const conversationService = {
 // ---------------------------------------------------------------------------
 export const messageService = {
   /** selectedPersonaID: DB row id; backend loads prompt text from SQLite. */
-  send: (convID: number, content: string, selectedPersonaID: string, attachmentsJSON: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SendMessage(convID, content, selectedPersonaID, attachmentsJSON),
-  sendWithImages: (
+  send: async (convID: number, content: string, selectedPersonaID: string, attachmentsJSON: string): Promise<string> =>
+    useDevStub ? '' : await callGo<string>('SendMessage', convID, content, selectedPersonaID, attachmentsJSON),
+  sendWithImages: async (
     convID: number,
     content: string,
     images: string[],
@@ -233,86 +240,117 @@ export const messageService = {
     attachmentsJSON: string,
   ): Promise<string> =>
     useDevStub
-      ? Promise.resolve('')
-      : SendMessageWithImages(convID, content, images, selectedPersonaID, attachmentsJSON),
-  regenerate: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex, selectedPersonaID),
-  abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
-  deleteMessage: (convID: number, messageIndex: number): Promise<void> =>
-    useDevStub ? Promise.resolve() : DeleteMessage(convID, messageIndex),
+      ? ''
+      : await callGo<string>('SendMessageWithImages', convID, content, images, selectedPersonaID, attachmentsJSON),
+  regenerate: async (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
+    useDevStub ? '' : await callGo<string>('RegenerateMessage', convID, messageIndex, selectedPersonaID),
+  abort: async (): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('AbortMessage')
+    }
+  },
+  deleteMessage: async (convID: number, messageIndex: number): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('DeleteMessage', convID, messageIndex)
+    }
+  },
 }
 
 // ---------------------------------------------------------------------------
 // Settings service
 // ---------------------------------------------------------------------------
 export const settingsService = {
-  get: (): Promise<Record<string, string>> =>
-    useDevStub ? Promise.resolve({}) : GetSettings(),
-  getDefaultSystemPrompt: (): Promise<string> =>
-    useDevStub ? Promise.resolve('') : GetDefaultSystemPrompt(),
-  save: (settings: Record<string, string>): Promise<void> =>
-    useDevStub ? Promise.resolve() : SaveSettings(settings),
-  setSetting: (key: string, value: string): Promise<void> =>
-    useDevStub ? Promise.resolve() : SetSetting(key, value),
-  test: (): Promise<string> => (useDevStub ? Promise.resolve('') : TestConnection()),
-  signIn: (): Promise<string> => (useDevStub ? Promise.resolve('') : SignIn()),
-  signOut: (): Promise<void> => (useDevStub ? Promise.resolve() : SignOut()),
-  isAuthenticated: (): Promise<boolean> =>
-    useDevStub ? Promise.resolve(false) : IsAuthenticated(),
+  get: async (): Promise<Record<string, string>> =>
+    useDevStub ? {} : await callGo<Record<string, string>>('GetSettings'),
+  getDefaultSystemPrompt: async (): Promise<string> =>
+    useDevStub ? '' : await callGo<string>('GetDefaultSystemPrompt'),
+  save: async (settings: Record<string, string>): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('SaveSettings', settings)
+    }
+  },
+  setSetting: async (key: string, value: string): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('SetSetting', key, value)
+    }
+  },
+  test: async (): Promise<string> => (useDevStub ? '' : await callGo<string>('TestConnection')),
+  signIn: async (): Promise<string> => (useDevStub ? '' : await callGo<string>('SignIn')),
+  signOut: async (): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('SignOut')
+    }
+  },
+  isAuthenticated: async (): Promise<boolean> =>
+    useDevStub ? false : await callGo<boolean>('IsAuthenticated'),
 }
 
 // ---------------------------------------------------------------------------
 // Personas (SQLite-backed)
 // ---------------------------------------------------------------------------
 export const personaService = {
-  getAll: async (): Promise<main.Persona[]> => {
-    const raw = useDevStub ? [] : await GetPersonas()
+  getAll: async (): Promise<Persona[]> => {
+    const raw = useDevStub ? [] : await callGo<Persona[]>('GetPersonas')
     return raw ?? []
   },
-  create: (name: string, prompt: string): Promise<main.Persona> =>
+  create: async (name: string, prompt: string): Promise<Persona> =>
     useDevStub
-      ? Promise.resolve(
-          new main.Persona({
-            ID: Date.now(),
-            Name: name,
-            Prompt: prompt,
-            CreatedAt: new Date().toISOString(),
-            UpdatedAt: new Date().toISOString(),
-          }),
-        )
-      : CreatePersona(name, prompt),
-  update: (id: number, name: string, prompt: string): Promise<void> =>
-    useDevStub ? Promise.resolve() : UpdatePersona(id, name, prompt),
-  delete: (id: number): Promise<void> =>
-    useDevStub ? Promise.resolve() : DeletePersona(id),
-  getActiveId: (): Promise<string> =>
-    useDevStub ? Promise.resolve('') : GetActivePersonaID(),
-  setActive: (id: string): Promise<void> =>
-    useDevStub ? Promise.resolve() : SetActivePersonaID(id),
+      ? {
+          ID: Date.now(),
+          Name: name,
+          Prompt: prompt,
+          CreatedAt: new Date().toISOString(),
+          UpdatedAt: new Date().toISOString(),
+        }
+      : await callGo<Persona>('CreatePersona', name, prompt),
+  update: async (id: number, name: string, prompt: string): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('UpdatePersona', id, name, prompt)
+    }
+  },
+  delete: async (id: number): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('DeletePersona', id)
+    }
+  },
+  getActiveId: async (): Promise<string> =>
+    useDevStub ? '' : await callGo<string>('GetActivePersonaID'),
+  setActive: async (id: string): Promise<void> => {
+    if (!useDevStub) {
+      await callGo('SetActivePersonaID', id)
+    }
+  },
 }
 
 // ---------------------------------------------------------------------------
 // File service
 // ---------------------------------------------------------------------------
 export const fileService = {
-  selectFile: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFile()),
-  selectFolder: (): Promise<string> => (useDevStub ? Promise.resolve('') : SelectFolder()),
+  selectFile: async (): Promise<string> => (useDevStub ? '' : await callGo<string>('SelectFile')),
+  selectFolder: async (): Promise<string> => (useDevStub ? '' : await callGo<string>('SelectFolder')),
   /** Opens with the OS default app (WebView blocks file:// links). */
-  openPath: (path: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : OpenPath(path),
+  openPath: async (path: string): Promise<string> =>
+    useDevStub ? '' : await callGo<string>('OpenPath', path),
 }
 
 // ---------------------------------------------------------------------------
-// Event service (streaming)
+// Event service (streaming) - Wails v3 uses @wailsio/runtime Events
 // ---------------------------------------------------------------------------
 const stubEventService = {
   on: (_eventName: string, _callback: (...data: unknown[]) => void) => () => {},
-  off: (_eventName: string, ..._additional: string[]) => {},
+  off: (_eventName: string) => {},
 }
 
 export const eventService = useDevStub
   ? stubEventService
   : {
-      on: EventsOn,
-      off: EventsOff,
+      on: (eventName: string, callback: (...data: unknown[]) => void) => {
+        Events.On(eventName, (event: { data: unknown[] }) => {
+          callback(...(event.data || []))
+        })
+        return () => Events.Off(eventName)
+      },
+      off: (eventName: string) => {
+        Events.Off(eventName)
+      },
     }

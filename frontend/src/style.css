@@ -178,6 +178,8 @@
 
 html {
   font-size: var(--font-size-root);
+  height: 100%;
+  width: 100%;
 }
 
 body {
@@ -185,22 +187,31 @@ body {
   background: var(--bg-gradient);
   background-attachment: fixed;
   color: var(--text-primary);
-  height: 100vh;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   transition: background var(--transition-smooth), color 0.25s ease;
   -webkit-font-smoothing: antialiased;
 }
 
+#root {
+  height: 100%;
+  width: 100%;
+}
+
 /* ===== Layout ===== */
 .layout {
   display: flex;
-  height: 100vh;
-  min-width: 800px;
+  height: 100%;
+  width: 100%;
   min-height: 400px;
   position: relative;
   z-index: 1;
   padding: 0;
   gap: 0;
+  transform: translateZ(0);
 }
 
 /* ===== Sidebar ===== */

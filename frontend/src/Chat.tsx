@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
-import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
+import { Events } from '@wailsio/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
@@ -371,29 +371,28 @@ export default function Chat({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    // Wails: native paths come from OnFileDrop. Browser: use File API.
-    const rt = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDrop?: unknown } }).runtime : undefined
-    if (rt?.OnFileDrop) return
+    // Check for Wails v3 DragAndDrop - if available, file paths come via OnFilesDropped
+    const hasWails = typeof window !== 'undefined' && (window as Window & { wails?: unknown }).wails
+    if (hasWails) return
     const files = Array.from(e.dataTransfer?.files ?? [])
     for (const file of files) processFile(file)
   }
 
-  // Use Wails' OnFileDrop to get native file paths for drag & drop
-  // useDropTarget=false means accept drops anywhere without requiring CSS properties
+  // Use Wails v3 Events for native file drop paths
   useEffect(() => {
-    const rt = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDrop?: unknown } }).runtime : undefined
-    if (!rt?.OnFileDrop) return
-    OnFileDrop((_x: number, _y: number, paths: string[]) => {
+    const hasWails = typeof window !== 'undefined' && (window as Window & { wails?: unknown }).wails
+    if (!hasWails) return
+    const unsub = Events.On('common:WindowFilesDropped', (event) => {
       setIsDragging(false)
-      for (const path of paths) {
-        const name = path.split(/[\\/]/).pop() || path
-        setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
+      const paths = event.data as string[] | undefined
+      if (paths && Array.isArray(paths)) {
+        for (const path of paths) {
+          const name = path.split(/[\\/]/).pop() || path
+          setAttachments(prev => [...prev, { type: 'file-ref', content: path, name }])
+        }
       }
-    }, false)
-    return () => {
-      const rtOff = typeof window !== 'undefined' ? (window as Window & { runtime?: { OnFileDropOff?: unknown } }).runtime : undefined
-      if (rtOff?.OnFileDropOff) OnFileDropOff()
-    }
+    })
+    return unsub
   }, [])
 
   const handlePaste = useCallback(
