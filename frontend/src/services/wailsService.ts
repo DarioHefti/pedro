@@ -80,10 +80,26 @@ const MOCK_UI_CONVERSATION_ID = -9_001
 const MOCK_SAMPLE_TITLE = 'Sample chat'
 
 const MOCK_SAMPLE_USER_CONTENT =
-  'What does this project use for the desktop shell?'
+  'Show me a mermaid diagram for the auth flow'
 
 const MOCK_SAMPLE_ASSISTANT_CONTENT =
-  'This app is built with Wails: the UI is the Vite/React frontend while Go hosts native APIs. Tool calls like search and repo grep are typical for how the assistant answers.'
+  `This app is built with Wails: the UI is the Vite/React frontend while Go hosts native APIs. Here is a diagram showing the flow:
+
+\`\`\`mermaid
+flowchart TD
+    A[User Signs Up] --> B[Derive KEK from Password]
+    B --> C[Generate random DEK]
+    C --> D[Wrap DEK with KEK]
+    D --> E[Generate Recovery Key]
+    E --> F[Wrap DEK with Recovery Key]
+    F --> G[Encrypt Data with DEK]
+    G --> H[Upload to Server]
+    
+    style A fill:#bbf
+    style H fill:#fbb
+\`\`\`
+
+I used web search to find the latest Wails v2 documentation and searched the codebase for existing auth implementations to ensure consistency.`
 
 function buildMockConversation(): main.Conversation {
   const now = new Date().toISOString()
@@ -97,6 +113,7 @@ function buildMockConversation(): main.Conversation {
 
 function buildMockMessagesForConversation(conversationID: number): main.Message[] {
   const now = new Date().toISOString()
+  const mockToolCallsJSON = JSON.stringify(mockEmptyChatToolCalls)
   return [
     new main.Message({
       ID: -1,
@@ -110,6 +127,7 @@ function buildMockMessagesForConversation(conversationID: number): main.Message[
       ConversationID: conversationID,
       Role: 'assistant',
       Content: MOCK_SAMPLE_ASSISTANT_CONTENT,
+      ToolCalls: mockToolCallsJSON,
       CreatedAt: now,
     }),
   ]
@@ -127,7 +145,7 @@ function isSeededEmptyChatMock(msgs: main.Message[]): boolean {
     msgs[0]?.Role === 'user' &&
     msgs[0]?.Content === MOCK_SAMPLE_USER_CONTENT &&
     msgs[1]?.Role === 'assistant' &&
-    msgs[1]?.Content === MOCK_SAMPLE_ASSISTANT_CONTENT
+    msgs[1]?.Content?.includes('I used web search')
   )
 }
 

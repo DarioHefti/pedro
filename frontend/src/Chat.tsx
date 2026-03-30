@@ -620,7 +620,7 @@ export default function Chat({
             <div className="assistant-bubble-shell">
               <div className="message assistant assistant-reply-bubble">
                 {streamingContent ? (
-                  <MessageRenderer content={streamingContent} role="assistant" />
+                  <MessageRenderer content={streamingContent} role="assistant" isStreaming={true} />
                 ) : (
                   <div className="message-content typing">
                     Thinking<span className="thinking-dots"><span>.</span><span>.</span><span>.</span></span>

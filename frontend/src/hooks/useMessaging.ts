@@ -33,6 +33,10 @@ export interface FileAttachment {
   type: string
 }
 
+function isDebugMockMermaid(): boolean {
+  return typeof window !== 'undefined' && localStorage.getItem('debug_mock_mermaid') === 'true'
+}
+
 type StreamBuffer = { content: string; toolCalls: ToolCall[] }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +158,32 @@ export function useMessaging({
     setMessageImages(new Map())
     setMessageFiles(new Map())
     setMessageToolCalls(new Map())
+
+    if (isDebugMockMermaid() && msgSeqRef.current === 1) {
+      const mockMessages = [
+        { Role: 'user', Content: 'Show me a mermaid diagram' } as Message,
+        { Role: 'assistant', Content: `Here is a diagram showing the flow:
+
+\`\`\`mermaid
+flowchart TD
+    A[User Signs Up] --> B[Derive KEK from Password]
+    B --> C[Generate random DEK]
+    C --> D[Wrap DEK with KEK]
+    D --> E[Generate Recovery Key]
+    E --> F[Wrap DEK with Recovery Key]
+    F --> G[Encrypt Data with DEK]
+    G --> H[Upload to Server]
+    
+    style A fill:#bbf
+    style H fill:#fbb
+\`\`\`
+
+This shows the key derivation and encryption flow.` } as Message,
+      ]
+      setMessages(mockMessages)
+      return
+    }
+
     const msgs = await conversationService.getMessages(convID)
     if (msgSeqRef.current !== seq) return
     const list = msgs ?? []

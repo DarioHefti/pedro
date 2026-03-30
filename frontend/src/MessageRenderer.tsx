@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, memo, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
@@ -7,22 +7,86 @@ import { useTheme } from './ThemeContext'
 import { fileService } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
 
+// Memoized component to prevent re-renders from destroying the SVG
+const MermaidDiagram = memo(function MermaidDiagram({ code, theme }: { code: string; theme: string }) {
+  const [svg, setSvg] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const renderDiagram = async () => {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: theme === 'dark' ? 'dark' : 'default',
+        })
+        const result = await mermaid.render(
+          `mermaid-${Date.now()}`,
+          code,
+        )
+        if (!cancelled) {
+          setSvg(result.svg)
+          setError(false)
+        }
+      } catch (err) {
+        console.error('[Mermaid render error]', err)
+        if (!cancelled) {
+          setError(true)
+        }
+      }
+    }
+
+    // Small delay for Wails WebView
+    const timer = setTimeout(renderDiagram, 50)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [code, theme])
+
+  if (svg) {
+    return (
+      <div 
+        className="mermaid-diagram" 
+        dangerouslySetInnerHTML={{ __html: svg }} 
+      />
+    )
+  }
+
+  return (
+    <div className="mermaid-diagram">
+      <pre style={{ margin: 0 }}><code>{code}</code></pre>
+    </div>
+  )
+}, (prevProps, nextProps) => {
+  // Only re-render if code or theme changes
+  return prevProps.code === nextProps.code && prevProps.theme === nextProps.theme
+})
+
 interface MessageRendererProps {
   content: string
   role: string
+  isStreaming?: boolean
 }
 
 export default function MessageRenderer({
   content,
   role,
+  isStreaming = false,
 }: MessageRendererProps) {
   const { theme } = useTheme()
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxImage, setLightboxImage] = useState('')
-  // These are reset to [] on each render cycle (before children push into them)
-  // so that refs don't accumulate across re-renders.
   const codeRefs = useRef<HTMLElement[]>([])
-  const mermaidRefs = useRef<HTMLDivElement[]>([])
+
+  // Initialize mermaid once on mount.
+  useEffect(() => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: theme === 'dark' ? 'dark' : 'default',
+    })
+  }, [])
 
   // Keep Mermaid theme in sync with the app theme.
   useEffect(() => {
@@ -32,49 +96,44 @@ export default function MessageRenderer({
     })
   }, [theme])
 
-  // Run syntax highlighting and Mermaid rendering whenever content changes.
-  useEffect(() => {
-    // Reset and re-highlight; refs were populated during this render.
+  // Run syntax highlighting after render.
+  useLayoutEffect(() => {
+    // Skip while streaming to avoid issues with incomplete content
+    if (isStreaming) return
+
+    // Syntax highlighting
     codeRefs.current.forEach(el => {
       if (el) hljs.highlightElement(el)
     })
 
-    mermaidRefs.current.forEach(async (el, i) => {
-      if (el?.dataset.mermaid) {
-        try {
-          const { svg } = await mermaid.render(
-            `mermaid-${i}-${Date.now()}`,
-            el.dataset.mermaid,
-          )
-          el.innerHTML = svg
-        } catch {
-          el.textContent = el.dataset.mermaid ?? ''
-        }
-      }
-    })
-  }, [content])
+    // Reset refs after processing for next render
+    return () => {
+      codeRefs.current = []
+    }
+  }, [content, isStreaming])
 
   const isArtifact =
     content.trim().startsWith('<!DOCTYPE html>') ||
     content.trim().startsWith('<html') ||
     (content.includes('<script>') && content.includes('</html>'))
 
-  const copyCode = (code: string) => navigator.clipboard.writeText(code)
+  const copyCode = useCallback((code: string) => navigator.clipboard.writeText(code), [])
 
-  const components = {
+  const components = useMemo(() => ({
     code({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string }) {
       const match = /language-(\w+)/.exec(className || '')
-      const code = String(children).replace(/\n$/, '')
+      const codeText = String(children).replace(/\n$/, '')
       const isMermaid = match?.[1] === 'mermaid'
 
       if (isMermaid) {
-        return (
-          <div
-            ref={el => { if (el) mermaidRefs.current.push(el) }}
-            data-mermaid={code}
-            className="mermaid-diagram"
-          />
-        )
+        if (isStreaming) {
+          return (
+            <pre className="mermaid-diagram">
+              <code>{codeText}</code>
+            </pre>
+          )
+        }
+        return <MermaidDiagram code={codeText} theme={theme} />
       }
 
       if (match) {
@@ -82,7 +141,7 @@ export default function MessageRenderer({
           <div className="code-block">
             <div className="code-header">
               <span className="code-language">{match[1]}</span>
-              <button className="copy-code-btn" onClick={() => copyCode(code)}>
+              <button className="copy-code-btn" onClick={() => copyCode(codeText)}>
                 Copy
               </button>
             </div>
@@ -149,35 +208,50 @@ export default function MessageRenderer({
         </a>
       )
     },
+  }), [theme, isStreaming, copyCode])
+
+  if (isStreaming) {
+    return (
+      <div className="message-container">
+        <div className="message-body-wrap">
+          <div className="markdown-content">
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
+              {content}
+            </pre>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  // Reset ref arrays before each render so they don't grow unboundedly.
-  codeRefs.current = []
-  mermaidRefs.current = []
+  const renderContent = () => {
+    if (isArtifact && role === 'assistant') {
+      return (
+        <div className="artifact-preview">
+          <iframe
+            srcDoc={content}
+            title="Artifact Preview"
+            sandbox="allow-scripts"
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div className="markdown-content">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components as any}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    )
+  }
 
   return (
     <>
-      <div
-        className="message-container"
-      >
+      <div className="message-container">
         <div className="message-body-wrap">
-          {isArtifact && role === 'assistant' ? (
-            <div className="artifact-preview">
-              <iframe
-                srcDoc={content}
-                title="Artifact Preview"
-                sandbox="allow-scripts"
-              />
-            </div>
-          ) : (
-            <div className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={components as any}>
-                {content}
-              </ReactMarkdown>
-            </div>
-          )}
+          {content ? renderContent() : <div className="markdown-content"><em>(empty message)</em></div>}
         </div>
-
       </div>
 
       {lightboxOpen && (
