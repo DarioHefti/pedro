@@ -288,6 +288,13 @@ func (a *App) DeleteAllConversations() error {
 	return a.store.DeleteAllConversations()
 }
 
+func (a *App) DeleteMessage(conversationID int64, messageIndex int) error {
+	if a.store == nil {
+		return nil
+	}
+	return a.store.DeleteMessage(conversationID, messageIndex)
+}
+
 func (a *App) SendMessage(conversationID int64, content string, selectedPersonaID string, attachmentsJSON string) string {
 	return a.sendMessage(conversationID, content, nil, selectedPersonaID, attachmentsJSON)
 }

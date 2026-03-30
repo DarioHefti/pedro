@@ -140,6 +140,7 @@ export default function App() {
         onRegenerate={(index, selectedPersonaId) =>
           void messaging.regenerate(index, selectedPersonaId)
         }
+        onDeleteMessage={(index) => void messaging.deleteMessage(index)}
         onSelectFile={fileService.selectFile}
         onSelectFolder={fileService.selectFolder}
         welcomeMessage={welcomeMessage}
@@ -154,6 +155,7 @@ export default function App() {
           }
         }}
         focusTrigger={focusTrigger}
+        currentConvID={currentConvID}
       />
       {settingsOpen && (
         <SettingsModal

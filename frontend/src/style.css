@@ -548,6 +548,7 @@ body {
   width: 90%;
   max-width: 90%;
   min-width: 48px;
+  position: relative;
 }
 
 .message-wrapper.user .message {
@@ -1776,6 +1777,59 @@ body {
   color: var(--text-secondary);
   border: none;
   transform: none;
+}
+
+.message-wrapper.user .message-actions--user-actions-overlay-br {
+  position: absolute;
+  z-index: 3;
+  bottom: 6px;
+  right: 6px;
+  top: auto;
+  left: auto;
+  margin-top: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  opacity: 0;
+}
+
+.message-wrapper.user:hover .message-actions--user-actions-overlay-br,
+.message-actions--user-actions-overlay-br:hover {
+  opacity: 1;
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.message-wrapper.user .message-actions--user-actions-overlay-br .message-action-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-secondary);
+  opacity: 0.72;
+  transition: opacity 0.18s ease, color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.message-wrapper.user:hover .message-actions--user-actions-overlay-br .message-action-btn:not(:disabled),
+.message-actions--user-actions-overlay-br:hover .message-action-btn:not(:disabled) {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.message-wrapper.user .message-actions--user-actions-overlay-br .message-action-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--btn-primary-text);
+  opacity: 1;
+  transform: scale(1.06);
 }
 
 /* ===== Markdown Content ===== */

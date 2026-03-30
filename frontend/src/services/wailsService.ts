@@ -14,6 +14,7 @@ import {
   CreateConversation,
   DeleteAllConversations,
   DeleteConversation,
+  DeleteMessage,
   SearchMessages,
   SendMessage,
   SendMessageWithImages,
@@ -237,6 +238,8 @@ export const messageService = {
   regenerate: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex, selectedPersonaID),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
+  deleteMessage: (convID: number, messageIndex: number): Promise<void> =>
+    useDevStub ? Promise.resolve() : DeleteMessage(convID, messageIndex),
 }
 
 // ---------------------------------------------------------------------------

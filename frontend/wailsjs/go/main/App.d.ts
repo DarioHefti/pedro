@@ -12,6 +12,8 @@ export function DeleteAllConversations():Promise<void>;
 
 export function DeleteConversation(arg1:number):Promise<void>;
 
+export function DeleteMessage(arg1:number,arg2:number):Promise<void>;
+
 export function DeletePersona(arg1:number):Promise<void>;
 
 export function GetActivePersonaID():Promise<string>;

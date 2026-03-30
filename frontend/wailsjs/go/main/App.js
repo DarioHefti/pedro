@@ -22,6 +22,10 @@ export function DeleteConversation(arg1) {
   return window['go']['main']['App']['DeleteConversation'](arg1);
 }
 
+export function DeleteMessage(arg1, arg2) {
+  return window['go']['main']['App']['DeleteMessage'](arg1, arg2);
+}
+
 export function DeletePersona(arg1) {
   return window['go']['main']['App']['DeletePersona'](arg1);
 }

@@ -5,7 +5,7 @@ import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import { fileService, type Persona } from './services/wailsService'
 import MessageRenderer from './MessageRenderer'
-import AssistantMessageActions from './AssistantMessageActions'
+import AssistantMessageActions, { IconDelete } from './AssistantMessageActions'
 
 interface ChatProps {
   messages: Message[]
@@ -23,6 +23,8 @@ interface ChatProps {
   onStop: () => void
   /** selectedPersonaId is the DB persona id for this regeneration (read prompt from DB on backend). */
   onRegenerate: (index: number, selectedPersonaId: string) => void
+  /** Deletes user message and all following user/assistant messages. */
+  onDeleteMessage: (index: number) => void
   /** Opens the native OS file picker; resolves to the selected path or "". */
   onSelectFile: () => Promise<string>
   /** Opens the native folder picker; resolves to the selected path or "". */
@@ -33,6 +35,8 @@ interface ChatProps {
   onPersonaChange: (id: string) => void
   /** Increment to trigger focus on the input textarea. */
   focusTrigger?: number
+  /** Current conversation ID to detect conversation switches. */
+  currentConvID?: number | null
 }
 
 /**
@@ -84,6 +88,7 @@ export default function Chat({
   onSend,
   onStop,
   onRegenerate,
+  onDeleteMessage,
   onSelectFile,
   onSelectFolder,
   welcomeMessage,
@@ -91,6 +96,7 @@ export default function Chat({
   activePersonaId,
   onPersonaChange,
   focusTrigger,
+  currentConvID,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -110,8 +116,9 @@ export default function Chat({
   const inputAreaRef = useRef<HTMLDivElement>(null)
   const attachWrapRef = useRef<HTMLDivElement>(null)
   const personaWrapRef = useRef<HTMLDivElement>(null)
-  /** Smooth jump-to-bottom animates scrollTop; ignore transient “away from bottom” during that window. */
+  /** Smooth jump-to-bottom animates scrollTop; ignore transient "away from bottom" during that window. */
   const suppressStickBreakRef = useRef(false)
+  const prevConvIDRef = useRef<number | null>(null)
   /**
    * Physical scrollTop while loading with !stickToBottom — synced each layout pass so we still have
    * the right value when the stream ends between chunks (no scroll event). Used to restore after the
@@ -180,6 +187,17 @@ export default function Chat({
     })
     return () => cancelAnimationFrame(id)
   }, [focusTrigger])
+
+  /** Scroll to bottom when switching to a different conversation. */
+  useEffect(() => {
+    if (currentConvID !== undefined && currentConvID !== prevConvIDRef.current) {
+      if (prevConvIDRef.current !== null) {
+        setStickToBottom(true)
+        scrollMessagesToBottom('auto')
+      }
+      prevConvIDRef.current = currentConvID
+    }
+  }, [currentConvID, scrollMessagesToBottom])
 
   /** User scrolled away from the tail → stop following. Following only resumes on Send or "jump to bottom". */
   useEffect(() => {
@@ -507,6 +525,21 @@ export default function Chat({
     return (
       <div key={i} className={`message-wrapper ${msg.Role}`}>
         {bubble}
+        <div
+          className="message-actions message-actions--user-actions-overlay-br"
+          role="group"
+          aria-label="User message actions"
+        >
+          <button
+            type="button"
+            className="message-action-btn"
+            onClick={() => onDeleteMessage(i)}
+            title="Delete message"
+            aria-label="Delete message"
+          >
+            <IconDelete />
+          </button>
+        </div>
       </div>
     )
   }

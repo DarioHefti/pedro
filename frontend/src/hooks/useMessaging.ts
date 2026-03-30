@@ -376,6 +376,45 @@ This shows the key derivation and encryption flow.` } as Message,
     }
   }, [])
 
+  const deleteMessage = useCallback(
+    async (index: number): Promise<void> => {
+      const convID = currentConvID
+      if (!convID || uiConversationService.isVirtualConversation(convID)) return
+      const msg = messages[index]
+      if (msg?.Role !== 'user') return
+
+      const messagesToDelete = messages.slice(index).filter(m => m.Role === 'user' || m.Role === 'assistant')
+
+      for (let i = messagesToDelete.length - 1; i >= 0; i--) {
+        await messageService.deleteMessage(convID, index + i)
+      }
+
+      const dbMsgs = await conversationService.getMessages(convID)
+
+      if (dbMsgs.length === 0) {
+        await conversationService.delete(convID)
+        if (currentConvIDRef.current === convID) {
+          ++msgSeqRef.current
+          setMessages([])
+          setMessageImages(new Map())
+          setMessageFiles(new Map())
+          setMessageToolCalls(new Map())
+        }
+      } else if (currentConvIDRef.current === convID) {
+        ++msgSeqRef.current
+        const { images, files } = buildAttachmentMaps(dbMsgs)
+        const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
+        setMessageImages(images)
+        setMessageFiles(files)
+        setMessageToolCalls(toolCallsByMessageIndex)
+        setMessages(dbMsgs)
+      }
+
+      await refreshConversations()
+    },
+    [currentConvID, messages, refreshConversations],
+  )
+
   return {
     messages,
     loading,
@@ -390,6 +429,7 @@ This shows the key derivation and encryption flow.` } as Message,
     send,
     regenerate,
     stop,
+    deleteMessage,
   }
 }
 
