@@ -3,8 +3,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import mermaid from 'mermaid'
+import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 import { useTheme } from './ThemeContext'
-import { fileService } from './services/wailsService'
+import { fileService, isWailsDevStub } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
 
 // Memoized component to prevent re-renders from destroying the SVG
@@ -202,8 +203,20 @@ export default function MessageRenderer({
       return <img src={src} alt={alt ?? 'Image'} className="message-image" />
     },
     a({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+      const handleClick = (e: React.MouseEvent) => {
+        if (href && !isWailsDevStub) {
+          e.preventDefault()
+          BrowserOpenURL(href)
+        }
+        // In dev stub mode, let the browser handle it normally
+      }
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer">
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleClick}
+        >
           {children}
         </a>
       )

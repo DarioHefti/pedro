@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { flushSync } from 'react-dom'
 import {
   conversationService,
   messageService,
@@ -100,7 +101,10 @@ export function useMessaging({
       const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
       buf.content += chunk
       streamingBuffersRef.current.set(convId, buf)
-      setStreamingStreams(new Map(streamingBuffersRef.current))
+      // Use flushSync to force immediate DOM update - fixes Wayland event batching issues
+      flushSync(() => {
+        setStreamingStreams(new Map(streamingBuffersRef.current))
+      })
     }
 
     const onTool = (...args: unknown[]) => {
@@ -112,7 +116,10 @@ export function useMessaging({
       const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
       buf.toolCalls = [...buf.toolCalls, { name, argsJSON }]
       streamingBuffersRef.current.set(convId, buf)
-      setStreamingStreams(new Map(streamingBuffersRef.current))
+      // Use flushSync to force immediate DOM update - fixes Wayland event batching issues
+      flushSync(() => {
+        setStreamingStreams(new Map(streamingBuffersRef.current))
+      })
     }
 
     const onConversationUpdated = (...args: unknown[]) => {
@@ -257,13 +264,16 @@ This shows the key derivation and encryption flow.` } as Message,
 
       const optimisticIdx = messages.length
       if (currentConvIDRef.current === convID) {
-        setMessages(prev => [...prev, { Role: 'user', Content: content } as Message])
-        if (imageDataURLs.length > 0) {
-          setMessageImages(m => new Map(m).set(optimisticIdx, imageDataURLs))
-        }
-        if (fileAttachments.length > 0) {
-          setMessageFiles(m => new Map(m).set(optimisticIdx, fileAttachments))
-        }
+        // Use flushSync to ensure user message renders immediately on Wayland
+        flushSync(() => {
+          setMessages(prev => [...prev, { Role: 'user', Content: content } as Message])
+          if (imageDataURLs.length > 0) {
+            setMessageImages(m => new Map(m).set(optimisticIdx, imageDataURLs))
+          }
+          if (fileAttachments.length > 0) {
+            setMessageFiles(m => new Map(m).set(optimisticIdx, fileAttachments))
+          }
+        })
       }
 
       prepareStreaming(convID)

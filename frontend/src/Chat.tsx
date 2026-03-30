@@ -31,6 +31,8 @@ interface ChatProps {
   personas: Persona[]
   activePersonaId: string
   onPersonaChange: (id: string) => void
+  /** Increment to trigger focus on the input textarea. */
+  focusTrigger?: number
 }
 
 /**
@@ -88,6 +90,7 @@ export default function Chat({
   personas,
   activePersonaId,
   onPersonaChange,
+  focusTrigger,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -169,7 +172,16 @@ export default function Chat({
     return () => cancelAnimationFrame(id)
   }, [])
 
-  /** User scrolled away from the tail → stop following. Following only resumes on Send or “jump to bottom”. */
+  /** Focus composer when focusTrigger changes (e.g. new chat clicked). */
+  useEffect(() => {
+    if (focusTrigger === undefined || focusTrigger === 0) return
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [focusTrigger])
+
+  /** User scrolled away from the tail → stop following. Following only resumes on Send or "jump to bottom". */
   useEffect(() => {
     const el = messagesRef.current
     if (!el) return
