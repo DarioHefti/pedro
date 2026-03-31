@@ -18,8 +18,9 @@ func NewSearchTool() *SearchTool { return &SearchTool{} }
 
 func (SearchTool) Definition() Definition {
 	return Definition{
-		Name:        "web_search",
-		Description: "Search the web for current information, news, and facts.",
+		Name:         "web_search",
+		Description:  "Search the web for current information, news, and facts.",
+		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

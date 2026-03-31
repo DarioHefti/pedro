@@ -25,8 +25,9 @@ func NewReadFileTool() *ReadFileTool { return &ReadFileTool{} }
 
 func (ReadFileTool) Definition() Definition {
 	return Definition{
-		Name:        "read_file",
-		Description: "Read a local file in paginated chunks. Always use offset and limit for large files. The response tells you the next offset to use if there is more content. For Excel files, it shows sheet metadata and reads data as CSV format.",
+		Name:         "read_file",
+		Description:  "Read a local file in paginated chunks. Always use offset and limit for large files. The response tells you the next offset to use if there is more content. For Excel files, it shows sheet metadata and reads data as CSV format.",
+		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

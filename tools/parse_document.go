@@ -16,10 +16,9 @@ func NewParseDocumentTool() *ParseDocumentTool { return &ParseDocumentTool{} }
 
 func (ParseDocumentTool) Definition() Definition {
 	return Definition{
-		Name: "parse_document",
-		Description: "Extract human-readable text from a local document (PDF, Excel, Word DOCX, PowerPoint PPTX, ODT, HTML, or plain text). " +
-			"Prefer this over read_file for PDFs and Office files. Output is paginated like read_file (50 KB max per call). " +
-			"For Excel, omit 'sheet' to include all sheets, or set 'sheet' to a specific sheet name.",
+		Name:         "parse_document",
+		Description:  "Extract human-readable text from a local document (PDF, Excel, Word DOCX, PowerPoint PPTX, ODT, HTML, or plain text). Prefer this over read_file for PDFs and Office files. Output is paginated like read_file (50 KB max per call). For Excel, omit 'sheet' to include all sheets, or set 'sheet' to a specific sheet name.",
+		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

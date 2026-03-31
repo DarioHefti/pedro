@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/openai/openai-go"
 	"pedro/shared"
@@ -150,14 +149,16 @@ func StreamingChat(
 			if onToolCall != nil {
 				onToolCall(tc.Function.Name, tc.Function.Arguments)
 			}
-			if tc.Function.Name == "tool_discovery" {
-				maybeUnlockDirectTool(tc.Function.Arguments, registry, unlockedTools)
-			}
 			result := registry.Execute(tc.Function.Name, tc.Function.Arguments)
+
+			if tc.Function.Name == tools.ToolSearchToolName {
+				handleToolSearchResult(result, unlockedTools)
+			}
+
 			apiMessages = append(apiMessages, openai.ToolMessage(result, tc.ID))
 		}
 
-		toolDefs = append([]openai.ChatCompletionToolParam{}, ToolDefinitions(registry)...)
+		toolDefs = ToolDefinitions(registry)
 		if len(unlockedTools) > 0 {
 			names := make([]string, 0, len(unlockedTools))
 			for name := range unlockedTools {
@@ -171,36 +172,25 @@ func StreamingChat(
 	return nil
 }
 
-func maybeUnlockDirectTool(argsJSON string, registry *tools.Registry, unlocked map[string]struct{}) {
-	if registry == nil || unlocked == nil {
-		return
-	}
-	var args struct {
-		Action   string `json:"action"`
+type toolSearchResultJSON struct {
+	ToolReference []struct {
 		ToolName string `json:"tool_name"`
-	}
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+	} `json:"tool_references"`
+}
+
+func handleToolSearchResult(result string, unlocked map[string]struct{}) {
+	if unlocked == nil {
 		return
 	}
-	action := strings.ToLower(strings.TrimSpace(args.Action))
-	if action == "list" {
-		for _, def := range registry.AllDefinitions() {
-			if def.Name == "tool_discovery" {
-				continue
-			}
-			unlocked[def.Name] = struct{}{}
+
+	var parsed toolSearchResultJSON
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		return
+	}
+
+	for _, ref := range parsed.ToolReference {
+		if ref.ToolName != "" {
+			unlocked[ref.ToolName] = struct{}{}
 		}
-		return
 	}
-	if action != "describe" && action != "execute" {
-		return
-	}
-	name := strings.TrimSpace(args.ToolName)
-	if name == "" || name == "tool_discovery" {
-		return
-	}
-	if _, ok := registry.DefinitionByName(name); !ok {
-		return
-	}
-	unlocked[name] = struct{}{}
 }

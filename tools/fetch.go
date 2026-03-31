@@ -59,8 +59,9 @@ func NewFetchURLTool() *FetchURLTool { return &FetchURLTool{} }
 
 func (FetchURLTool) Definition() Definition {
 	return Definition{
-		Name:        "fetch_url",
-		Description: "Fetch and read the text content of a web page as Markdown. Automatically handles JavaScript-rendered pages (e.g. fedlex.admin.ch, SPAs) using a headless browser. Always try this tool first before assuming a page cannot be read. Do not fetch homepages.",
+		Name:         "fetch_url",
+		Description:  "Fetch and read the text content of a web page as Markdown. Automatically handles JavaScript-rendered pages (e.g. fedlex.admin.ch, SPAs) using a headless browser. Always try this tool first before assuming a page cannot be read. Do not fetch homepages.",
+		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

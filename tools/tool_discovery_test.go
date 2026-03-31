@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestNewRegistryExposesOnlyToolDiscoveryDefinition(t *testing.T) {
+func TestNewRegistryExposesToolSearch(t *testing.T) {
 	r := New()
 	defs := r.Definitions()
 	if len(defs) != 1 {
 		t.Fatalf("expected exactly 1 exposed tool, got %d", len(defs))
 	}
-	if defs[0].Name != toolDiscoveryName {
-		t.Fatalf("expected exposed tool %q, got %q", toolDiscoveryName, defs[0].Name)
+	if defs[0].Name != ToolSearchToolName {
+		t.Fatalf("expected exposed tool %q, got %q", ToolSearchToolName, defs[0].Name)
 	}
 
 	all := r.AllDefinitions()

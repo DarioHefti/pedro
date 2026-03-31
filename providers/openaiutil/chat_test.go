@@ -1,7 +1,6 @@
 package openaiutil
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -83,54 +82,50 @@ func TestToolDefinitionsFromRegistry(t *testing.T) {
 	r.Register(tools.NewSearchTool())
 	r.Register(tools.NewFetchURLTool())
 	defs := ToolDefinitions(r)
-	if len(defs) < 2 {
-		t.Fatalf("expected at least 2 tools, got %d", len(defs))
-	}
+
 	seen := map[string]bool{}
 	for _, d := range defs {
 		seen[d.Function.Name] = true
 	}
-	if !seen["web_search"] || !seen["fetch_url"] {
-		t.Fatalf("missing expected tools: %+v", seen)
+
+	if len(seen) != 0 {
+		t.Fatalf("expected no immediate tools (all deferred), got %d: %+v", len(seen), seen)
+	}
+
+	deferred := r.DeferredDefinitions()
+	if len(deferred) < 2 {
+		t.Fatalf("expected at least 2 deferred tools, got %d", len(deferred))
+	}
+	deferredSeen := map[string]bool{}
+	for _, d := range deferred {
+		deferredSeen[d.Name] = true
+	}
+	if !deferredSeen["web_search"] || !deferredSeen["fetch_url"] {
+		t.Fatalf("missing expected deferred tools: %+v", deferredSeen)
 	}
 }
 
-func TestMaybeUnlockDirectTool(t *testing.T) {
-	r := tools.New()
+func TestHandleToolSearchResult(t *testing.T) {
 	unlocked := map[string]struct{}{}
 
-	payload, err := json.Marshal(map[string]any{
-		"action":    "describe",
-		"tool_name": "read_file",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	maybeUnlockDirectTool(string(payload), r, unlocked)
+	result := `{"tool_references":[{"tool_name":"read_file"},{"tool_name":"web_search"}]}`
+	handleToolSearchResult(result, unlocked)
+
 	if _, ok := unlocked["read_file"]; !ok {
-		t.Fatalf("expected read_file to be unlocked, got %+v", unlocked)
+		t.Fatal("expected read_file to be unlocked")
+	}
+	if _, ok := unlocked["web_search"]; !ok {
+		t.Fatal("expected web_search to be unlocked")
 	}
 }
 
-func TestMaybeUnlockDirectToolListUnlocksAll(t *testing.T) {
-	r := tools.New()
+func TestHandleToolSearchResultInvalidJSON(t *testing.T) {
 	unlocked := map[string]struct{}{}
 
-	payload, err := json.Marshal(map[string]any{
-		"action": "list",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	maybeUnlockDirectTool(string(payload), r, unlocked)
+	result := `not json`
+	handleToolSearchResult(result, unlocked)
 
-	if len(unlocked) == 0 {
-		t.Fatal("expected tools to be unlocked after list")
-	}
-	if _, ok := unlocked["show_file_tree"]; !ok {
-		t.Fatalf("expected show_file_tree unlocked, got %+v", unlocked)
-	}
-	if _, ok := unlocked["tool_discovery"]; ok {
-		t.Fatalf("tool_discovery must not be unlocked as a direct tool")
+	if len(unlocked) != 0 {
+		t.Fatalf("expected no tools unlocked for invalid JSON, got %+v", unlocked)
 	}
 }

@@ -23,9 +23,10 @@ var HTTPClient = &http.Client{
 
 // Definition describes a tool's JSON schema in a provider-agnostic way.
 type Definition struct {
-	Name        string
-	Description string
-	Parameters  map[string]any
+	Name         string
+	Description  string
+	Parameters   map[string]any
+	DeferLoading bool // if true, tool is loaded on-demand via tool_search
 }
 
 // Tool is the interface every tool must implement.
@@ -87,14 +88,34 @@ func (r *Registry) Execute(name, argsJSON string) string {
 	return result
 }
 
-// Definitions returns all tool definitions in registration order.
+// Definitions returns all visible (non-deferred) tool definitions in registration order.
 func (r *Registry) Definitions() []Definition {
 	defs := make([]Definition, 0, len(r.order))
 	for _, name := range r.order {
 		if !r.visible[name] {
 			continue
 		}
-		defs = append(defs, r.tools[name].Definition())
+		def := r.tools[name].Definition()
+		if def.DeferLoading {
+			continue
+		}
+		defs = append(defs, def)
+	}
+	return defs
+}
+
+// DeferredDefinitions returns all deferred tool definitions in registration order.
+func (r *Registry) DeferredDefinitions() []Definition {
+	defs := make([]Definition, 0, len(r.order))
+	for _, name := range r.order {
+		if !r.visible[name] {
+			continue
+		}
+		def := r.tools[name].Definition()
+		if !def.DeferLoading {
+			continue
+		}
+		defs = append(defs, def)
 	}
 	return defs
 }
@@ -143,14 +164,27 @@ func (r *Registry) DefinitionsByName(names []string) []Definition {
 }
 
 // New builds and returns a Registry pre-loaded with all available tools.
-// Add or remove Register calls here to enable/disable tools at runtime.
+// Tools are marked as deferred (DeferLoading=true) and loaded on-demand via tool_search.
 func New() *Registry {
 	r := NewRegistry()
-	r.RegisterHidden(NewSearchTool())
-	r.RegisterHidden(NewFetchURLTool())
-	r.RegisterHidden(NewReadFileTool())
-	r.RegisterHidden(NewParseDocumentTool())
-	r.RegisterHidden(NewShowFileTreeTool())
-	r.Register(NewToolDiscoveryTool(r))
+
+	// Tool search is always available immediately (never deferred)
+	r.Register(NewToolSearchTool(r))
+
+	// All other tools are deferred (DeferLoading=true) - they do not appear in
+	// the initial tool list sent to the model, but are discoverable via tool_search
+	// and are appended to the tool list once unlocked.
+	r.Register(NewSearchTool())
+	r.Register(NewFetchURLTool())
+	r.Register(NewReadFileTool())
+	r.Register(NewParseDocumentTool())
+	r.Register(NewShowFileTreeTool())
+	r.Register(NewGlobTool())
+	r.Register(NewGrepTool())
+
+	// tool_discovery is truly hidden: deprecated, not discoverable via tool_search,
+	// but still executable for backward compatibility.
+	r.RegisterHidden(NewToolDiscoveryTool(r))
+
 	return r
 }

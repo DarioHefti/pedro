@@ -24,8 +24,9 @@ func NewShowFileTreeTool() *ShowFileTreeTool { return &ShowFileTreeTool{} }
 
 func (ShowFileTreeTool) Definition() Definition {
 	return Definition{
-		Name:        "show_file_tree",
-		Description: "List files and subfolders under a local directory up to a given depth. Output is paginated (default 500 tree lines per call). If the response says there is more, call again with the same path and depth and the given offset to continue. Use when the user gives a folder path and you need to find a file by name or structure.",
+		Name:         "show_file_tree",
+		Description:  "List files and subfolders under a local directory up to a given depth. Output is paginated (default 500 tree lines per call). If the response says there is more, call again with the same path and depth and the given offset to continue. Use when the user gives a folder path and you need to find a file by name or structure. Common development folders like node_modules, .git, vendor, etc. are ignored by default.",
+		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -45,6 +46,11 @@ func (ShowFileTreeTool) Definition() Definition {
 					"type":        "integer",
 					"description": fmt.Sprintf("Maximum number of tree lines to return this call (default %d, maximum %d).", showTreeDefaultLimit, showTreeMaxLimit),
 				},
+				"ignore": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "List of folder names to skip. Default includes: .git, node_modules, vendor, __pycache__, .next, dist, build, .cache, .svn. Pass empty array to disable ignoring.",
+				},
 			},
 			"required": []string{"path"},
 		},
@@ -53,10 +59,11 @@ func (ShowFileTreeTool) Definition() Definition {
 
 func (ShowFileTreeTool) Execute(argsJSON string) (string, error) {
 	var args struct {
-		Path   string `json:"path"`
-		Depth  int    `json:"depth"`
-		Offset int    `json:"offset"`
-		Limit  int    `json:"limit"`
+		Path   string   `json:"path"`
+		Depth  int      `json:"depth"`
+		Offset int      `json:"offset"`
+		Limit  int      `json:"limit"`
+		Ignore []string `json:"ignore"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
@@ -82,14 +89,26 @@ func (ShowFileTreeTool) Execute(argsJSON string) (string, error) {
 	if limit > showTreeMaxLimit {
 		limit = showTreeMaxLimit
 	}
-	out, err := buildFileTree(args.Path, depth, offset, limit)
+
+	ignoredSet := make(map[string]bool)
+	if len(args.Ignore) == 0 {
+		for k, v := range DefaultIgnoredDirs {
+			ignoredSet[k] = v
+		}
+	} else {
+		for _, name := range args.Ignore {
+			ignoredSet[name] = true
+		}
+	}
+
+	out, err := buildFileTree(args.Path, depth, offset, limit, ignoredSet)
 	if err != nil {
 		return fmt.Sprintf("File tree error: %v", err), nil
 	}
 	return out, nil
 }
 
-func buildFileTree(root string, maxDepth, offset, limit int) (string, error) {
+func buildFileTree(root string, maxDepth, offset, limit int, ignoredSet map[string]bool) (string, error) {
 	absRoot, err := filepath.Abs(filepath.Clean(root))
 	if err != nil {
 		return "", err
@@ -162,6 +181,9 @@ func buildFileTree(root string, maxDepth, offset, limit int) (string, error) {
 		}
 		var names []named
 		for _, e := range entries {
+			if ignoredSet[e.Name()] {
+				continue
+			}
 			names = append(names, named{name: e.Name(), isDir: e.IsDir()})
 		}
 		sort.Slice(names, func(i, j int) bool {
