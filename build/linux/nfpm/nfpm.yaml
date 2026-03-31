@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "pedro-temp"
+name: "pedro"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.1.0"
+version: "1.0.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A pedro-temp application"
-vendor: "My Company"
+description: "Pedro AI Chat"
+vendor: "Pedro Corp"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/pedro-temp"
-    dst: "/usr/local/bin/pedro-temp"
+  - src: "./bin/pedro"
+    dst: "/usr/local/bin/pedro"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/pedro-temp.png"
-  - src: "./build/linux/pedro-temp.desktop"
-    dst: "/usr/share/applications/pedro-temp.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/pedro.png"
+  - src: "./build/linux/pedro.desktop"
+    dst: "/usr/share/applications/pedro.desktop"
 
 # Default dependencies for Debian 12/Ubuntu 22.04+ with WebKit 4.1
 depends:
