@@ -10,11 +10,15 @@ import (
 
 func TestFullSystemPrompt(t *testing.T) {
 	base := "You are a bot."
-	if got := FullSystemPrompt(base, "", ""); got != base {
-		t.Fatalf("empty custom: got %q want %q", got, base)
+	got := FullSystemPrompt(base, "", "")
+	if !strings.HasPrefix(got, base) {
+		t.Fatalf("expected prefix %q, got %q", base, got)
+	}
+	if !strings.Contains(got, "## Current Date/Time") {
+		t.Fatalf("expected datetime section in %q", got)
 	}
 	custom := "Be brief."
-	got := FullSystemPrompt(base, "", custom)
+	got = FullSystemPrompt(base, "", custom)
 	if !strings.HasPrefix(got, base) {
 		t.Fatalf("expected prefix %q", base)
 	}
