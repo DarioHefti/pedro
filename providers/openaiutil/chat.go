@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/openai/openai-go"
 	"pedro/shared"
@@ -14,7 +15,8 @@ import (
 // FullSystemPrompt builds the final system prompt from the base instructions,
 // an optional persona, and optional custom instructions.
 func FullSystemPrompt(base, persona, custom string) string {
-	out := base
+	now := time.Now().UTC().Format("2006-01-02 15:04:05 MST")
+	out := base + "\n\n## Current Date/Time\nCurrent UTC datetime: " + now
 	if persona != "" {
 		out += "\n\n## Persona\nYou MUST adopt the following persona for ALL your responses. " +
 			"This overrides your default tone, style, and personality:\n" + persona
