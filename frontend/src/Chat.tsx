@@ -135,10 +135,22 @@ export default function Chat({
     bottomRef.current?.scrollIntoView({ block: 'end', behavior })
   }, [])
 
-  const focusComposer = useCallback(() => {
-    requestAnimationFrame(() => {
-      inputRef.current?.focus({ preventScroll: true })
-    })
+  /**
+   * Robustly focus the composer textarea. On Windows/Wails the webview performs
+   * its own focus restoration after window-focus events, which can steal focus
+   * back from a single requestAnimationFrame call. We retry a few times over
+   * ~200ms to win the race reliably.
+   */
+  const focusComposer = useCallback((retries = 4) => {
+    const attempt = (remaining: number) => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus({ preventScroll: true })
+      if (remaining <= 0) return
+      if (document.activeElement === el) return
+      setTimeout(() => attempt(remaining - 1), 50)
+    }
+    requestAnimationFrame(() => attempt(retries))
   }, [])
 
   /** Match textarea height to content (min from CSS, max --composer-textarea-max-height). Grows upward; buttons sit outside .composer-input-shell. */
@@ -195,16 +207,41 @@ export default function Chat({
   useEffect(() => {
     if (composerFocusPaused) return
 
+    let recoverTimer: ReturnType<typeof setTimeout> | null = null
+
     const onAppFocus = () => {
       if (document.visibilityState !== 'visible') return
-      focusComposer()
+      focusComposer(6)
     }
+
+    /**
+     * Safety net: if the textarea loses focus and nothing meaningful takes it
+     * (activeElement falls to body/null), reclaim it after a short grace period.
+     * This catches the case where Wails re-steals focus after our initial attempt.
+     */
+    const onBlur = () => {
+      if (recoverTimer) clearTimeout(recoverTimer)
+      recoverTimer = setTimeout(() => {
+        const active = document.activeElement
+        const isIdle =
+          !active || active === document.body || active === document.documentElement
+        if (isIdle && document.visibilityState === 'visible' && !composerFocusPaused) {
+          inputRef.current?.focus({ preventScroll: true })
+        }
+      }, 80)
+    }
+
+    const textarea = inputRef.current
 
     window.addEventListener('focus', onAppFocus)
     document.addEventListener('visibilitychange', onAppFocus)
+    textarea?.addEventListener('blur', onBlur)
+
     return () => {
       window.removeEventListener('focus', onAppFocus)
       document.removeEventListener('visibilitychange', onAppFocus)
+      textarea?.removeEventListener('blur', onBlur)
+      if (recoverTimer) clearTimeout(recoverTimer)
     }
   }, [composerFocusPaused, focusComposer])
 
