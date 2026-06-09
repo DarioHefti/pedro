@@ -37,6 +37,8 @@ interface ChatProps {
   focusTrigger?: number
   /** Current conversation ID to detect conversation switches. */
   currentConvID?: number | null
+  /** When true, skip refocusing the composer on window focus (e.g. settings modal open). */
+  composerFocusPaused?: boolean
 }
 
 /**
@@ -97,6 +99,7 @@ export default function Chat({
   onPersonaChange,
   focusTrigger,
   currentConvID,
+  composerFocusPaused = false,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -130,6 +133,12 @@ export default function Chat({
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior })
+  }, [])
+
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true })
+    })
   }, [])
 
   /** Match textarea height to content (min from CSS, max --composer-textarea-max-height). Grows upward; buttons sit outside .composer-input-shell. */
@@ -173,20 +182,31 @@ export default function Chat({
 
   /** Focus composer on mount so the user can type without clicking (Wails: defer one frame after paint). */
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      inputRef.current?.focus({ preventScroll: true })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [])
+    focusComposer()
+  }, [focusComposer])
 
-  /** Focus composer when focusTrigger changes (e.g. new chat clicked). */
+  /** Focus composer when focusTrigger changes (e.g. new chat or conversation selected). */
   useEffect(() => {
     if (focusTrigger === undefined || focusTrigger === 0) return
-    const id = requestAnimationFrame(() => {
-      inputRef.current?.focus({ preventScroll: true })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [focusTrigger])
+    focusComposer()
+  }, [focusTrigger, focusComposer])
+
+  /** Refocus composer when the app window regains focus (e.g. alt-tab back). */
+  useEffect(() => {
+    if (composerFocusPaused) return
+
+    const onAppFocus = () => {
+      if (document.visibilityState !== 'visible') return
+      focusComposer()
+    }
+
+    window.addEventListener('focus', onAppFocus)
+    document.addEventListener('visibilitychange', onAppFocus)
+    return () => {
+      window.removeEventListener('focus', onAppFocus)
+      document.removeEventListener('visibilitychange', onAppFocus)
+    }
+  }, [composerFocusPaused, focusComposer])
 
   /** Scroll to bottom when switching to a different conversation. */
   useEffect(() => {

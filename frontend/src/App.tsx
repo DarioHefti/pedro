@@ -78,6 +78,7 @@ export default function App() {
   // during send for a new conversation) never race with the optimistic update.
   async function selectConversation(id: number) {
     setCurrentConvID(id)
+    setFocusTrigger(n => n + 1)
     await messaging.load(id)
   }
 
@@ -156,6 +157,7 @@ export default function App() {
         }}
         focusTrigger={focusTrigger}
         currentConvID={currentConvID}
+        composerFocusPaused={settingsOpen}
       />
       {settingsOpen && (
         <SettingsModal
