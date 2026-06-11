@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import Chat from './Chat'
 import SettingsModal from './SettingsModal'
 import Toaster from './components/Toaster'
+import UpdateNotification from './components/UpdateNotification'
 import { useConversations } from './hooks/useConversations'
 import { useMessaging } from './hooks/useMessaging'
 import { useToast } from './context/ToastContext'
@@ -180,6 +181,7 @@ export default function App() {
         />
       )}
       <Toaster />
+      <UpdateNotification />
     </div>
   )
 }

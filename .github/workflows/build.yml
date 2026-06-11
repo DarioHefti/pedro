@@ -25,6 +25,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Patch wails.json version
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $json = Get-Content wails.json | ConvertFrom-Json
+          $json.Info.productVersion = $version
+          $json | ConvertTo-Json -Depth 10 | Set-Content wails.json
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -51,7 +58,7 @@ jobs:
         working-directory: frontend
 
       - name: Build Windows with NSIS Installer
-        run: wails build --platform windows/${{ matrix.arch }} --nsis
+        run: wails build --platform windows/${{ matrix.arch }} --nsis -ldflags "-X main.Version=${{ github.ref_name }}"
         env:
           CGO_ENABLED: 1
         
@@ -81,6 +88,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Patch wails.json version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          jq --arg v "$VERSION" '.Info.productVersion = $v' wails.json > tmp.json && mv tmp.json wails.json
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -102,7 +115,7 @@ jobs:
         working-directory: frontend
 
       - name: Build macOS
-        run: wails build --platform darwin/${{ matrix.arch }}
+        run: wails build --platform darwin/${{ matrix.arch }} -ldflags "-X main.Version=${{ github.ref_name }}"
         env:
           CGO_ENABLED: 1
 
@@ -147,6 +160,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Patch wails.json version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          jq --arg v "$VERSION" '.Info.productVersion = $v' wails.json > tmp.json && mv tmp.json wails.json
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -173,7 +192,7 @@ jobs:
         working-directory: frontend
 
       - name: Build Linux
-        run: wails build --platform linux/${{ matrix.arch }}
+        run: wails build --platform linux/${{ matrix.arch }} -ldflags "-X main.Version=${{ github.ref_name }}"
         env:
           CGO_ENABLED: 1
 

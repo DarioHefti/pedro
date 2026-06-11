@@ -38,6 +38,11 @@ import {
   GetActivePersonaID,
   SetActivePersonaID,
 } from '../../wailsjs/go/main/App'
+import {
+  CheckForUpdate,
+  DownloadAndInstall,
+  GetCurrentVersion,
+} from '../../wailsjs/go/main/Updater'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { main } from '../../wailsjs/go/models'
 
@@ -45,6 +50,7 @@ import { main } from '../../wailsjs/go/models'
 export type Conversation = main.Conversation
 export type Message = main.Message
 export type Persona = main.Persona
+export type UpdateInfo = main.UpdateInfo
 
 function hasWailsBridge(): boolean {
   if (typeof window === 'undefined') return false
@@ -300,6 +306,20 @@ export const fileService = {
   /** Opens with the OS default app (WebView blocks file:// links). */
   openPath: (path: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : OpenPath(path),
+}
+
+// ---------------------------------------------------------------------------
+// Updater service
+// ---------------------------------------------------------------------------
+export const updaterService = {
+  checkForUpdate: (): Promise<main.UpdateInfo> =>
+    useDevStub
+      ? Promise.resolve(new main.UpdateInfo({ available: false, currentVersion: 'dev', latestVersion: 'dev', releaseURL: '', assetName: '', assetURL: '' }))
+      : CheckForUpdate(),
+  downloadAndInstall: (assetURL: string, assetName: string): Promise<void> =>
+    useDevStub ? Promise.resolve() : DownloadAndInstall(assetURL, assetName),
+  getCurrentVersion: (): Promise<string> =>
+    useDevStub ? Promise.resolve('dev') : GetCurrentVersion(),
 }
 
 // ---------------------------------------------------------------------------

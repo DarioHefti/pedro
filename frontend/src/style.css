@@ -2703,3 +2703,99 @@ button.attachment-name.attachment-name--open:focus-visible {
 .sidebar-bulk-delete-btn-confirm:hover:not(:disabled) {
   background: color-mix(in srgb, var(--error) 28%, var(--bg-surface));
 }
+
+/* Update notification banner */
+.update-notification {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated), 0 0 0 1px var(--accent-primary);
+  font-family: var(--font-main);
+  font-size: var(--font-size-ui);
+  color: var(--text-primary);
+  animation: update-slide-in 0.3s var(--ease-out-expo);
+  max-width: 360px;
+}
+
+@keyframes update-slide-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.update-notification-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.update-notification-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.update-btn-primary {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background var(--transition-smooth);
+}
+
+.update-btn-primary:hover {
+  background: var(--btn-primary-hover-bg);
+}
+
+.update-btn-dismiss {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background var(--transition-smooth);
+}
+
+.update-btn-dismiss:hover {
+  background: var(--btn-ghost-hover-bg);
+}
+
+.update-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: update-spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: var(--space-1);
+}
+
+@keyframes update-spin {
+  to { transform: rotate(360deg); }
+}
+
+.update-success {
+  color: var(--success);
+}
+
+.update-error {
+  color: var(--error);
+}

@@ -82,6 +82,10 @@ FunctionEnd
 Section
     !insertmacro wails.setShellContext
 
+    ; Close running Pedro instances before overwriting the binary
+    nsExec::ExecToLog 'taskkill /F /IM ${PRODUCT_EXECUTABLE}'
+    Sleep 1000
+
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
