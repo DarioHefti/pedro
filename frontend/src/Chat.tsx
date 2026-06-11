@@ -139,15 +139,15 @@ export default function Chat({
    * Robustly focus the composer textarea. On Windows/Wails the webview performs
    * its own focus restoration after window-focus events, which can steal focus
    * back from a single requestAnimationFrame call. We retry a few times over
-   * ~200ms to win the race reliably.
+   * ~300ms to win the race reliably. Early-exits once focus is confirmed.
    */
-  const focusComposer = useCallback((retries = 4) => {
+  const focusComposer = useCallback((retries = 6) => {
     const attempt = (remaining: number) => {
       const el = inputRef.current
       if (!el) return
       el.focus({ preventScroll: true })
-      if (remaining <= 0) return
       if (document.activeElement === el) return
+      if (remaining <= 0) return
       setTimeout(() => attempt(remaining - 1), 50)
     }
     requestAnimationFrame(() => attempt(retries))
@@ -192,56 +192,58 @@ export default function Chat({
     }
   }, [])
 
-  /** Focus composer on mount so the user can type without clicking (Wails: defer one frame after paint). */
-  useEffect(() => {
-    focusComposer()
-  }, [focusComposer])
-
   /** Focus composer when focusTrigger changes (e.g. new chat or conversation selected). */
   useEffect(() => {
     if (focusTrigger === undefined || focusTrigger === 0) return
     focusComposer()
   }, [focusTrigger, focusComposer])
 
-  /** Refocus composer when the app window regains focus (e.g. alt-tab back). */
+  /**
+   * Robust composer focus for Wails/WebView2 on Windows.
+   *
+   * In WebView2, JS .focus() is silently ignored until the webview control
+   * itself has received OS-level focus (i.e. the user clicked inside it).
+   * Neither document.hasFocus(), window 'focus' events, nor polling are
+   * reliable for detecting when the webview is ready.
+   *
+   * Strategy:
+   * 1. On any pointerdown that doesn't target an interactive element,
+   *    redirect focus to the textarea. This handles first click after launch
+   *    AND clicking back into the app from another window.
+   * 2. On window 'focus' event (alt-tab back without clicking), try focusing.
+   * 3. On mount, try immediately in case focus is already available.
+   */
   useEffect(() => {
     if (composerFocusPaused) return
 
-    let recoverTimer: ReturnType<typeof setTimeout> | null = null
+    const INTERACTIVE = 'input, textarea, select, button, a, [contenteditable], [tabindex]'
 
-    const onAppFocus = () => {
-      if (document.visibilityState !== 'visible') return
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest(INTERACTIVE)) return
+      setTimeout(() => {
+        inputRef.current?.focus({ preventScroll: true })
+      }, 0)
+    }
+
+    const onWindowFocus = () => {
       focusComposer(6)
     }
 
-    /**
-     * Safety net: if the textarea loses focus and nothing meaningful takes it
-     * (activeElement falls to body/null), reclaim it after a short grace period.
-     * This catches the case where Wails re-steals focus after our initial attempt.
-     */
-    const onBlur = () => {
-      if (recoverTimer) clearTimeout(recoverTimer)
-      recoverTimer = setTimeout(() => {
-        const active = document.activeElement
-        const isIdle =
-          !active || active === document.body || active === document.documentElement
-        if (isIdle && document.visibilityState === 'visible' && !composerFocusPaused) {
-          inputRef.current?.focus({ preventScroll: true })
-        }
-      }, 80)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') focusComposer(6)
     }
 
-    const textarea = inputRef.current
+    document.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('focus', onWindowFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
-    window.addEventListener('focus', onAppFocus)
-    document.addEventListener('visibilitychange', onAppFocus)
-    textarea?.addEventListener('blur', onBlur)
+    focusComposer(10)
 
     return () => {
-      window.removeEventListener('focus', onAppFocus)
-      document.removeEventListener('visibilitychange', onAppFocus)
-      textarea?.removeEventListener('blur', onBlur)
-      if (recoverTimer) clearTimeout(recoverTimer)
+      document.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('focus', onWindowFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [composerFocusPaused, focusComposer])
 
