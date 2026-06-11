@@ -25,8 +25,31 @@ A desktop app for chatting with Azure AI models. It stores your conversations lo
 
 ## Development
 
+Prerequisites: Go 1.25+, Node 20+, and the Wails CLI.
+
 ```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
 wails dev
+```
+
+Frontend is also served here by default: http://localhost:5173/
+
+### macOS prerequisites
+
+Install Xcode Command Line Tools (required for CGO / Wails):
+
+```bash
+xcode-select --install
+```
+
+### Windows prerequisites
+
+No extra system dependencies needed beyond Go, Node, and the Wails CLI.
+
+### Linux prerequisites
+
+```bash
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev build-essential pkg-config
 ```
 
 ## Build
@@ -35,36 +58,64 @@ wails dev
 wails build
 ```
 
-frontend is also served here by default:
-http://localhost:5173/
+## Create a release
 
-# Create a release
+```bash
 git tag v1.0.0
 git push origin v1.0.0
+```
 
 ## Why "Pedro"?
 
 We didn't name it. The logs just started calling it that and we were too afraid to ask.
 
+---
 
-# Problems on windows (windows defender issues)
-the installer is not signed, so you need to do the following to allow it.
-right click on the installer, then click "unblock", apply, save.
+## Platform-specific notes
 
-then open powershell as admin and run this (you will need to set the actual path)
+### macOS — Gatekeeper (unsigned app)
 
-```ps
-Add-MpPreference -AttackSurfaceReductionOnlyExclusions "PATH TO INSTALLER \Pedro-windows-amd64-installer.exe"
+The app is not code-signed or notarized, so macOS Gatekeeper will block it on first launch.
+
+**Option A — Right-click → Open:**
+Right-click (or Control-click) on `Pedro.app`, select **Open**, then click **Open** in the dialog. You only need to do this once.
+
+**Option B — Remove the quarantine attribute:**
+
+```bash
+xattr -cr /path/to/Pedro.app
 ```
 
-then run this (if you use the standard installation path, otherwise set your path).
+**Data location:** `~/Library/Application Support/Pedro/pedro.db`
+
+### Windows — Windows Defender issues
+
+The installer is not signed, so you need to do the following to allow it.
+Right-click on the installer, then click "unblock", apply, save.
+
+Then open PowerShell as admin and run this (set the actual path):
+
+```ps
+Add-MpPreference -AttackSurfaceReductionOnlyExclusions "PATH TO INSTALLER\Pedro-windows-amd64-installer.exe"
+```
+
+Then run this (if you use the standard installation path, otherwise set your path):
 
 ```ps
 Add-MpPreference -AttackSurfaceReductionOnlyExclusions "C:\Program Files\Pedro Corp\Pedro\pedro.exe"
 ```
 
-then double click the installer and it should finally work.
+Then double-click the installer and it should finally work.
 
-# Login with Azure Entra Id
-For this to work when you create the azure openai service you will need to add RBAC roles to the services in IAM.
+**Data location:** `%AppData%\Pedro\pedro.db`
+
+### Linux
+
+**Data location:** `~/.config/Pedro/pedro.db`
+
+---
+
+## Login with Azure Entra ID
+
+For this to work when you create the Azure OpenAI service you will need to add RBAC roles to the services in IAM.
 All the users need this role "Cognitive Services OpenAI User".

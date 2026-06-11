@@ -27,6 +27,5 @@ go.work
 .DS_Store
 Thumbs.db
 
-# Wails
-wails.json can be re-generated
-nul
+# Wails build cache
+.task/
