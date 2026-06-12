@@ -218,9 +218,11 @@ export default function Chat({
 
     const INTERACTIVE = 'input, textarea, select, button, a, [contenteditable], [tabindex]'
 
-    const onPointerDown = (e: PointerEvent) => {
+    const onPointerUp = (e: PointerEvent) => {
       const target = e.target as HTMLElement
       if (target.closest(INTERACTIVE)) return
+      const selection = window.getSelection()
+      if (selection && selection.toString().length > 0) return
       setTimeout(() => {
         inputRef.current?.focus({ preventScroll: true })
       }, 0)
@@ -234,14 +236,14 @@ export default function Chat({
       if (document.visibilityState === 'visible') focusComposer(6)
     }
 
-    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('pointerup', onPointerUp)
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
     focusComposer(10)
 
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
