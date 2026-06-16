@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
@@ -136,12 +135,11 @@ func (u *Updater) DownloadAndInstall(assetURL, assetName string) error {
 		return fmt.Errorf("install failed: %w", err)
 	}
 
-	u.logUpdate("Install successful")
+	u.logUpdate("Install launched")
 	runtime.EventsEmit(u.ctx, "update_progress", 100, "done")
 
-	// On Windows the NSIS installer kills the running process via taskkill,
-	// but we also quit gracefully here so the user sees a clean shutdown.
-	if goruntime.GOOS == "windows" {
+	// Deferred install scripts wait for Pedro to exit before replacing files.
+	if goruntime.GOOS == "windows" || goruntime.GOOS == "darwin" || goruntime.GOOS == "linux" {
 		runtime.Quit(u.ctx)
 	}
 
@@ -226,12 +224,19 @@ func pickAsset(assets []githubAsset) *githubAsset {
 }
 
 func downloadFile(ctx context.Context, url, dest string) error {
+	if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale download: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
+	req.Header.Set("User-Agent", "Pedro-Updater/"+Version)
+	req.Header.Set("Accept", "application/octet-stream")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -247,35 +252,17 @@ func downloadFile(ctx context.Context, url, dest string) error {
 	}
 	defer f.Close()
 
-	_, err = io.Copy(f, resp.Body)
-	return err
-}
-
-func launchInstaller(path string) error {
-	switch goruntime.GOOS {
-	case "windows":
-		cmd := exec.Command(path)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Start()
-	case "darwin":
-		if strings.HasSuffix(path, ".dmg") {
-			return exec.Command("open", path).Start()
-		}
-		return exec.Command("open", path).Start()
-	case "linux":
-		if err := os.Chmod(path, 0755); err != nil {
-			return err
-		}
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		// Replace current binary
-		return os.Rename(path, exe)
-	default:
-		return fmt.Errorf("unsupported OS: %s", goruntime.GOOS)
+	written, err := io.Copy(f, resp.Body)
+	if err != nil {
+		_ = os.Remove(dest)
+		return err
 	}
+	if written == 0 {
+		_ = os.Remove(dest)
+		return fmt.Errorf("download returned empty file")
+	}
+
+	return nil
 }
 
 // isNewerVersion returns true if latest > current (simple semver comparison).

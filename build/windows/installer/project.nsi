@@ -73,22 +73,34 @@ ManifestDPIAware true
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+
+   ; Reuse the previous install location when upgrading.
+   SetRegView 64
+   ReadRegStr $R0 HKLM "${UNINST_KEY}" "InstallLocation"
+   StrCmp $R0 "" +2 0
+     StrCpy $INSTDIR $R0
 FunctionEnd
 
 Section
     !insertmacro wails.setShellContext
 
-    ; Close running Pedro instances before overwriting the binary
-    nsExec::ExecToLog 'taskkill /F /IM ${PRODUCT_EXECUTABLE}'
-    Sleep 1000
+    ; Close running Pedro instances (and child processes) before overwriting files.
+    nsExec::ExecToLog 'taskkill /F /T /IM ${PRODUCT_EXECUTABLE}'
+    Sleep 1500
+    nsExec::ExecToLog 'taskkill /F /T /IM ${PRODUCT_EXECUTABLE}'
+    Sleep 500
 
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
+
+    ; Remove stale binary so overwrite succeeds even if the file was briefly locked.
+    Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     !insertmacro wails.files
 
@@ -99,6 +111,10 @@ Section
     !insertmacro wails.associateCustomProtocols
 
     !insertmacro wails.writeUninstaller
+
+    ; Persist install location for future upgrades and silent in-app updates.
+    SetRegView 64
+    WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
 SectionEnd
 
 Section "uninstall"
