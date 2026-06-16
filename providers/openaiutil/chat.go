@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	goruntime "runtime"
 	"sort"
 	"time"
 
@@ -12,11 +13,40 @@ import (
 	"pedro/tools"
 )
 
+func userFacingOSName() string {
+	switch goruntime.GOOS {
+	case "darwin":
+		return "macOS"
+	case "windows":
+		return "Windows"
+	case "linux":
+		return "Linux"
+	default:
+		return goruntime.GOOS
+	}
+}
+
+func userFacingShellHint() string {
+	switch goruntime.GOOS {
+	case "windows":
+		return "PowerShell (not bash)"
+	default:
+		return "bash or zsh"
+	}
+}
+
 // FullSystemPrompt builds the final system prompt from the base instructions,
 // an optional persona, and optional custom instructions.
 func FullSystemPrompt(base, persona, custom string) string {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05 MST")
 	out := base + "\n\n## Current Date/Time\nCurrent UTC datetime: " + now
+	out += fmt.Sprintf(
+		"\n\n## Operating System\nThe user is running Pedro on %s (%s/%s). When suggesting terminal commands, file paths, keyboard shortcuts, or other OS-specific steps, use conventions appropriate for this operating system. Default shell: %s.",
+		userFacingOSName(),
+		goruntime.GOOS,
+		goruntime.GOARCH,
+		userFacingShellHint(),
+	)
 	if persona != "" {
 		out += "\n\n## Persona\nYou MUST adopt the following persona for ALL your responses. " +
 			"This overrides your default tone, style, and personality:\n" + persona

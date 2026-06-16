@@ -17,6 +17,9 @@ func TestFullSystemPrompt(t *testing.T) {
 	if !strings.Contains(got, "## Current Date/Time") {
 		t.Fatalf("expected datetime section in %q", got)
 	}
+	if !strings.Contains(got, "## Operating System") {
+		t.Fatalf("expected operating system section in %q", got)
+	}
 	custom := "Be brief."
 	got = FullSystemPrompt(base, "", custom)
 	if !strings.HasPrefix(got, base) {
