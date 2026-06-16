@@ -81,28 +81,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class UpdateInfo {
-	    available: boolean;
-	    currentVersion: string;
-	    latestVersion: string;
-	    releaseURL: string;
-	    assetName: string;
-	    assetURL: string;
-
-	    static createFrom(source: any = {}) {
-	        return new UpdateInfo(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.available = source["available"];
-	        this.currentVersion = source["currentVersion"];
-	        this.latestVersion = source["latestVersion"];
-	        this.releaseURL = source["releaseURL"];
-	        this.assetName = source["assetName"];
-	        this.assetURL = source["assetURL"];
-	    }
-	}
 	export class Persona {
 	    ID: number;
 	    Name: string;
@@ -142,6 +120,28 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class UpdateInfo {
+	    available: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseURL: string;
+	    assetName: string;
+	    assetURL: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseURL = source["releaseURL"];
+	        this.assetName = source["assetName"];
+	        this.assetURL = source["assetURL"];
+	    }
 	}
 
 }

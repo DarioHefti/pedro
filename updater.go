@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -60,13 +61,17 @@ func (u *Updater) GetCurrentVersion() string {
 }
 
 func (u *Updater) CheckForUpdate() (*UpdateInfo, error) {
+	u.logUpdate("Checking for updates...")
 	release, err := fetchLatestRelease()
 	if err != nil {
+		u.logUpdate(fmt.Sprintf("Failed to check for updates: %v", err))
 		return nil, fmt.Errorf("failed to check for updates: %w", err)
 	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
 	currentVersion := strings.TrimPrefix(Version, "v")
+
+	u.logUpdate(fmt.Sprintf("Current version: %s, Latest version: %s", currentVersion, latestVersion))
 
 	info := &UpdateInfo{
 		CurrentVersion: currentVersion,
@@ -75,15 +80,18 @@ func (u *Updater) CheckForUpdate() (*UpdateInfo, error) {
 	}
 
 	if !isNewerVersion(currentVersion, latestVersion) {
+		u.logUpdate("No newer version available")
 		info.Available = false
 		return info, nil
 	}
 
 	asset := pickAsset(release.Assets)
 	if asset == nil {
+		u.logUpdate("No compatible asset found")
 		return nil, fmt.Errorf("no compatible asset found for %s/%s", goruntime.GOOS, goruntime.GOARCH)
 	}
 
+	u.logUpdate(fmt.Sprintf("Update available! Asset: %s", asset.Name))
 	info.Available = true
 	info.AssetName = asset.Name
 	info.AssetURL = asset.BrowserDownloadURL
@@ -105,23 +113,30 @@ func (u *Updater) DownloadAndInstall(assetURL, assetName string) error {
 		u.mu.Unlock()
 	}()
 
+	u.logUpdate("Starting download and install process")
 	tmpDir := os.TempDir()
 	destPath := filepath.Join(tmpDir, assetName)
 
+	u.logUpdate(fmt.Sprintf("Downloading from: %s", assetURL))
 	runtime.EventsEmit(u.ctx, "update_progress", 0, "downloading")
 
 	if err := downloadFile(u.ctx, assetURL, destPath); err != nil {
+		u.logUpdate(fmt.Sprintf("Download failed: %v", err))
 		runtime.EventsEmit(u.ctx, "update_progress", -1, "error")
 		return fmt.Errorf("download failed: %w", err)
 	}
 
+	u.logUpdate("Download successful")
 	runtime.EventsEmit(u.ctx, "update_progress", 100, "installing")
 
+	u.logUpdate(fmt.Sprintf("Launching installer: %s", destPath))
 	if err := launchInstaller(destPath); err != nil {
+		u.logUpdate(fmt.Sprintf("Install failed: %v", err))
 		runtime.EventsEmit(u.ctx, "update_progress", -1, "error")
 		return fmt.Errorf("install failed: %w", err)
 	}
 
+	u.logUpdate("Install successful")
 	runtime.EventsEmit(u.ctx, "update_progress", 100, "done")
 
 	// On Windows the NSIS installer kills the running process via taskkill,
@@ -135,8 +150,10 @@ func (u *Updater) DownloadAndInstall(assetURL, assetName string) error {
 
 func fetchLatestRelease() (*githubRelease, error) {
 	url := "https://api.github.com/repos/DarioHefti/pedro/releases/latest"
+	logUpdate(fmt.Sprintf("Fetching latest release from: %s", url))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		logUpdate(fmt.Sprintf("Failed to create request: %v", err))
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
@@ -144,16 +161,19 @@ func fetchLatestRelease() (*githubRelease, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		logUpdate(fmt.Sprintf("HTTP request failed: %v", err))
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logUpdate(fmt.Sprintf("GitHub API returned status %d", resp.StatusCode))
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
 	var release githubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		logUpdate(fmt.Sprintf("Failed to decode GitHub release JSON: %v", err))
 		return nil, err
 	}
 	return &release, nil
@@ -163,6 +183,7 @@ func pickAsset(assets []githubAsset) *githubAsset {
 	os := goruntime.GOOS
 	arch := goruntime.GOARCH
 
+	logUpdate(fmt.Sprintf("Picking asset for OS: %s, Arch: %s", os, arch))
 	var preferred, fallback *githubAsset
 	for i := range assets {
 		name := strings.ToLower(assets[i].Name)
@@ -192,9 +213,16 @@ func pickAsset(assets []githubAsset) *githubAsset {
 	}
 
 	if preferred != nil {
+		logUpdate(fmt.Sprintf("Selected preferred asset: %s", preferred.Name))
 		return preferred
 	}
-	return fallback
+	if fallback != nil {
+		logUpdate(fmt.Sprintf("Selected fallback asset: %s", fallback.Name))
+		return fallback
+	}
+
+	logUpdate("No compatible asset found")
+	return nil
 }
 
 func downloadFile(ctx context.Context, url, dest string) error {
@@ -270,13 +298,33 @@ func isNewerVersion(current, latest string) bool {
 	return false
 }
 
-func parseSemver(v string) [3]int {
+func logUpdate(message string) {
+	f, err := os.OpenFile("updater.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	timestamp := time.Now().Format(time.RFC3339)
+	fmt.Fprintf(f, "[%s] %s\n", timestamp, message)
+}
+
+func (u *Updater) logUpdate(message string) {
+	logUpdate(message)
+}
+
+func parseSemver(v string) []int {
 	v = strings.TrimPrefix(v, "v")
-	parts := strings.SplitN(v, ".", 3)
-	var result [3]int
-	for i := 0; i < 3 && i < len(parts); i++ {
-		n, _ := strconv.Atoi(strings.Split(parts[i], "-")[0])
-		result[i] = n
+	parts := strings.Split(v, ".")
+	var result []int
+	for _, part := range parts {
+		if i, err := strconv.Atoi(part); err == nil {
+			result = append(result, i)
+		} else {
+			result = append(result, 0)
+		}
+	}
+	for len(result) < 3 {
+		result = append(result, 0)
 	}
 	return result
 }
