@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Shared tokens */
 :root {
   --radius-sm: 4px;
@@ -120,6 +124,16 @@
   --glow-accent: none;
   --glow-accent-tight: none;
   --main-ring: transparent;
+
+  /* Streamdown / shadcn tokens */
+  --background: var(--bg-chat-ai);
+  --foreground: var(--text-primary);
+  --muted: var(--code-bg);
+  --muted-foreground: var(--text-secondary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--btn-primary-text);
+  --sidebar: var(--code-header-bg);
+  --radius: var(--radius-md);
 }
 
 /* Light — shades of #242f62 */
@@ -167,6 +181,16 @@
   --glow-accent: none;
   --glow-accent-tight: none;
   --main-ring: transparent;
+
+  /* Streamdown / shadcn tokens */
+  --background: var(--bg-chat-ai);
+  --foreground: var(--text-primary);
+  --muted: var(--code-bg);
+  --muted-foreground: var(--text-secondary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--btn-primary-text);
+  --sidebar: var(--code-header-bg);
+  --radius: var(--radius-md);
 }
 
 /* ===== Base ===== */
@@ -1926,7 +1950,71 @@ body {
   margin: 1em 0;
 }
 
-/* ===== Code Blocks ===== */
+/* Streamdown — match compact chat typography */
+.markdown-content [data-streamdown="heading-1"] {
+  font-size: 1.5em;
+  margin: 0.3em 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2em;
+  color: var(--text-primary);
+}
+
+.markdown-content [data-streamdown="heading-2"] {
+  font-size: 1.3em;
+  margin: 0.3em 0;
+  color: var(--text-primary);
+}
+
+.markdown-content [data-streamdown="heading-3"] {
+  font-size: 1.1em;
+  margin: 0.3em 0;
+  color: var(--text-primary);
+}
+
+.markdown-content [data-streamdown="heading-4"],
+.markdown-content [data-streamdown="heading-5"],
+.markdown-content [data-streamdown="heading-6"] {
+  margin: 0.3em 0;
+  color: var(--text-primary);
+}
+
+.markdown-content [data-streamdown="ordered-list"],
+.markdown-content [data-streamdown="unordered-list"] {
+  margin: 0.5em 0;
+}
+
+.markdown-content [data-streamdown="list-item"] {
+  margin: 0.25em 0;
+  color: var(--text-primary);
+}
+
+.markdown-content [data-streamdown="link"] {
+  color: var(--accent-primary);
+}
+
+.markdown-content [data-streamdown="blockquote"] {
+  border-left-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.markdown-content [data-streamdown="inline-code"].local-path-link {
+  cursor: pointer;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-content [data-streamdown="inline-code"].local-path-link:hover {
+  color: var(--accent-secondary);
+}
+
+.markdown-content .message-image {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}
+
+/* ===== Code Blocks (legacy — kept for any non-streamdown usage) ===== */
 .markdown-content > pre {
   display: block;
   width: 100%;

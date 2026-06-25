@@ -8,17 +8,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "highlight.js": "^11.11.1",
-    "mermaid": "^11.13.0",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/mermaid": "^1.0.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "streamdown": "^2.5.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "vite": "^4.0.0"
   }

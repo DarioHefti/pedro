@@ -1,69 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useRef, memo, useMemo, useCallback } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import hljs from 'highlight.js'
-import mermaid from 'mermaid'
+import { useState, useMemo, useCallback, memo } from 'react'
+import { Streamdown } from 'streamdown'
+import { code } from '@streamdown/code'
+import { mermaid } from '@streamdown/mermaid'
 import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 import { useTheme } from './ThemeContext'
 import { fileService, isWailsDevStub } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
-
-// Memoized component to prevent re-renders from destroying the SVG
-const MermaidDiagram = memo(function MermaidDiagram({ code, theme }: { code: string; theme: string }) {
-  const [svg, setSvg] = useState<string | null>(null)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const renderDiagram = async () => {
-      try {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: theme === 'dark' ? 'dark' : 'default',
-        })
-        const result = await mermaid.render(
-          `mermaid-${Date.now()}`,
-          code,
-        )
-        if (!cancelled) {
-          setSvg(result.svg)
-          setError(false)
-        }
-      } catch (err) {
-        console.error('[Mermaid render error]', err)
-        if (!cancelled) {
-          setError(true)
-        }
-      }
-    }
-
-    // Small delay for Wails WebView
-    const timer = setTimeout(renderDiagram, 50)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [code, theme])
-
-  if (svg) {
-    return (
-      <div 
-        className="mermaid-diagram" 
-        dangerouslySetInnerHTML={{ __html: svg }} 
-      />
-    )
-  }
-
-  return (
-    <div className="mermaid-diagram">
-      <pre style={{ margin: 0 }}><code>{code}</code></pre>
-    </div>
-  )
-}, (prevProps, nextProps) => {
-  // Only re-render if code or theme changes
-  return prevProps.code === nextProps.code && prevProps.theme === nextProps.theme
-})
 
 interface MessageRendererProps {
   content: string
@@ -71,7 +13,9 @@ interface MessageRendererProps {
   isStreaming?: boolean
 }
 
-export default function MessageRenderer({
+const streamdownPlugins = { code, mermaid }
+
+function MessageRenderer({
   content,
   role,
   isStreaming = false,
@@ -79,163 +23,114 @@ export default function MessageRenderer({
   const { theme } = useTheme()
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxImage, setLightboxImage] = useState('')
-  const codeRefs = useRef<HTMLElement[]>([])
-
-  // Initialize mermaid once on mount.
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: theme === 'dark' ? 'dark' : 'default',
-    })
-  }, [])
-
-  // Keep Mermaid theme in sync with the app theme.
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: theme === 'dark' ? 'dark' : 'default',
-    })
-  }, [theme])
-
-  // Run syntax highlighting after render.
-  useLayoutEffect(() => {
-    // Skip while streaming to avoid issues with incomplete content
-    if (isStreaming) return
-
-    // Syntax highlighting
-    codeRefs.current.forEach(el => {
-      if (el) hljs.highlightElement(el)
-    })
-
-    // Reset refs after processing for next render
-    return () => {
-      codeRefs.current = []
-    }
-  }, [content, isStreaming])
 
   const isArtifact =
     content.trim().startsWith('<!DOCTYPE html>') ||
     content.trim().startsWith('<html') ||
     (content.includes('<script>') && content.includes('</html>'))
 
-  const copyCode = useCallback((code: string) => navigator.clipboard.writeText(code), [])
+  const mermaidOptions = useMemo(
+    () => ({
+      config: {
+        theme: (theme === 'dark' ? 'dark' : 'default') as 'dark' | 'default',
+      },
+    }),
+    [theme],
+  )
 
-  const components = useMemo(() => ({
-    code({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string }) {
-      const match = /language-(\w+)/.exec(className || '')
-      const codeText = String(children).replace(/\n$/, '')
-      const isMermaid = match?.[1] === 'mermaid'
+  const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href?: string) => {
+    if (href && !isWailsDevStub) {
+      e.preventDefault()
+      BrowserOpenURL(href)
+    }
+  }, [])
 
-      if (isMermaid) {
-        if (isStreaming) {
-          return (
-            <pre className="mermaid-diagram">
-              <code>{codeText}</code>
-            </pre>
-          )
-        }
-        return <MermaidDiagram code={codeText} theme={theme} />
-      }
-
-      if (match) {
-        return (
-          <div className="code-block">
-            <div className="code-header">
-              <span className="code-language">{match[1]}</span>
-              <button className="copy-code-btn" onClick={() => copyCode(codeText)}>
-                Copy
-              </button>
-            </div>
-            <pre>
-              <code
-                ref={el => { if (el) codeRefs.current.push(el) }}
-                className={`hljs language-${match[1]}`}
-                {...props}
-              >
-                {children}
-              </code>
-            </pre>
-          </div>
-        )
-      }
-
-      const inline = String(children).replace(/\n$/, '')
-      if (looksLikeLocalFilesystemPath(inline)) {
+  const components = useMemo(
+    () => ({
+      a({ href, children, className, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
         return (
           <a
-            href="#"
-            className="inline-code local-path-link"
-            title="Open file or folder"
-            onClick={e => {
-              e.preventDefault()
-              void fileService.openPath(inline).then(err => {
-                if (err) {
-                  console.warn('[OpenPath]', err)
-                }
-              })
-            }}
+            href={href}
+            className={className}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => handleLinkClick(e, href)}
+            {...props}
           >
             {children}
           </a>
         )
-      }
-
-      return (
-        <code className="inline-code" {...props}>
-          {children}
-        </code>
-      )
-    },
-    img({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement>) {
-      if (src?.startsWith('data:image')) {
+      },
+      img({ src, alt, className, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
+        if (src?.startsWith('data:image')) {
+          return (
+            <img
+              src={src}
+              alt={alt ?? 'Image'}
+              className={`message-image ${className ?? ''}`.trim()}
+              onClick={() => {
+                setLightboxImage(src)
+                setLightboxOpen(true)
+              }}
+              {...props}
+            />
+          )
+        }
         return (
           <img
             src={src}
             alt={alt ?? 'Image'}
-            className="message-image"
-            onClick={() => {
-              setLightboxImage(src)
-              setLightboxOpen(true)
-            }}
+            className={`message-image ${className ?? ''}`.trim()}
+            {...props}
           />
         )
-      }
-      return <img src={src} alt={alt ?? 'Image'} className="message-image" />
-    },
-    a({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
-      const handleClick = (e: React.MouseEvent) => {
-        if (href && !isWailsDevStub) {
-          e.preventDefault()
-          BrowserOpenURL(href)
+      },
+      inlineCode({ children, className, ...props }: React.HTMLAttributes<HTMLElement>) {
+        const inline = String(children).replace(/\n$/, '')
+        if (looksLikeLocalFilesystemPath(inline)) {
+          return (
+            <code
+              className={`local-path-link ${className ?? ''}`.trim()}
+              title="Open file or folder"
+              onClick={e => {
+                e.preventDefault()
+                void fileService.openPath(inline).then(err => {
+                  if (err) {
+                    console.warn('[OpenPath]', err)
+                  }
+                })
+              }}
+              {...props}
+            >
+              {children}
+            </code>
+          )
         }
-        // In dev stub mode, let the browser handle it normally
-      }
-      return (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleClick}
-        >
-          {children}
-        </a>
-      )
-    },
-  }), [theme, isStreaming, copyCode])
+        return (
+          <code className={className} {...props}>
+            {children}
+          </code>
+        )
+      },
+    }),
+    [handleLinkClick],
+  )
 
-  if (isStreaming) {
-    return (
-      <div className="message-container">
-        <div className="message-body-wrap">
-          <div className="markdown-content">
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
-              {content}
-            </pre>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const renderMarkdown = () => (
+    <Streamdown
+      className="markdown-content"
+      mode={isStreaming ? 'streaming' : 'static'}
+      isAnimating={isStreaming}
+      parseIncompleteMarkdown={isStreaming}
+      plugins={streamdownPlugins}
+      mermaid={mermaidOptions}
+      shikiTheme={['github-light', 'github-dark']}
+      lineNumbers={false}
+      components={components}
+    >
+      {content}
+    </Streamdown>
+  )
 
   const renderContent = () => {
     if (isArtifact && role === 'assistant') {
@@ -250,20 +145,20 @@ export default function MessageRenderer({
       )
     }
 
-    return (
-      <div className="markdown-content">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components as any}>
-          {content}
-        </ReactMarkdown>
-      </div>
-    )
+    return renderMarkdown()
   }
 
   return (
     <>
       <div className="message-container">
         <div className="message-body-wrap">
-          {content ? renderContent() : <div className="markdown-content"><em>(empty message)</em></div>}
+          {content ? (
+            renderContent()
+          ) : (
+            <div className="markdown-content">
+              <em>(empty message)</em>
+            </div>
+          )}
         </div>
       </div>
 
@@ -275,3 +170,5 @@ export default function MessageRenderer({
     </>
   )
 }
+
+export default memo(MessageRenderer)

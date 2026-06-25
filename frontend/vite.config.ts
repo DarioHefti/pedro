@@ -9,8 +9,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
-          'highlight': ['highlight.js'],
-          'mermaid': ['mermaid'],
+          'streamdown': ['streamdown', '@streamdown/code', '@streamdown/mermaid'],
         },
       },
     },
