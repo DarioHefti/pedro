@@ -376,6 +376,61 @@ This shows the key derivation and encryption flow.` } as Message,
     }
   }, [])
 
+  const resendMessage = useCallback(
+    async (index: number, selectedPersonaId: string): Promise<void> => {
+      const convID = currentConvID
+      if (!convID || uiConversationService.isVirtualConversation(convID)) return
+      const msg = messages[index]
+      if (msg?.Role !== 'user') return
+
+      if (currentConvIDRef.current === convID) {
+        setMessages(prev => prev.slice(0, index + 1))
+        setMessageImages(prev => truncateMapAfterIndex(prev, index))
+        setMessageFiles(prev => truncateMapAfterIndex(prev, index))
+        setMessageToolCalls(prev => truncateMapAfterIndex(prev, index))
+      }
+
+      prepareStreaming(convID)
+      let streamClosed = false
+
+      try {
+        const response = await messageService.resend(convID, index, selectedPersonaId)
+        if (currentConvIDRef.current === convID) {
+          if (response?.startsWith('Error:')) {
+            showError(response)
+            ++msgSeqRef.current
+            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
+            const { images, files } = buildAttachmentMaps(dbMsgs)
+            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
+            setMessageImages(images)
+            setMessageFiles(files)
+            setMessageToolCalls(toolCallsByMessageIndex)
+            setMessages(dbMsgs)
+          } else {
+            cleanupStreaming(convID)
+            streamClosed = true
+            ++msgSeqRef.current
+            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
+            const { images, files } = buildAttachmentMaps(dbMsgs)
+            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
+            setMessageImages(images)
+            setMessageFiles(files)
+            setMessageToolCalls(toolCallsByMessageIndex)
+            setMessages(dbMsgs)
+          }
+        } else if (!response?.startsWith('Error:')) {
+          await refreshConversations()
+        }
+      } finally {
+        if (!streamClosed) cleanupStreaming(convID)
+      }
+
+      await refreshConversations()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, currentConvID, showError, refreshConversations],
+  )
+
   const deleteMessage = useCallback(
     async (index: number): Promise<void> => {
       const convID = currentConvID
@@ -430,6 +485,7 @@ This shows the key derivation and encryption flow.` } as Message,
     regenerate,
     stop,
     deleteMessage,
+    resendMessage,
   }
 }
 
@@ -524,6 +580,14 @@ function buildToolCallMaps(msgs: Message[]): Map<number, ToolCall[]> {
     }
   })
 
+  return out
+}
+
+function truncateMapAfterIndex<T>(input: Map<number, T>, maxIndex: number): Map<number, T> {
+  const out = new Map<number, T>()
+  for (const [idx, value] of input.entries()) {
+    if (idx <= maxIndex) out.set(idx, value)
+  }
   return out
 }
 

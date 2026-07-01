@@ -70,6 +70,10 @@ export function RegenerateMessage(arg1, arg2, arg3) {
   return window['go']['main']['App']['RegenerateMessage'](arg1, arg2, arg3);
 }
 
+export function ResendMessage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResendMessage'](arg1, arg2, arg3);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }

@@ -143,6 +143,9 @@ export default function App() {
           void messaging.regenerate(index, selectedPersonaId)
         }
         onDeleteMessage={(index) => void messaging.deleteMessage(index)}
+        onResendMessage={(index, selectedPersonaId) =>
+          void messaging.resendMessage(index, selectedPersonaId)
+        }
         onSelectFile={fileService.selectFile}
         onSelectFolder={fileService.selectFolder}
         welcomeMessage={welcomeMessage}

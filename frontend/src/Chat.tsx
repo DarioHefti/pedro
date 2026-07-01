@@ -5,7 +5,7 @@ import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import { fileService, type Persona } from './services/wailsService'
 import MessageRenderer from './MessageRenderer'
-import AssistantMessageActions, { IconDelete } from './AssistantMessageActions'
+import AssistantMessageActions, { IconDelete, IconRegenerate } from './AssistantMessageActions'
 
 interface ChatProps {
   messages: Message[]
@@ -25,6 +25,8 @@ interface ChatProps {
   onRegenerate: (index: number, selectedPersonaId: string) => void
   /** Deletes user message and all following user/assistant messages. */
   onDeleteMessage: (index: number) => void
+  /** Resends user message: truncates later turns and streams a new assistant reply. */
+  onResendMessage: (index: number, selectedPersonaId: string) => void
   /** Opens the native OS file picker; resolves to the selected path or "". */
   onSelectFile: () => Promise<string>
   /** Opens the native folder picker; resolves to the selected path or "". */
@@ -91,6 +93,7 @@ export default function Chat({
   onStop,
   onRegenerate,
   onDeleteMessage,
+  onResendMessage,
   onSelectFile,
   onSelectFolder,
   welcomeMessage,
@@ -591,6 +594,16 @@ export default function Chat({
           role="group"
           aria-label="User message actions"
         >
+          <button
+            type="button"
+            className="message-action-btn"
+            onClick={() => onResendMessage(i, activePersonaId)}
+            disabled={streamingBusy}
+            title="Resend message"
+            aria-label="Resend message"
+          >
+            <IconRegenerate />
+          </button>
           <button
             type="button"
             className="message-action-btn"

@@ -303,6 +303,55 @@ func (a *App) SendMessageWithImages(conversationID int64, content string, imageD
 	return a.sendMessage(conversationID, content, imageDataURLs, selectedPersonaID, attachmentsJSON)
 }
 
+func (a *App) ResendMessage(conversationID int64, messageIndex int, selectedPersonaID string) string {
+	if a.store == nil {
+		return "Error: Database not initialized"
+	}
+
+	messages, err := a.store.GetMessages(conversationID)
+	if err != nil {
+		return "Error: Failed to get messages: " + err.Error()
+	}
+
+	if messageIndex < 0 || messageIndex >= len(messages) {
+		return "Error: Invalid message index"
+	}
+	if messages[messageIndex].Role != "user" {
+		return "Error: No user message to resend"
+	}
+
+	// Truncate everything after the selected user turn, then stream a fresh assistant reply.
+	for i := len(messages) - 1; i > messageIndex; i-- {
+		if err := a.store.DeleteMessage(conversationID, i); err != nil {
+			return "Error: Failed to delete message: " + err.Error()
+		}
+	}
+
+	messages, err = a.store.GetMessages(conversationID)
+	if err != nil {
+		return "Error: Failed to get messages: " + err.Error()
+	}
+
+	if a.llm == nil {
+		return "Error: Please configure LLM provider settings first"
+	}
+
+	userMsg := messages[messageIndex]
+	inlineImages := imageDataURLsFromAttachmentsJSON(userMsg.Attachments)
+	mergedImages := mergeImageDataURLsFromFileRefs(inlineImages, userMsg.Attachments, userMsg.Content)
+
+	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+
+	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
+		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
+	}
+	return resp
+}
+
 func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selectedPersonaID string) string {
 	if a.store == nil {
 		return "Error: Database not initialized"

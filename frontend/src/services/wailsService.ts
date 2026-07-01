@@ -19,6 +19,7 @@ import {
   SendMessage,
   SendMessageWithImages,
   RegenerateMessage,
+  ResendMessage,
   AbortMessage,
   GetSettings,
   GetDefaultSystemPrompt,
@@ -243,6 +244,8 @@ export const messageService = {
       : SendMessageWithImages(convID, content, images, selectedPersonaID, attachmentsJSON),
   regenerate: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex, selectedPersonaID),
+  resend: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : ResendMessage(convID, messageIndex, selectedPersonaID),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
   deleteMessage: (convID: number, messageIndex: number): Promise<void> =>
     useDevStub ? Promise.resolve() : DeleteMessage(convID, messageIndex),

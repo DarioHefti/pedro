@@ -13,6 +13,29 @@ import (
 // maxImageFileBytes caps a single on-disk image read for vision (file-ref attachments).
 const maxImageFileBytes = 25 << 20 // 25 MiB
 
+// imageDataURLsFromAttachmentsJSON returns inline image attachment data URLs stored on a user message.
+func imageDataURLsFromAttachmentsJSON(attachmentsJSON string) []string {
+	if attachmentsJSON == "" {
+		return nil
+	}
+	var atts []struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(attachmentsJSON), &atts); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(atts))
+	for _, a := range atts {
+		if a.Type == "image" {
+			if u := strings.TrimSpace(a.Content); u != "" {
+				out = append(out, u)
+			}
+		}
+	}
+	return out
+}
+
 // mergeImageDataURLsFromFileRefs appends data:image/...;base64,... URLs for raster images
 // referenced either via file-ref attachments or [Path: ...] markers in message content.
 func mergeImageDataURLsFromFileRefs(imageDataURLs []string, attachmentsJSON, content string) []string {

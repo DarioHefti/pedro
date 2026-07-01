@@ -36,6 +36,8 @@ export function OpenPath(arg1:string):Promise<string>;
 
 export function RegenerateMessage(arg1:number,arg2:number,arg3:string):Promise<string>;
 
+export function ResendMessage(arg1:number,arg2:number,arg3:string):Promise<string>;
+
 export function SaveSettings(arg1:Record<string, string>):Promise<void>;
 
 export function SearchMessages(arg1:string):Promise<Record<number, Array<main.Message>>>;
