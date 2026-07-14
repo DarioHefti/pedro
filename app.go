@@ -473,6 +473,21 @@ func (a *App) SelectFolder() string {
 }
 
 // OpenPath opens a file or folder with the OS default handler. Returns "" on success, else an error message.
+// SaveFile shows a native save dialog and writes content to the selected path.
+// Returns "" on success, else an error message.
+func (a *App) SaveFile(defaultFilename string, content string) string {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: defaultFilename,
+	})
+	if err != nil || path == "" {
+		return fmt.Sprintf("save cancelled: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Sprintf("failed to write file: %v", err)
+	}
+	return ""
+}
+
 func (a *App) OpenPath(path string) string {
 	if path == "" {
 		return "empty path"

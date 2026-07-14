@@ -74,6 +74,10 @@ export function ResendMessage(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResendMessage'](arg1, arg2, arg3);
 }
 
+export function SaveFile(arg1, arg2) {
+  return window['go']['main']['App']['SaveFile'](arg1, arg2);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }

@@ -32,6 +32,7 @@ import {
   SelectFile,
   SelectFolder,
   OpenPath,
+  SaveFile,
   GetPersonas,
   CreatePersona,
   UpdatePersona,
@@ -309,6 +310,9 @@ export const fileService = {
   /** Opens with the OS default app (WebView blocks file:// links). */
   openPath: (path: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : OpenPath(path),
+  /** Shows a native save dialog and writes content to disk. */
+  saveFile: (defaultFilename: string, content: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : SaveFile(defaultFilename, content),
 }
 
 // ---------------------------------------------------------------------------

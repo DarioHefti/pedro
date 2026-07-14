@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type JSX } from 'react'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
