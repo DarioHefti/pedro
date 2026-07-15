@@ -12,6 +12,7 @@ import {
   settingsService,
   fileService,
   personaService,
+  memoryService,
   uiConversationService,
 } from './services/wailsService'
 import type { Persona } from './services/wailsService'
@@ -181,6 +182,9 @@ export default function App() {
           createPersona={personaService.create}
           updatePersona={personaService.update}
           deletePersona={personaService.delete}
+          getMemories={memoryService.getAll}
+          saveMemory={memoryService.save}
+          deleteMemory={memoryService.delete}
         />
       )}
       <Toaster />

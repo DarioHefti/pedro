@@ -2,13 +2,15 @@ package main
 
 import (
 	"time"
+
+	"pedro/shared"
 )
 
 type Conversation struct {
 	ID        int64
 	Title     string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt time.Time `ts_type:"string"`
+	UpdatedAt time.Time `ts_type:"string"`
 }
 
 type Message struct {
@@ -18,7 +20,7 @@ type Message struct {
 	Content        string
 	Attachments    string
 	ToolCalls      string
-	CreatedAt      time.Time
+	CreatedAt      time.Time `ts_type:"string"`
 }
 
 // Persona is a named instruction block prepended to outgoing user prompts when selected.
@@ -26,8 +28,8 @@ type Persona struct {
 	ID        int64
 	Name      string
 	Prompt    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt time.Time `ts_type:"string"`
+	UpdatedAt time.Time `ts_type:"string"`
 }
 
 type Store interface {
@@ -47,5 +49,6 @@ type Store interface {
 	CreatePersona(name, prompt string) (*Persona, error)
 	UpdatePersona(id int64, name, prompt string) error
 	DeletePersona(id int64) error
+	shared.MemoryBackend
 	Close() error
 }

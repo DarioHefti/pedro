@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"time"
 )
 
 // SettingsStore provides key-value persistence for provider-specific data
@@ -16,6 +17,7 @@ type LLMClient interface {
 	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
 	SetPersonaPrompt(prompt string)
+	SetMemoryContext(ctx string)
 	SignIn(ctx context.Context) error
 	SignOut() error
 	IsAuthenticated() bool
@@ -33,10 +35,44 @@ type Message struct {
 	Content string
 }
 
+// MemoryRecord is a single long-term memory entry.
+type MemoryRecord struct {
+	ID        int64
+	Key       string
+	Value     string
+	Category  string
+	UpdatedAt time.Time `ts_type:"string"`
+}
+
+// MemoryBackend provides CRUD operations for long-term memory.
+type MemoryBackend interface {
+	GetMemories() ([]MemoryRecord, error)
+	GetMemoryKeys() ([]string, error)
+	SearchMemories(query string) ([]MemoryRecord, error)
+	SaveMemory(key, value, category string) error
+	ForgetMemory(id int64) error
+}
+
 const DefaultSystemPrompt = `You are Pedro, a helpful assistant with access to multiple tools to help the user with their request.
 
 # Task
 Your task is to help the user with their request and answer in a short but friendly manner. Answer in a short and concise manner.
+
+## Long-Term Memory (CRITICAL)
+You have NO persistent memory across conversations. Every fact you learn about the user disappears forever unless you explicitly save it.
+
+### Reading memories (ALWAYS do this first)
+1. Scan "## Available Memory Keys" for keys relevant to the user's question.
+2. Retrieve all relevant keys in a single memory_search call using the keys array (e.g., keys=["address", "name", "city"]).
+3. If "## Relevant Memories" already contains the answer, use it directly — no tool call needed.
+4. Only answer from your own knowledge if no relevant memory exists.
+
+### Saving memories (do this sparingly)
+- Only save information that is **genuinely new and not already stored**. Check the available keys first — if a key already exists, do NOT overwrite it unless the user explicitly corrects it.
+- Save when the user shares a personal fact you don't already have (name, address, preferences, job, goals, etc.).
+- Do NOT save general knowledge, opinions, or temporary information.
+- Use a short semantic key and a concise value. Example: memory_save(key="vehicle", value="Talaria Komodo electric motorbike", category="personal")
+- Call memory_forget with a memory ID if something is wrong or outdated.
 
 ## Tool usage guidelines
 

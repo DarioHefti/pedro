@@ -3,10 +3,8 @@ export namespace main {
 	export class Conversation {
 	    ID: number;
 	    Title: string;
-	    // Go type: time
-	    CreatedAt: any;
-	    // Go type: time
-	    UpdatedAt: any;
+	    CreatedAt: string;
+	    UpdatedAt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Conversation(source);
@@ -16,27 +14,9 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ID = source["ID"];
 	        this.Title = source["Title"];
-	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
-	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	        this.CreatedAt = source["CreatedAt"];
+	        this.UpdatedAt = source["UpdatedAt"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class Message {
 	    ID: number;
@@ -45,8 +25,7 @@ export namespace main {
 	    Content: string;
 	    Attachments: string;
 	    ToolCalls: string;
-	    // Go type: time
-	    CreatedAt: any;
+	    CreatedAt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Message(source);
@@ -60,35 +39,15 @@ export namespace main {
 	        this.Content = source["Content"];
 	        this.Attachments = source["Attachments"];
 	        this.ToolCalls = source["ToolCalls"];
-	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
+	        this.CreatedAt = source["CreatedAt"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class Persona {
 	    ID: number;
 	    Name: string;
 	    Prompt: string;
-	    // Go type: time
-	    CreatedAt: any;
-	    // Go type: time
-	    UpdatedAt: any;
+	    CreatedAt: string;
+	    UpdatedAt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Persona(source);
@@ -99,27 +58,9 @@ export namespace main {
 	        this.ID = source["ID"];
 	        this.Name = source["Name"];
 	        this.Prompt = source["Prompt"];
-	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
-	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	        this.CreatedAt = source["CreatedAt"];
+	        this.UpdatedAt = source["UpdatedAt"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class UpdateInfo {
 	    available: boolean;
@@ -141,6 +82,31 @@ export namespace main {
 	        this.releaseURL = source["releaseURL"];
 	        this.assetName = source["assetName"];
 	        this.assetURL = source["assetURL"];
+	    }
+	}
+
+}
+
+export namespace shared {
+	
+	export class MemoryRecord {
+	    ID: number;
+	    Key: string;
+	    Value: string;
+	    Category: string;
+	    UpdatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MemoryRecord(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.Key = source["Key"];
+	        this.Value = source["Value"];
+	        this.Category = source["Category"];
+	        this.UpdatedAt = source["UpdatedAt"];
 	    }
 	}
 

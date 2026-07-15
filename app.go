@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"strings"
 	"sync"
+	"unicode"
 
 	"pedro/providers"
 	"pedro/shared"
@@ -46,7 +48,7 @@ func NewApp() *App {
 
 	return &App{
 		store:    db,
-		registry: tools.New(),
+		registry: tools.New(db),
 		factory:  factory,
 	}
 }
@@ -154,6 +156,90 @@ func (a *App) AbortMessage() {
 	}
 }
 
+var englishStopWords = map[string]bool{
+	"the": true, "a": true, "an": true, "is": true, "are": true, "was": true, "were": true,
+	"be": true, "been": true, "being": true, "have": true, "has": true, "had": true,
+	"do": true, "does": true, "did": true, "will": true, "would": true, "could": true,
+	"should": true, "may": true, "might": true, "must": true, "shall": true, "can": true,
+	"need": true, "dare": true, "ought": true, "used": true, "to": true, "of": true,
+	"in": true, "for": true, "on": true, "with": true, "at": true, "by": true, "from": true,
+	"as": true, "into": true, "through": true, "during": true, "before": true, "after": true,
+	"above": true, "below": true, "between": true, "under": true, "and": true, "but": true,
+	"or": true, "yet": true, "so": true, "if": true, "because": true, "although": true,
+	"though": true, "while": true, "where": true, "when": true, "that": true, "which": true,
+	"who": true, "whom": true, "whose": true, "what": true, "this": true, "these": true,
+	"those": true, "i": true, "me": true, "my": true, "myself": true, "we": true, "our": true,
+	"ours": true, "ourselves": true, "you": true, "your": true, "yours": true, "yourself": true,
+	"yourselves": true, "he": true, "him": true, "his": true, "himself": true, "she": true,
+	"her": true, "hers": true, "herself": true, "it": true, "its": true, "itself": true,
+	"they": true, "them": true, "their": true, "theirs": true, "themselves": true, "am": true,
+	"having": true, "doing": true,
+}
+
+func extractKeywords(text string) []string {
+	words := strings.Fields(strings.ToLower(text))
+	var result []string
+	for _, w := range words {
+		w = strings.TrimFunc(w, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
+		if len(w) >= 3 && !englishStopWords[w] {
+			result = append(result, w)
+		}
+	}
+	return result
+}
+
+func (a *App) relevantMemoriesSection(content string) string {
+	if a.store == nil {
+		return ""
+	}
+	keywords := extractKeywords(content)
+	if len(keywords) == 0 {
+		return ""
+	}
+	query := strings.Join(keywords, " ")
+	records, err := a.store.SearchMemories(query)
+	if err != nil || len(records) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Relevant Memories\n")
+	b.WriteString("The following memories may help personalize your response. Reference them naturally when relevant, but do not force them into the conversation.\n\n")
+	for _, r := range records {
+		b.WriteString(fmt.Sprintf("- %s: %s\n", r.Key, r.Value))
+	}
+	return b.String()
+}
+
+func (a *App) memoryKeysSection() string {
+	if a.store == nil {
+		return ""
+	}
+	keys, err := a.store.GetMemoryKeys()
+	if err != nil || len(keys) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Available Memory Keys\n")
+	b.WriteString("You have the following saved memories. Call memory_search with a key to retrieve its full value.\n\n")
+	for _, k := range keys {
+		b.WriteString(fmt.Sprintf("- %s\n", k))
+	}
+	return b.String()
+}
+
+func (a *App) buildMemoryContext(content string) string {
+	var parts []string
+	if section := a.relevantMemoriesSection(content); section != "" {
+		parts = append(parts, section)
+	}
+	if section := a.memoryKeysSection(); section != "" {
+		parts = append(parts, section)
+	}
+	return strings.Join(parts, "\n")
+}
+
 func (a *App) requireStore() error {
 	if a.store == nil {
 		return errors.New("database not initialized")
@@ -188,6 +274,7 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 	}
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	a.llm.SetMemoryContext(a.buildMemoryContext(content))
 	mergedImages := mergeImageDataURLsFromFileRefs(imageDataURLs, attachmentsJSON, content)
 	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
@@ -341,6 +428,7 @@ func (a *App) ResendMessage(conversationID int64, messageIndex int, selectedPers
 	mergedImages := mergeImageDataURLsFromFileRefs(inlineImages, userMsg.Attachments, userMsg.Content)
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	a.llm.SetMemoryContext(a.buildMemoryContext(userMsg.Content))
 	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
 		return "Error: " + err.Error()
@@ -386,7 +474,17 @@ func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selected
 		return "Error: Please configure LLM provider settings first"
 	}
 
+	// Find the last user message to use for memory context.
+	var lastUserContent string
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastUserContent = messages[i].Content
+			break
+		}
+	}
+
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
+	a.llm.SetMemoryContext(a.buildMemoryContext(lastUserContent))
 	resp, toolCallsJSON, err := a.runChat(conversationID, messages, nil)
 	if err != nil {
 		return "Error: " + err.Error()
@@ -586,4 +684,30 @@ func (a *App) GetAvailableProviders() []map[string]string {
 		})
 	}
 	return result
+}
+
+func (a *App) GetMemories() []shared.MemoryRecord {
+	if a.store == nil {
+		return []shared.MemoryRecord{}
+	}
+	list, err := a.store.GetMemories()
+	if err != nil {
+		fmt.Println("GetMemories error:", err.Error())
+		return []shared.MemoryRecord{}
+	}
+	return list
+}
+
+func (a *App) SaveMemory(key, value, category string) error {
+	if a.store == nil {
+		return errors.New("database not initialized")
+	}
+	return a.store.SaveMemory(key, value, category)
+}
+
+func (a *App) ForgetMemory(id int64) error {
+	if a.store == nil {
+		return errors.New("database not initialized")
+	}
+	return a.store.ForgetMemory(id)
 }

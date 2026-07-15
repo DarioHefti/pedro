@@ -24,14 +24,15 @@ type stubClient struct{}
 func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(string), func(string, string)) error {
 	return nil
 }
-func (s *stubClient) SetBaseSystemPrompt(string)    {}
-func (s *stubClient) SetCustomSystemPrompt(string)  {}
-func (s *stubClient) SetPersonaPrompt(string)       {}
-func (s *stubClient) SignIn(context.Context) error   { return nil }
-func (s *stubClient) SignOut() error               { return nil }
-func (s *stubClient) IsAuthenticated() bool        { return true }
-func (s *stubClient) SetAuthenticated(bool)        {}
-func (s *stubClient) Name() string                 { return "stub" }
+func (s *stubClient) SetBaseSystemPrompt(string)   {}
+func (s *stubClient) SetCustomSystemPrompt(string) {}
+func (s *stubClient) SetPersonaPrompt(string)      {}
+func (s *stubClient) SetMemoryContext(string)      {}
+func (s *stubClient) SignIn(context.Context) error  { return nil }
+func (s *stubClient) SignOut() error              { return nil }
+func (s *stubClient) IsAuthenticated() bool       { return true }
+func (s *stubClient) SetAuthenticated(bool)       {}
+func (s *stubClient) Name() string                { return "stub" }
 
 func dummyBuilder(shared.Config, shared.SettingsStore, *tools.Registry) (shared.LLMClient, error) {
 	return &stubClient{}, nil

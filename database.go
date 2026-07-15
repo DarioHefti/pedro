@@ -8,6 +8,8 @@ import (
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
+
+	"pedro/shared"
 )
 
 type Database struct {
@@ -71,6 +73,15 @@ func (d *Database) init() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE IF NOT EXISTS memories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			key TEXT NOT NULL UNIQUE,
+			value TEXT NOT NULL,
+			category TEXT NOT NULL DEFAULT 'general',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
+		CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 	`)
 	return err
 }
@@ -366,4 +377,96 @@ func (d *Database) DeletePersona(id int64) error {
 		return fmt.Errorf("persona not found: %d", id)
 	}
 	return nil
+}
+
+func (d *Database) GetMemories() ([]shared.MemoryRecord, error) {
+	rows, err := d.db.Query("SELECT id, key, value, category, updated_at FROM memories ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []shared.MemoryRecord
+	for rows.Next() {
+		var m shared.MemoryRecord
+		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func (d *Database) GetMemoryKeys() ([]string, error) {
+	rows, err := d.db.Query("SELECT key FROM memories ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+func (d *Database) SearchMemories(query string) ([]shared.MemoryRecord, error) {
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return d.GetMemories()
+	}
+
+	var conditions []string
+	var args []any
+	for _, t := range terms {
+		if len(t) < 3 {
+			continue
+		}
+		conditions = append(conditions, "LOWER(key) LIKE ? OR LOWER(value) LIKE ?")
+		args = append(args, "%"+t+"%", "%"+t+"%")
+	}
+	if len(conditions) == 0 {
+		return d.GetMemories()
+	}
+
+	sqlStr := "SELECT id, key, value, category, updated_at FROM memories WHERE " +
+		strings.Join(conditions, " OR ") +
+		" ORDER BY updated_at DESC LIMIT 5"
+
+	rows, err := d.db.Query(sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []shared.MemoryRecord
+	for rows.Next() {
+		var m shared.MemoryRecord
+		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func (d *Database) SaveMemory(key, value, category string) error {
+	if category == "" {
+		category = "general"
+	}
+	_, err := d.db.Exec(
+		"INSERT OR REPLACE INTO memories (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+		key, value, category,
+	)
+	return err
+}
+
+func (d *Database) ForgetMemory(id int64) error {
+	_, err := d.db.Exec("DELETE FROM memories WHERE id = ?", id)
+	return err
 }

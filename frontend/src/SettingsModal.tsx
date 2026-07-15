@@ -16,11 +16,11 @@ import {
   UI_FONT_SIZE_SLIDER_MAX_PX,
   UI_FONT_SIZE_SLIDER_MIN_PX,
 } from './designTheme'
-import type { Persona } from './services/wailsService'
+import type { Persona, MemoryRecord } from './services/wailsService'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
-type Tab = 'llm' | 'prompt' | 'personas' | 'design'
+type Tab = 'llm' | 'prompt' | 'personas' | 'memory' | 'design'
 
 type ConnectionCheckState =
   | { kind: 'idle' }
@@ -154,6 +154,9 @@ interface SettingsModalProps {
   createPersona: (name: string, prompt: string) => Promise<Persona>
   updatePersona: (id: number, name: string, prompt: string) => Promise<void>
   deletePersona: (id: number) => Promise<void>
+  getMemories: () => Promise<MemoryRecord[]>
+  saveMemory: (key: string, value: string, category: string) => Promise<void>
+  deleteMemory: (id: number) => Promise<void>
 }
 
 export default function SettingsModal({
@@ -171,6 +174,9 @@ export default function SettingsModal({
   createPersona,
   updatePersona,
   deletePersona,
+  getMemories,
+  saveMemory,
+  deleteMemory,
 }: SettingsModalProps) {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('llm')
@@ -224,6 +230,17 @@ export default function SettingsModal({
   const [editDraft, setEditDraft] = useState<{ id: number; name: string; prompt: string } | null>(
     null,
   )
+
+  // Memory (persisted immediately; not part of main Save fingerprint)
+  const [memoriesList, setMemoriesList] = useState<MemoryRecord[]>([])
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const [newMemoryKey, setNewMemoryKey] = useState('')
+  const [newMemoryValue, setNewMemoryValue] = useState('')
+  const [newMemoryCategory, setNewMemoryCategory] = useState('')
+  const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null)
+  const [editMemoryKey, setEditMemoryKey] = useState('')
+  const [editMemoryValue, setEditMemoryValue] = useState('')
+  const [editMemoryCategory, setEditMemoryCategory] = useState('')
 
   const snapshot = useMemo<FullSettingsSnapshot>(
     () => ({
@@ -556,6 +573,82 @@ export default function SettingsModal({
     }
   }
 
+  const loadMemories = useCallback(async () => {
+    try {
+      const list = await getMemories()
+      setMemoriesList(list)
+    } catch (e) {
+      toast.error('Failed to load memories: ' + String(e))
+    }
+  }, [getMemories])
+
+  useEffect(() => {
+    if (activeTab !== 'memory') return
+    void loadMemories()
+  }, [activeTab, loadMemories])
+
+  async function handleAddMemory() {
+    const key = newMemoryKey.trim()
+    const value = newMemoryValue.trim()
+    if (!key || !value) {
+      toast.error('Key and value are required')
+      return
+    }
+    setMemoryBusy(true)
+    try {
+      await saveMemory(key, value, newMemoryCategory.trim())
+      setNewMemoryKey('')
+      setNewMemoryValue('')
+      setNewMemoryCategory('')
+      await loadMemories()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+
+  async function handleSaveEditMemory() {
+    if (editingMemoryId == null) return
+    const key = editMemoryKey.trim()
+    const value = editMemoryValue.trim()
+    if (!key || !value) {
+      toast.error('Key and value are required')
+      return
+    }
+    setMemoryBusy(true)
+    try {
+      await saveMemory(key, value, editMemoryCategory.trim())
+      setEditingMemoryId(null)
+      setEditMemoryKey('')
+      setEditMemoryValue('')
+      setEditMemoryCategory('')
+      await loadMemories()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+
+  async function handleDeleteMemory(id: number) {
+    setMemoryBusy(true)
+    try {
+      await deleteMemory(id)
+      if (editingMemoryId === id) {
+        setEditingMemoryId(null)
+        setEditMemoryKey('')
+        setEditMemoryValue('')
+        setEditMemoryCategory('')
+      }
+      await loadMemories()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+
   const connectionBadgeDotClass =
     connectionCheck.kind === 'ok'
       ? 'connection-dot connection-dot--ok'
@@ -595,6 +688,12 @@ export default function SettingsModal({
             onClick={() => setActiveTab('llm')}
           >
             LLM
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'memory' ? 'active' : ''}`}
+            onClick={() => setActiveTab('memory')}
+          >
+            Memory
           </button>
           <button
             className={`settings-tab ${activeTab === 'prompt' ? 'active' : ''}`}
@@ -919,6 +1018,163 @@ export default function SettingsModal({
                                 className="persona-delete-link"
                                 onClick={() => void handleDeletePersona(p.ID)}
                                 disabled={personaBusy}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'memory' && (
+            <div className="settings-panel settings-panel--memory">
+              <p className="settings-description">
+                These are the facts Pedro remembers about you. You can add, edit, or delete entries here.
+              </p>
+
+              <div className="memory-add-block">
+                <div className="memory-field">
+                  <label htmlFor="new-memory-key">Key</label>
+                  <input
+                    id="new-memory-key"
+                    type="text"
+                    value={newMemoryKey}
+                    onChange={e => setNewMemoryKey(e.target.value)}
+                    placeholder="user_name"
+                    disabled={memoryBusy}
+                  />
+                </div>
+                <div className="memory-field">
+                  <label htmlFor="new-memory-value">Value</label>
+                  <input
+                    id="new-memory-value"
+                    type="text"
+                    value={newMemoryValue}
+                    onChange={e => setNewMemoryValue(e.target.value)}
+                    placeholder="Sarah"
+                    disabled={memoryBusy}
+                  />
+                </div>
+                <div className="memory-field">
+                  <label htmlFor="new-memory-category">Category</label>
+                  <input
+                    id="new-memory-category"
+                    type="text"
+                    value={newMemoryCategory}
+                    onChange={e => setNewMemoryCategory(e.target.value)}
+                    placeholder="personal"
+                    disabled={memoryBusy}
+                  />
+                </div>
+                <div className="memory-btn-wrap">
+                  <button
+                    type="button"
+                    className="memory-add-btn"
+                    onClick={() => void handleAddMemory()}
+                    disabled={memoryBusy}
+                  >
+                    {memoryBusy ? 'Saving…' : 'Add'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="memory-list-header">Saved memories</div>
+              {memoriesList.length === 0 ? (
+                <p className="settings-description memory-list-empty">No memories yet.</p>
+              ) : (
+                <ul className="memory-list">
+                  {memoriesList.map(m => {
+                    const isEditing = editingMemoryId === m.ID
+                    return (
+                      <li key={m.ID} className="memory-list-item">
+                        {isEditing ? (
+                          <div className="memory-edit-form">
+                            <div className="memory-field">
+                              <label>Key</label>
+                              <div className="memory-field-static" title={editMemoryKey}>
+                                {editMemoryKey}
+                              </div>
+                            </div>
+                            <div className="memory-field">
+                              <label>Value</label>
+                              <input
+                                type="text"
+                                value={editMemoryValue}
+                                onChange={e => setEditMemoryValue(e.target.value)}
+                                disabled={memoryBusy}
+                              />
+                            </div>
+                            <div className="memory-field">
+                              <label>Category</label>
+                              <input
+                                type="text"
+                                value={editMemoryCategory}
+                                onChange={e => setEditMemoryCategory(e.target.value)}
+                                disabled={memoryBusy}
+                              />
+                            </div>
+                            <div className="memory-btn-wrap">
+                              <div className="memory-edit-actions">
+                                <button
+                                  type="button"
+                                  className="memory-save-btn"
+                                  onClick={() => void handleSaveEditMemory()}
+                                  disabled={memoryBusy}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="memory-cancel-btn"
+                                  onClick={() => {
+                                    setEditingMemoryId(null)
+                                    setEditMemoryKey('')
+                                    setEditMemoryValue('')
+                                    setEditMemoryCategory('')
+                                  }}
+                                  disabled={memoryBusy}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="memory-row-summary">
+                            <div className="memory-row-text">
+                              <span className="memory-row-key">{m.Key}</span>
+                              <span className="memory-row-value" title={m.Value}>
+                                {m.Value.length > 120 ? `${m.Value.slice(0, 120)}…` : m.Value}
+                              </span>
+                              {m.Category && (
+                                <span className="memory-row-category">{m.Category}</span>
+                              )}
+                            </div>
+                            <div className="memory-row-actions">
+                              <button
+                                type="button"
+                                className="memory-edit-link"
+                                onClick={() => {
+                                  setEditingMemoryId(m.ID)
+                                  setEditMemoryKey(m.Key)
+                                  setEditMemoryValue(m.Value)
+                                  setEditMemoryCategory(m.Category)
+                                }}
+                                disabled={memoryBusy}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="memory-delete-link"
+                                onClick={() => void handleDeleteMemory(m.ID)}
+                                disabled={memoryBusy}
                               >
                                 Delete
                               </button>

@@ -30,6 +30,10 @@ export function DeletePersona(arg1) {
   return window['go']['main']['App']['DeletePersona'](arg1);
 }
 
+export function ForgetMemory(arg1) {
+  return window['go']['main']['App']['ForgetMemory'](arg1);
+}
+
 export function GetActivePersonaID() {
   return window['go']['main']['App']['GetActivePersonaID']();
 }
@@ -44,6 +48,10 @@ export function GetConversations() {
 
 export function GetDefaultSystemPrompt() {
   return window['go']['main']['App']['GetDefaultSystemPrompt']();
+}
+
+export function GetMemories() {
+  return window['go']['main']['App']['GetMemories']();
 }
 
 export function GetMessages(arg1) {
@@ -76,6 +84,10 @@ export function ResendMessage(arg1, arg2, arg3) {
 
 export function SaveFile(arg1, arg2) {
   return window['go']['main']['App']['SaveFile'](arg1, arg2);
+}
+
+export function SaveMemory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveMemory'](arg1, arg2, arg3);
 }
 
 export function SaveSettings(arg1) {

@@ -39,6 +39,9 @@ import {
   DeletePersona,
   GetActivePersonaID,
   SetActivePersonaID,
+  GetMemories,
+  SaveMemory,
+  ForgetMemory,
 } from '../../wailsjs/go/main/App'
 import {
   CheckForUpdate,
@@ -52,6 +55,7 @@ import { main } from '../../wailsjs/go/models'
 export type Conversation = main.Conversation
 export type Message = main.Message
 export type Persona = main.Persona
+export type MemoryRecord = main.MemoryRecord
 export type UpdateInfo = main.UpdateInfo
 
 function hasWailsBridge(): boolean {
@@ -299,6 +303,20 @@ export const personaService = {
     useDevStub ? Promise.resolve('') : GetActivePersonaID(),
   setActive: (id: string): Promise<void> =>
     useDevStub ? Promise.resolve() : SetActivePersonaID(id),
+}
+
+// ---------------------------------------------------------------------------
+// Memory (SQLite-backed)
+// ---------------------------------------------------------------------------
+export const memoryService = {
+  getAll: async (): Promise<main.MemoryRecord[]> => {
+    const raw = useDevStub ? [] : await GetMemories()
+    return raw ?? []
+  },
+  save: (key: string, value: string, category: string): Promise<void> =>
+    useDevStub ? Promise.resolve() : SaveMemory(key, value, category),
+  delete: (id: number): Promise<void> =>
+    useDevStub ? Promise.resolve() : ForgetMemory(id),
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sort"
 	"time"
+
+	"pedro/shared"
 )
 
 // UserAgent is the browser UA sent with every outbound HTTP request.
@@ -165,11 +167,14 @@ func (r *Registry) DefinitionsByName(names []string) []Definition {
 
 // New builds and returns a Registry pre-loaded with all available tools.
 // Tools are marked as deferred (DeferLoading=true) and loaded on-demand via tool_search.
-func New() *Registry {
+func New(backend shared.MemoryBackend) *Registry {
 	r := NewRegistry()
 
 	// Tool search is always available immediately (never deferred)
 	r.Register(NewToolSearchTool(r))
+
+	// Memory save is always available so the model can store facts immediately.
+	r.Register(NewMemorySaveTool(backend))
 
 	// All other tools are deferred (DeferLoading=true) - they do not appear in
 	// the initial tool list sent to the model, but are discoverable via tool_search
@@ -181,6 +186,8 @@ func New() *Registry {
 	r.Register(NewShowFileTreeTool())
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
+	r.Register(NewMemorySearchTool(backend))
+	r.Register(NewMemoryForgetTool(backend))
 
 	// tool_discovery is truly hidden: deprecated, not discoverable via tool_search,
 	// but still executable for backward compatibility.

@@ -965,7 +965,7 @@ body {
   font-size: var(--font-size-ui-secondary);
   color: var(--text-secondary);
   margin-bottom: 12px;
-  margin-top: -4px;
+  margin-top: 0;
   line-height: 1.4;
 }
 
@@ -1134,6 +1134,225 @@ body {
   color: var(--text-primary);
   font-size: var(--font-size-ui-secondary);
   font-family: var(--font-main);
+  cursor: pointer;
+}
+
+/* Memory tab */
+.settings-panel--memory .memory-add-block,
+.settings-panel--memory .memory-edit-form {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.settings-panel--memory .memory-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.settings-panel--memory .memory-field label {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.settings-panel--memory .memory-field input {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--control-height);
+  margin-bottom: 0;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-main);
+  line-height: 1.4;
+}
+
+.settings-panel--memory .memory-field input:focus {
+  outline: none;
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.settings-panel--memory .memory-field-static {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-main);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.settings-panel--memory .memory-btn-wrap {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.settings-panel--memory .memory-add-btn {
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  font-family: var(--font-main);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.settings-panel--memory .memory-add-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.settings-panel--memory .memory-add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-panel--memory .memory-list-header {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.settings-panel--memory .memory-list-empty {
+  margin-bottom: 0;
+}
+
+.settings-panel--memory .memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-panel--memory .memory-list-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: 12px;
+}
+
+.settings-panel--memory .memory-row-summary {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.settings-panel--memory .memory-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-panel--memory .memory-row-key {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--font-size-ui);
+}
+
+.settings-panel--memory .memory-row-value {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-secondary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.settings-panel--memory .memory-row-category {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.settings-panel--memory .memory-row-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.settings-panel--memory .memory-edit-link,
+.settings-panel--memory .memory-delete-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-ui-secondary);
+  font-family: var(--font-main);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.settings-panel--memory .memory-edit-link {
+  color: var(--accent-primary);
+}
+
+.settings-panel--memory .memory-delete-link {
+  color: var(--error);
+}
+
+.settings-panel--memory .memory-edit-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-panel--memory .memory-save-btn {
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  font-family: var(--font-main);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.settings-panel--memory .memory-cancel-btn {
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-main);
+  line-height: 1.4;
   cursor: pointer;
 }
 

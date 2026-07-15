@@ -127,6 +127,7 @@ type Provider struct {
 	baseSystemPrompt   string
 	customSystemPrompt string
 	personaPrompt      string
+	memoryContext      string
 	authenticated      bool
 }
 
@@ -136,6 +137,7 @@ func (p *Provider) SetAuthenticated(a bool)          { p.authenticated = a }
 func (p *Provider) SetBaseSystemPrompt(s string)     { p.baseSystemPrompt = s }
 func (p *Provider) SetCustomSystemPrompt(s string)   { p.customSystemPrompt = s }
 func (p *Provider) SetPersonaPrompt(s string)        { p.personaPrompt = s }
+func (p *Provider) SetMemoryContext(s string)        { p.memoryContext = s }
 
 func ParseConfig(settings map[string]string) (shared.Config, error) {
 	cfg := Config{
@@ -236,7 +238,7 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 	if base == "" {
 		base = shared.DefaultSystemPrompt
 	}
-	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt)
+	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt, p.memoryContext)
 	err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
 	if err == nil {
 		return nil

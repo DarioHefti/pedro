@@ -7,23 +7,23 @@ import (
 )
 
 func TestNewRegistryExposesToolSearch(t *testing.T) {
-	r := New()
+	r := newTestRegistry()
 	defs := r.Definitions()
-	if len(defs) != 1 {
-		t.Fatalf("expected exactly 1 exposed tool, got %d", len(defs))
+	if len(defs) != 2 {
+		t.Fatalf("expected exactly 2 exposed tools, got %d", len(defs))
 	}
 	if defs[0].Name != ToolSearchToolName {
 		t.Fatalf("expected exposed tool %q, got %q", ToolSearchToolName, defs[0].Name)
 	}
 
 	all := r.AllDefinitions()
-	if len(all) < 2 {
+	if len(all) < 3 {
 		t.Fatalf("expected hidden tools to be registered too, got %d total", len(all))
 	}
 }
 
 func TestToolDiscoveryListDescribeAndExecute(t *testing.T) {
-	r := New()
+	r := newTestRegistry()
 	d := NewToolDiscoveryTool(r)
 
 	listPayload, _ := json.Marshal(map[string]any{

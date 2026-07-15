@@ -6,7 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"pedro/shared"
 )
+
+type stubMemoryBackend struct{}
+
+func (s *stubMemoryBackend) GetMemories() ([]shared.MemoryRecord, error) {
+	return nil, nil
+}
+func (s *stubMemoryBackend) GetMemoryKeys() ([]string, error) {
+	return nil, nil
+}
+func (s *stubMemoryBackend) SearchMemories(string) ([]shared.MemoryRecord, error) {
+	return nil, nil
+}
+func (s *stubMemoryBackend) SaveMemory(_, _, _ string) error { return nil }
+func (s *stubMemoryBackend) ForgetMemory(_ int64) error      { return nil }
+
+func newTestRegistry() *Registry {
+	return New(&stubMemoryBackend{})
+}
 
 // ---------------------------------------------------------------------------
 // GrepTool tests
@@ -239,7 +259,7 @@ func TestToolSearchArgInfoDrillsIntoProperties(t *testing.T) {
 	// tool name and description. Previously the arg extraction iterated the
 	// top-level Parameters map (which only has "type","properties","required")
 	// and skipped all of them, so argInfo was always empty.
-	r := New()
+	r := newTestRegistry()
 	ts := NewToolSearchTool(r)
 
 	// "path" is an argument name present in read_file, grep, glob, show_file_tree.
@@ -262,7 +282,7 @@ func TestToolSearchArgInfoDrillsIntoProperties(t *testing.T) {
 }
 
 func TestToolSearchReturnsReferences(t *testing.T) {
-	r := New()
+	r := newTestRegistry()
 	ts := NewToolSearchTool(r)
 
 	argsJSON, _ := json.Marshal(map[string]any{
@@ -279,7 +299,7 @@ func TestToolSearchReturnsReferences(t *testing.T) {
 }
 
 func TestToolSearchDoesNotReturnSelf(t *testing.T) {
-	r := New()
+	r := newTestRegistry()
 	ts := NewToolSearchTool(r)
 
 	argsJSON, _ := json.Marshal(map[string]any{
@@ -303,7 +323,7 @@ func TestToolSearchDoesNotReturnSelf(t *testing.T) {
 func TestDeferredDefinitionsWorksWithProductionRegistry(t *testing.T) {
 	// After the RegisterHidden→Register fix, DeferredDefinitions() must return
 	// all deferred tools from the production registry.
-	r := New()
+	r := newTestRegistry()
 	deferred := r.DeferredDefinitions()
 	if len(deferred) == 0 {
 		t.Fatal("DeferredDefinitions() returned empty for production registry; RegisterHidden→Register fix may be missing")
@@ -315,7 +335,7 @@ func TestDeferredDefinitionsWorksWithProductionRegistry(t *testing.T) {
 			t.Errorf("tool %q in DeferredDefinitions() has DeferLoading=false", d.Name)
 		}
 	}
-	for _, expected := range []string{"web_search", "fetch_url", "read_file", "glob", "grep"} {
+	for _, expected := range []string{"web_search", "fetch_url", "read_file", "glob", "grep", "memory_search", "memory_forget"} {
 		if !seen[expected] {
 			t.Errorf("expected deferred tool %q not found in DeferredDefinitions()", expected)
 		}
@@ -324,7 +344,7 @@ func TestDeferredDefinitionsWorksWithProductionRegistry(t *testing.T) {
 
 func TestToolSearchToolNotDeferred(t *testing.T) {
 	// The spec: the tool_search tool itself must never have DeferLoading=true.
-	r := New()
+	r := newTestRegistry()
 	def, ok := r.DefinitionByName(ToolSearchToolName)
 	if !ok {
 		t.Fatal("tool_search not registered")

@@ -36,8 +36,8 @@ func userFacingShellHint() string {
 }
 
 // FullSystemPrompt builds the final system prompt from the base instructions,
-// an optional persona, and optional custom instructions.
-func FullSystemPrompt(base, persona, custom string) string {
+// an optional persona, optional custom instructions, and optional memory context.
+func FullSystemPrompt(base, persona, custom, memoryCtx string) string {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05 MST")
 	out := base + "\n\n## Current Date/Time\nCurrent UTC datetime: " + now
 	out += fmt.Sprintf(
@@ -53,6 +53,9 @@ func FullSystemPrompt(base, persona, custom string) string {
 	}
 	if custom != "" {
 		out += "\n\n## Additional Instructions\n" + custom
+	}
+	if memoryCtx != "" {
+		out += "\n\n" + memoryCtx
 	}
 	return out
 }
