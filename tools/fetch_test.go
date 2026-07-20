@@ -44,19 +44,9 @@ func TestLooksLikeHTML(t *testing.T) {
 	}
 }
 
-func TestConvertToMarkdown(t *testing.T) {
-	out, err := convertToMarkdown("<p>Hello <strong>world</strong></p>")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(strings.ToLower(out), "hello") {
-		t.Fatalf("expected hello in %q", out)
-	}
-}
-
-func TestFetchURLToolExecuteInvalidJSON(t *testing.T) {
-	var f FetchURLTool
-	s, err := f.Execute("{not json")
+func TestWebclawToolExecuteInvalidJSON(t *testing.T) {
+	var w WebclawTool
+	s, err := w.Execute("{not json")
 	if err != nil {
 		t.Fatalf("Execute returns string errors to model: %v", err)
 	}

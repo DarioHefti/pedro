@@ -87,7 +87,7 @@ func TestToolDefinitionsNilRegistry(t *testing.T) {
 func TestToolDefinitionsFromRegistry(t *testing.T) {
 	r := tools.NewRegistry()
 	r.Register(tools.NewSearchTool())
-	r.Register(tools.NewFetchURLTool())
+	r.Register(tools.NewWebclawTool())
 	defs := ToolDefinitions(r)
 
 	seen := map[string]bool{}
@@ -107,7 +107,7 @@ func TestToolDefinitionsFromRegistry(t *testing.T) {
 	for _, d := range deferred {
 		deferredSeen[d.Name] = true
 	}
-	if !deferredSeen["web_search"] || !deferredSeen["fetch_url"] {
+	if !deferredSeen["web_search"] || !deferredSeen["webclaw"] {
 		t.Fatalf("missing expected deferred tools: %+v", deferredSeen)
 	}
 }

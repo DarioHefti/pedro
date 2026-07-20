@@ -97,7 +97,7 @@ Use tool_search to load any of the following tools before using them:
 | Tool | Description |
 |------|-------------|
 | web_search | Search the web for current information, news, and facts |
-| fetch_url | Fetch and read web page content as Markdown (handles JS-rendered pages) |
+| webclaw | Fetch and read web page content as Markdown (intelligent extraction, handles JS-rendered pages) |
 | read_file | Read local files with pagination (text, PDF, Excel) |
 | parse_document | Extract text from documents (PDF, Word, Excel, PowerPoint, ODT, HTML) |
 | show_file_tree | List directory contents up to a given depth |

@@ -180,7 +180,7 @@ func New(backend shared.MemoryBackend) *Registry {
 	// the initial tool list sent to the model, but are discoverable via tool_search
 	// and are appended to the tool list once unlocked.
 	r.Register(NewSearchTool())
-	r.Register(NewFetchURLTool())
+	r.Register(NewWebclawTool())
 	r.Register(NewReadFileTool())
 	r.Register(NewParseDocumentTool())
 	r.Register(NewShowFileTreeTool())
