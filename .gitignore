@@ -29,3 +29,5 @@ Thumbs.db
 
 # Wails build cache
 .task/
+# Runtime log files
+updater.log
