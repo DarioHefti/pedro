@@ -3,14 +3,27 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
-	"os"
-	"path/filepath"
 
 	"pedro/shared"
 )
+
+func atoiSafe(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func itoaSafe(n int) string {
+	return strconv.Itoa(n)
+}
 
 type Database struct {
 	db *sql.DB
@@ -140,6 +153,8 @@ func (d *Database) migrate() {
 	d.db.Exec("ALTER TABLE memories ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
 	// Add request_count column to track how many HTTP requests each chat made to the LLM.
 	d.db.Exec("ALTER TABLE conversations ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0")
+	// Add request_tokens column to track the cumulative token usage per chat.
+	d.db.Exec("ALTER TABLE conversations ADD COLUMN request_tokens INTEGER NOT NULL DEFAULT 0")
 	d.sanitizeExistingConversationTitles()
 }
 
@@ -176,6 +191,34 @@ func (d *Database) GetRequestCount(conversationID int64) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// GetRequestTokens returns the cumulative token usage for a conversation.
+func (d *Database) GetRequestTokens(conversationID int64) (int, error) {
+	var tokens int
+	err := d.db.QueryRow(
+		"SELECT request_tokens FROM conversations WHERE id = ?",
+		conversationID,
+	).Scan(&tokens)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return tokens, nil
+}
+
+// IncrementRequestTokens adds the given token count to the conversation total and
+// returns the new cumulative value.
+func (d *Database) IncrementRequestTokens(conversationID int64, tokens int) (int, error) {
+	if _, err := d.db.Exec(
+		"UPDATE conversations SET request_tokens = request_tokens + ? WHERE id = ?",
+		tokens, conversationID,
+	); err != nil {
+		return 0, err
+	}
+	return d.GetRequestTokens(conversationID)
 }
 
 const globalRequestCountKey = "global_request_count"

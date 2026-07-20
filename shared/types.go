@@ -13,7 +13,7 @@ type SettingsStore interface {
 }
 
 type LLMClient interface {
-	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error
+	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(RequestUsage)) error
 	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
 	SetPersonaPrompt(prompt string)
@@ -35,6 +35,13 @@ type Config interface {
 type Message struct {
 	Role    string
 	Content string
+}
+
+// RequestUsage carries the token accounting for a single completed HTTP request
+// to an LLM provider. Prompt + completion tokens are reported when available.
+type RequestUsage struct {
+	PromptTokens     int
+	CompletionTokens int
 }
 
 // MemoryRecord is a single long-term memory entry.

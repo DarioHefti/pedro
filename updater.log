@@ -208,3 +208,33 @@
 [2026-07-20T15:35:51+02:00] Picking asset for OS: darwin, Arch: arm64
 [2026-07-20T15:35:51+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
 [2026-07-20T15:35:51+02:00] Update available! Asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:00:30+02:00] Checking for updates...
+[2026-07-20T16:00:30+02:00] Fetching latest release from: https://api.github.com/repos/DarioHefti/pedro/releases/latest
+[2026-07-20T16:00:30+02:00] Current version: dev, Latest version: 1.2.5
+[2026-07-20T16:00:30+02:00] Picking asset for OS: darwin, Arch: arm64
+[2026-07-20T16:00:30+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:00:30+02:00] Update available! Asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:03:21+02:00] Checking for updates...
+[2026-07-20T16:03:21+02:00] Fetching latest release from: https://api.github.com/repos/DarioHefti/pedro/releases/latest
+[2026-07-20T16:03:21+02:00] Current version: dev, Latest version: 1.2.5
+[2026-07-20T16:03:21+02:00] Picking asset for OS: darwin, Arch: arm64
+[2026-07-20T16:03:21+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:03:21+02:00] Update available! Asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:05:15+02:00] Checking for updates...
+[2026-07-20T16:05:15+02:00] Fetching latest release from: https://api.github.com/repos/DarioHefti/pedro/releases/latest
+[2026-07-20T16:05:16+02:00] Current version: dev, Latest version: 1.2.5
+[2026-07-20T16:05:16+02:00] Picking asset for OS: darwin, Arch: arm64
+[2026-07-20T16:05:16+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:05:16+02:00] Update available! Asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:09:38+02:00] Checking for updates...
+[2026-07-20T16:09:38+02:00] Fetching latest release from: https://api.github.com/repos/DarioHefti/pedro/releases/latest
+[2026-07-20T16:09:38+02:00] Current version: dev, Latest version: 1.2.5
+[2026-07-20T16:09:38+02:00] Picking asset for OS: darwin, Arch: arm64
+[2026-07-20T16:09:38+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:09:38+02:00] Update available! Asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:17:37+02:00] Checking for updates...
+[2026-07-20T16:17:37+02:00] Fetching latest release from: https://api.github.com/repos/DarioHefti/pedro/releases/latest
+[2026-07-20T16:17:37+02:00] Current version: dev, Latest version: 1.2.5
+[2026-07-20T16:17:37+02:00] Picking asset for OS: darwin, Arch: arm64
+[2026-07-20T16:17:37+02:00] Selected preferred asset: Pedro-macos-arm64.dmg
+[2026-07-20T16:17:37+02:00] Update available! Asset: Pedro-macos-arm64.dmg

@@ -42,6 +42,9 @@ import {
   GetMemories,
   SaveMemory,
   ForgetMemory,
+  GetRequestCounts,
+  GetGlobalRequestCount,
+  GetLifetimeStats,
 } from '../../wailsjs/go/main/App'
 import {
   CheckForUpdate,
@@ -345,6 +348,20 @@ export const updaterService = {
     useDevStub ? Promise.resolve() : DownloadAndInstall(assetURL, assetName),
   getCurrentVersion: (): Promise<string> =>
     useDevStub ? Promise.resolve('dev') : GetCurrentVersion(),
+}
+
+// ---------------------------------------------------------------------------
+// Request stats service (LLM request counters + token estimates)
+// ---------------------------------------------------------------------------
+export const statsService = {
+  getRequestCounts: (conversationID: number): Promise<main.RequestCounts> =>
+    useDevStub ? Promise.resolve(new main.RequestCounts({ PerChat: 0, Global: 0 })) : GetRequestCounts(conversationID),
+  getGlobalRequestCount: (): Promise<number> =>
+    useDevStub ? Promise.resolve(0) : GetGlobalRequestCount(),
+  getLifetimeStats: (): Promise<main.LifetimeStats> =>
+    useDevStub
+      ? Promise.resolve(new main.LifetimeStats({ TotalRequests: 0, TotalTokens: 0 }))
+      : GetLifetimeStats(),
 }
 
 // ---------------------------------------------------------------------------

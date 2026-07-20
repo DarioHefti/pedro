@@ -41,6 +41,14 @@ type Store interface {
 	SearchMessages(query string) (map[int64][]Message, error)
 	AddMessage(conversationID int64, role, content, attachments, toolCalls string) (*Message, error)
 	DeleteMessage(conversationID int64, messageIndex int) error
+	IncrementRequestCount(conversationID int64) (int, error)
+	GetRequestCount(conversationID int64) (int, error)
+	IncrementRequestTokens(conversationID int64, tokens int) (int, error)
+	GetRequestTokens(conversationID int64) (int, error)
+	IncrementGlobalRequestCount() (int, error)
+	GetGlobalRequestCount() (int, error)
+	AddLifetimeTokens(promptTokens, completionTokens int) error
+	GetLifetimeTokens() (int, error)
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
 	DeleteSetting(key string) error

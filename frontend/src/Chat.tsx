@@ -41,6 +41,10 @@ interface ChatProps {
   currentConvID?: number | null
   /** When true, skip refocusing the composer on window focus (e.g. settings modal open). */
   composerFocusPaused?: boolean
+  /** Number of LLM HTTP requests made in the current conversation. */
+  requestCount?: number
+  /** Cumulative token usage for the current conversation. */
+  requestTokens?: number
 }
 
 /**
@@ -103,6 +107,8 @@ export default function Chat({
   focusTrigger,
   currentConvID,
   composerFocusPaused = false,
+  requestCount = 0,
+  requestTokens = 0,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -671,6 +677,17 @@ export default function Chat({
       {isDragging && (
         <div className="drop-overlay">
           <div className="drop-message">Drop files here to attach by path</div>
+        </div>
+      )}
+
+      {currentConvID != null && (
+        <div className="chat-request-bar">
+          <span className="chat-request-bar-dot" aria-hidden />
+          <span className="chat-request-bar-value">{requestCount}</span>
+          <span className="chat-request-bar-label">LLM requests</span>
+          <span className="chat-request-bar-sep" aria-hidden>·</span>
+          <span className="chat-request-bar-value">{requestTokens.toLocaleString()}</span>
+          <span className="chat-request-bar-label">tokens in this chat</span>
         </div>
       )}
 

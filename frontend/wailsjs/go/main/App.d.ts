@@ -27,11 +27,17 @@ export function GetConversations():Promise<Array<main.Conversation>>;
 
 export function GetDefaultSystemPrompt():Promise<string>;
 
+export function GetGlobalRequestCount():Promise<number>;
+
+export function GetLifetimeStats():Promise<main.LifetimeStats>;
+
 export function GetMemories():Promise<Array<shared.MemoryRecord>>;
 
 export function GetMessages(arg1:number):Promise<Array<main.Message>>;
 
 export function GetPersonas():Promise<Array<main.Persona>>;
+
+export function GetRequestCounts(arg1:number):Promise<main.RequestCounts>;
 
 export function GetSettings():Promise<Record<string, string>>;
 

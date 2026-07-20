@@ -106,7 +106,7 @@ func (p *Provider) SignOut() error {
 	return nil
 }
 
-func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error {
+func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(shared.RequestUsage)) error {
 	if !p.authenticated {
 		return fmt.Errorf("not authenticated – API key may be missing")
 	}
@@ -116,5 +116,5 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 		base = shared.DefaultSystemPrompt
 	}
 	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt, p.memoryContext)
-	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
+	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
 }

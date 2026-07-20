@@ -17,10 +17,11 @@ import {
   UI_FONT_SIZE_SLIDER_MIN_PX,
 } from './designTheme'
 import type { Persona, MemoryRecord } from './services/wailsService'
+import { statsService } from './services/wailsService'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
 
-type Tab = 'llm' | 'prompt' | 'personas' | 'memory' | 'design'
+type Tab = 'llm' | 'prompt' | 'personas' | 'memory' | 'design' | 'stats'
 
 type ConnectionCheckState =
   | { kind: 'idle' }
@@ -241,6 +242,12 @@ export default function SettingsModal({
   const [editMemoryKey, setEditMemoryKey] = useState('')
   const [editMemoryValue, setEditMemoryValue] = useState('')
   const [editMemoryCategory, setEditMemoryCategory] = useState('')
+
+  // Stats (loaded when the Stats tab is opened)
+  const [lifetimeStats, setLifetimeStats] = useState<{ totalRequests: number; totalTokens: number }>(
+    { totalRequests: 0, totalTokens: 0 },
+  )
+  const [statsLoading, setStatsLoading] = useState(false)
 
   const snapshot = useMemo<FullSettingsSnapshot>(
     () => ({
@@ -587,6 +594,23 @@ export default function SettingsModal({
     void loadMemories()
   }, [activeTab, loadMemories])
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const s = await statsService.getLifetimeStats()
+      setLifetimeStats({ totalRequests: s.totalRequests, totalTokens: s.totalTokens })
+    } catch {
+      setLifetimeStats({ totalRequests: 0, totalTokens: 0 })
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'stats') return
+    void loadStats()
+  }, [activeTab, loadStats])
+
   async function handleAddMemory() {
     const key = newMemoryKey.trim()
     const value = newMemoryValue.trim()
@@ -712,6 +736,12 @@ export default function SettingsModal({
             onClick={() => setActiveTab('design')}
           >
             Design
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'stats' ? 'active' : ''}`}
+            onClick={() => setActiveTab('stats')}
+          >
+            Stats
           </button>
         </div>
 
@@ -1286,6 +1316,32 @@ export default function SettingsModal({
               <button type="button" className="design-reset-btn" onClick={resetDesignColors}>
                 Reset to defaults
               </button>
+            </div>
+          )}
+
+          {activeTab === 'stats' && (
+            <div className="settings-panel settings-panel--stats">
+              <p className="settings-description">
+                Lifetime usage across all chats. Request counts and token estimates are
+                accumulated on the backend and persist across app restarts.
+              </p>
+
+              {statsLoading ? (
+                <p className="settings-description">Loading stats…</p>
+              ) : (
+                <div className="stats-grid">
+                  <div className="stats-card">
+                    <div className="stats-card-value">{lifetimeStats.totalRequests}</div>
+                    <div className="stats-card-label">Total LLM requests</div>
+                  </div>
+                  <div className="stats-card">
+                    <div className="stats-card-value">
+                      {lifetimeStats.totalTokens.toLocaleString()}
+                    </div>
+                    <div className="stats-card-label">Estimated total tokens</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

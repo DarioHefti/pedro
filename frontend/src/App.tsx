@@ -14,6 +14,8 @@ import {
   personaService,
   memoryService,
   uiConversationService,
+  statsService,
+  eventService,
 } from './services/wailsService'
 import type { Persona } from './services/wailsService'
 import { applyDesignAndTypographyFromSettings } from './designTheme'
@@ -30,6 +32,8 @@ export default function App() {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [activePersonaId, setActivePersonaId] = useState<string>('')
   const [focusTrigger, setFocusTrigger] = useState(0)
+  const [perChatRequestCount, setPerChatRequestCount] = useState(0)
+  const [perChatTokens, setPerChatTokens] = useState(0)
 
   const {
     conversations,
@@ -67,6 +71,27 @@ export default function App() {
     void reloadSettings()
   }, [])
 
+  // Live per-chat request count: update when an event targets the active chat.
+  useEffect(() => {
+    const cancel = eventService.on(
+      'request_count_updated',
+      (
+        conversationID: number,
+        perChat: number,
+        _global: number,
+        chatTokens: number,
+      ) => {
+        if (conversationID === currentConvID) {
+          setPerChatRequestCount(perChat)
+          setPerChatTokens(chatTokens)
+        }
+      },
+    )
+    return () => {
+      cancel()
+    }
+  }, [currentConvID])
+
   useEffect(() => {
     if (!uiConversationService.isVirtualConversation(currentConvID)) return
     if (currentConvID === null) return
@@ -81,12 +106,24 @@ export default function App() {
   async function selectConversation(id: number) {
     setCurrentConvID(id)
     setFocusTrigger(n => n + 1)
+    if (!uiConversationService.isVirtualConversation(id)) {
+      try {
+        const counts = await statsService.getRequestCounts(id)
+        setPerChatRequestCount(counts.perChat)
+        setPerChatTokens(counts.perChatTokens)
+      } catch {
+        setPerChatRequestCount(0)
+        setPerChatTokens(0)
+      }
+    }
     await messaging.load(id)
   }
 
   function newConversation() {
     setCurrentConvID(null)
     messaging.clear()
+    setPerChatRequestCount(0)
+    setPerChatTokens(0)
     setFocusTrigger(n => n + 1)
   }
 
@@ -163,6 +200,8 @@ export default function App() {
         focusTrigger={focusTrigger}
         currentConvID={currentConvID}
         composerFocusPaused={settingsOpen}
+        requestCount={perChatRequestCount}
+        requestTokens={perChatTokens}
       />
       {settingsOpen && (
         <SettingsModal

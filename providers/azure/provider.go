@@ -231,7 +231,7 @@ func (p *Provider) ensureAuthenticated(ctx context.Context) error {
 	return p.SignIn(ctx)
 }
 
-func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string)) error {
+func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(shared.RequestUsage)) error {
 	if err := p.ensureAuthenticated(ctx); err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 		base = shared.DefaultSystemPrompt
 	}
 	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt, p.memoryContext)
-	err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
+	err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
 	if err == nil {
 		return nil
 	}
@@ -253,7 +253,7 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 	if signInErr := p.SignIn(ctx); signInErr != nil {
 		return fmt.Errorf("interactive authentication required: %w", signInErr)
 	}
-	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall)
+	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
 }
 
 func requiresInteractiveAuth(err error) bool {

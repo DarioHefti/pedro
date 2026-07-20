@@ -137,6 +137,7 @@ func StreamingChat(
 	systemPrompt string,
 	onChunk func(string),
 	onToolCall func(string, string),
+	onRequestDone func(shared.RequestUsage),
 ) error {
 	apiMessages := BuildMessages(messages, imageDataURLs, systemPrompt)
 	toolDefs := ToolDefinitions(registry)
@@ -147,6 +148,11 @@ func StreamingChat(
 			Model:    openai.ChatModel(model),
 			Messages: apiMessages,
 			Tools:    toolDefs,
+			// Request token usage in the streamed response. Without this, the
+			// provider omits usage and we can't report per-request context size.
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(true),
+			},
 		}
 
 		stream := client.Chat.Completions.NewStreaming(ctx, params)
@@ -164,6 +170,15 @@ func StreamingChat(
 
 		if err := stream.Err(); err != nil {
 			return fmt.Errorf("streaming error: %w", err)
+		}
+
+		// Report usage for this completed HTTP request (only populated on the
+		// final chunk for most providers; zero when not returned).
+		if onRequestDone != nil {
+			onRequestDone(shared.RequestUsage{
+				PromptTokens:     int(acc.Usage.PromptTokens),
+				CompletionTokens: int(acc.Usage.CompletionTokens),
+			})
 		}
 
 		if len(acc.Choices) == 0 {

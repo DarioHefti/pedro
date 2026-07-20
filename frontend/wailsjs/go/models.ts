@@ -18,6 +18,20 @@ export namespace main {
 	        this.UpdatedAt = source["UpdatedAt"];
 	    }
 	}
+	export class LifetimeStats {
+	    totalRequests: number;
+	    totalTokens: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LifetimeStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalRequests = source["totalRequests"];
+	        this.totalTokens = source["totalTokens"];
+	    }
+	}
 	export class Message {
 	    ID: number;
 	    ConversationID: number;
@@ -60,6 +74,22 @@ export namespace main {
 	        this.Prompt = source["Prompt"];
 	        this.CreatedAt = source["CreatedAt"];
 	        this.UpdatedAt = source["UpdatedAt"];
+	    }
+	}
+	export class RequestCounts {
+	    perChat: number;
+	    perChatTokens: number;
+	    global: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RequestCounts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.perChat = source["perChat"];
+	        this.perChatTokens = source["perChatTokens"];
+	        this.global = source["global"];
 	    }
 	}
 	export class UpdateInfo {

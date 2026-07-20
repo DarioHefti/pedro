@@ -141,6 +141,9 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 			toolCallsMu.Unlock()
 			runtime.EventsEmit(a.ctx, "tool_call", conversationID, name, argsJSON)
 		},
+		func(usage shared.RequestUsage) {
+			a.recordRequest(conversationID, usage)
+		},
 	)
 	toolCallsJSON := ""
 	if len(toolCalls) > 0 {
@@ -155,6 +158,40 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 		return "", "", err
 	}
 	return string(response), toolCallsJSON, nil
+}
+
+// recordRequest is invoked once per completed HTTP request to the LLM provider.
+// It increments the per-chat and global request counters, accumulates lifetime
+// token stats, and emits a live update event for the UI.
+func (a *App) recordRequest(conversationID int64, usage shared.RequestUsage) {
+	if a.store == nil {
+		return
+	}
+
+	perChat, err := a.store.IncrementRequestCount(conversationID)
+	if err != nil {
+		perChat = 0
+	}
+	global, err := a.store.IncrementGlobalRequestCount()
+	if err != nil {
+		global = 0
+	}
+	chatTokens := 0
+	if usage.PromptTokens > 0 || usage.CompletionTokens > 0 {
+		requestTokens := usage.PromptTokens + usage.CompletionTokens
+		chatTokens, _ = a.store.IncrementRequestTokens(conversationID, requestTokens)
+		_ = a.store.AddLifetimeTokens(usage.PromptTokens, usage.CompletionTokens)
+	}
+	runtime.EventsEmit(
+		a.ctx,
+		"request_count_updated",
+		conversationID,
+		perChat,
+		global,
+		chatTokens,
+		usage.PromptTokens,
+		usage.CompletionTokens,
+	)
 }
 
 func (a *App) AbortMessage() {
@@ -718,7 +755,7 @@ func (a *App) TestConnection() string {
 	}
 
 	testMsg := []providers.Message{{Role: "user", Content: "Hi"}}
-	if err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil); err != nil {
+	if err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil, nil); err != nil {
 		ret := "Error: " + err.Error()
 		a.persistConnectionTest(false, connectionTestFailureMessageForStore(ret), fp)
 		return ret
@@ -769,4 +806,65 @@ func (a *App) ForgetMemory(id int64) error {
 		return errors.New("database not initialized")
 	}
 	return a.store.ForgetMemory(id)
+}
+
+// RequestCounts bundles the per-chat and global request tallies for a conversation.
+type RequestCounts struct {
+	PerChat  int `json:"perChat"`
+	PerChatTokens int `json:"perChatTokens"`
+	Global  int `json:"global"`
+}
+
+// GetRequestCounts returns the per-chat and global LLM request counts.
+func (a *App) GetRequestCounts(conversationID int64) RequestCounts {
+	if a.store == nil {
+		return RequestCounts{}
+	}
+	perChat, err := a.store.GetRequestCount(conversationID)
+	if err != nil {
+		perChat = 0
+	}
+	perChatTokens, err := a.store.GetRequestTokens(conversationID)
+	if err != nil {
+		perChatTokens = 0
+	}
+	global, err := a.store.GetGlobalRequestCount()
+	if err != nil {
+		global = 0
+	}
+	return RequestCounts{PerChat: perChat, PerChatTokens: perChatTokens, Global: global}
+}
+
+// GetGlobalRequestCount returns the running global LLM request total.
+func (a *App) GetGlobalRequestCount() int {
+	if a.store == nil {
+		return 0
+	}
+	global, err := a.store.GetGlobalRequestCount()
+	if err != nil {
+		return 0
+	}
+	return global
+}
+
+// LifetimeStats reports the cumulative LLM request count and token total.
+type LifetimeStats struct {
+	TotalRequests int `json:"totalRequests"`
+	TotalTokens   int `json:"totalTokens"`
+}
+
+// GetLifetimeStats returns the cumulative request count and lifetime token total.
+func (a *App) GetLifetimeStats() LifetimeStats {
+	if a.store == nil {
+		return LifetimeStats{}
+	}
+	totalRequests, err := a.store.GetGlobalRequestCount()
+	if err != nil {
+		totalRequests = 0
+	}
+	totalTokens, err := a.store.GetLifetimeTokens()
+	if err != nil {
+		totalTokens = 0
+	}
+	return LifetimeStats{TotalRequests: totalRequests, TotalTokens: totalTokens}
 }

@@ -50,6 +50,14 @@ export function GetDefaultSystemPrompt() {
   return window['go']['main']['App']['GetDefaultSystemPrompt']();
 }
 
+export function GetGlobalRequestCount() {
+  return window['go']['main']['App']['GetGlobalRequestCount']();
+}
+
+export function GetLifetimeStats() {
+  return window['go']['main']['App']['GetLifetimeStats']();
+}
+
 export function GetMemories() {
   return window['go']['main']['App']['GetMemories']();
 }
@@ -60,6 +68,10 @@ export function GetMessages(arg1) {
 
 export function GetPersonas() {
   return window['go']['main']['App']['GetPersonas']();
+}
+
+export function GetRequestCounts(arg1) {
+  return window['go']['main']['App']['GetRequestCounts'](arg1);
 }
 
 export function GetSettings() {
