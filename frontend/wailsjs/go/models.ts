@@ -94,6 +94,8 @@ export namespace shared {
 	    Key: string;
 	    Value: string;
 	    Category: string;
+	    Importance: number;
+	    Source: string;
 	    UpdatedAt: string;
 	
 	    static createFrom(source: any = {}) {
@@ -106,6 +108,8 @@ export namespace shared {
 	        this.Key = source["Key"];
 	        this.Value = source["Value"];
 	        this.Category = source["Category"];
+	        this.Importance = source["Importance"];
+	        this.Source = source["Source"];
 	        this.UpdatedAt = source["UpdatedAt"];
 	    }
 	}

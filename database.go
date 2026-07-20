@@ -83,6 +83,50 @@ func (d *Database) init() error {
 		CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
 		CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 	`)
+	if err != nil {
+		return err
+	}
+
+	// FTS5 virtual table for full-text search on memories.
+	_, err = d.db.Exec(`
+		CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+			key, value, category,
+			content=memories,
+			content_rowid=id,
+			tokenize='porter unicode61'
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Triggers to keep FTS index in sync with the memories table.
+	_, err = d.db.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+			INSERT INTO memories_fts(rowid, key, value, category)
+			VALUES (new.id, new.key, new.value, new.category);
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = d.db.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+			INSERT INTO memories_fts(memories_fts, rowid, key, value, category)
+			VALUES ('delete', old.id, old.key, old.value, old.category);
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = d.db.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+			INSERT INTO memories_fts(memories_fts, rowid, key, value, category)
+			VALUES ('delete', old.id, old.key, old.value, old.category);
+			INSERT INTO memories_fts(rowid, key, value, category)
+			VALUES (new.id, new.key, new.value, new.category);
+		END;
+	`)
 	return err
 }
 
@@ -91,7 +135,107 @@ func (d *Database) migrate() {
 	d.db.Exec("ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT ''")
 	// Add tool_calls column (idempotent — ALTER fails silently if column exists).
 	d.db.Exec("ALTER TABLE messages ADD COLUMN tool_calls TEXT NOT NULL DEFAULT ''")
+	// Add importance and source columns for memory extraction.
+	d.db.Exec("ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 3")
+	d.db.Exec("ALTER TABLE memories ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+	// Add request_count column to track how many HTTP requests each chat made to the LLM.
+	d.db.Exec("ALTER TABLE conversations ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0")
 	d.sanitizeExistingConversationTitles()
+}
+
+// IncrementRequestCount increments the per-conversation request counter by one
+// and returns the new value. It is safe to call concurrently with MaxOpenConns(1).
+func (d *Database) IncrementRequestCount(conversationID int64) (int, error) {
+	if _, err := d.db.Exec(
+		"UPDATE conversations SET request_count = request_count + 1 WHERE id = ?",
+		conversationID,
+	); err != nil {
+		return 0, err
+	}
+	var count int
+	if err := d.db.QueryRow(
+		"SELECT request_count FROM conversations WHERE id = ?",
+		conversationID,
+	).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetRequestCount returns the number of LLM requests made in a conversation.
+func (d *Database) GetRequestCount(conversationID int64) (int, error) {
+	var count int
+	err := d.db.QueryRow(
+		"SELECT request_count FROM conversations WHERE id = ?",
+		conversationID,
+	).Scan(&count)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+const globalRequestCountKey = "global_request_count"
+
+// IncrementGlobalRequestCount increments the running global request total and
+// returns the new value.
+func (d *Database) IncrementGlobalRequestCount() (int, error) {
+	current, err := d.GetSetting(globalRequestCountKey)
+	if err != nil {
+		return 0, err
+	}
+	next := 1
+	if current != "" {
+		next = atoiSafe(current) + 1
+	}
+	if err := d.SetSetting(globalRequestCountKey, itoaSafe(next)); err != nil {
+		return 0, err
+	}
+	return next, nil
+}
+
+// GetGlobalRequestCount returns the running global request total.
+func (d *Database) GetGlobalRequestCount() (int, error) {
+	raw, err := d.GetSetting(globalRequestCountKey)
+	if err != nil {
+		return 0, err
+	}
+	if raw == "" {
+		return 0, nil
+	}
+	return atoiSafe(raw), nil
+}
+
+const lifetimeTokensKey = "lifetime_tokens"
+
+// AddLifetimeTokens accumulates the total prompt + completion tokens seen across
+// all requests (for the Settings stats view).
+func (d *Database) AddLifetimeTokens(promptTokens, completionTokens int) error {
+	raw, err := d.GetSetting(lifetimeTokensKey)
+	if err != nil {
+		return err
+	}
+	total := 0
+	if raw != "" {
+		total = atoiSafe(raw)
+	}
+	total += promptTokens + completionTokens
+	return d.SetSetting(lifetimeTokensKey, itoaSafe(total))
+}
+
+// GetLifetimeTokens returns the accumulated lifetime token total.
+func (d *Database) GetLifetimeTokens() (int, error) {
+	raw, err := d.GetSetting(lifetimeTokensKey)
+	if err != nil {
+		return 0, err
+	}
+	if raw == "" {
+		return 0, nil
+	}
+	return atoiSafe(raw), nil
 }
 
 func (d *Database) sanitizeExistingConversationTitles() {
@@ -380,7 +524,7 @@ func (d *Database) DeletePersona(id int64) error {
 }
 
 func (d *Database) GetMemories() ([]shared.MemoryRecord, error) {
-	rows, err := d.db.Query("SELECT id, key, value, category, updated_at FROM memories ORDER BY updated_at DESC")
+	rows, err := d.db.Query("SELECT id, key, value, category, importance, source, updated_at FROM memories ORDER BY importance DESC, updated_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +533,7 @@ func (d *Database) GetMemories() ([]shared.MemoryRecord, error) {
 	var list []shared.MemoryRecord
 	for rows.Next() {
 		var m shared.MemoryRecord
-		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.UpdatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.Importance, &m.Source, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, m)
@@ -421,6 +565,47 @@ func (d *Database) SearchMemories(query string) ([]shared.MemoryRecord, error) {
 		return d.GetMemories()
 	}
 
+	// Build FTS5 query: each term must match key, value, or category
+	var ftsTerms []string
+	for _, t := range terms {
+		if len(t) < 3 {
+			continue
+		}
+		ftsTerms = append(ftsTerms, t+"*") // prefix matching
+	}
+	if len(ftsTerms) == 0 {
+		return d.GetMemories()
+	}
+	ftsQuery := strings.Join(ftsTerms, " ")
+
+	// FTS5 search with BM25 ranking, combined with importance
+	sqlStr := `SELECT m.id, m.key, m.value, m.category, m.importance, m.source, m.updated_at
+		FROM memories m
+		JOIN memories_fts fts ON fts.rowid = m.id
+		WHERE memories_fts MATCH ?
+		ORDER BY (bm25(fts) * -1 + m.importance * 0.3) DESC
+		LIMIT 5`
+
+	rows, err := d.db.Query(sqlStr, ftsQuery)
+	if err != nil {
+		// Fallback to LIKE search if FTS fails
+		return d.searchMemoriesLike(query)
+	}
+	defer rows.Close()
+
+	var list []shared.MemoryRecord
+	for rows.Next() {
+		var m shared.MemoryRecord
+		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.Importance, &m.Source, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func (d *Database) searchMemoriesLike(query string) ([]shared.MemoryRecord, error) {
+	terms := strings.Fields(strings.ToLower(query))
 	var conditions []string
 	var args []any
 	for _, t := range terms {
@@ -433,21 +618,18 @@ func (d *Database) SearchMemories(query string) ([]shared.MemoryRecord, error) {
 	if len(conditions) == 0 {
 		return d.GetMemories()
 	}
-
-	sqlStr := "SELECT id, key, value, category, updated_at FROM memories WHERE " +
+	sqlStr := "SELECT id, key, value, category, importance, source, updated_at FROM memories WHERE " +
 		strings.Join(conditions, " OR ") +
-		" ORDER BY updated_at DESC LIMIT 5"
-
+		" ORDER BY importance DESC, updated_at DESC LIMIT 5"
 	rows, err := d.db.Query(sqlStr, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	var list []shared.MemoryRecord
 	for rows.Next() {
 		var m shared.MemoryRecord
-		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.UpdatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Key, &m.Value, &m.Category, &m.Importance, &m.Source, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, m)
@@ -460,8 +642,22 @@ func (d *Database) SaveMemory(key, value, category string) error {
 		category = "general"
 	}
 	_, err := d.db.Exec(
-		"INSERT OR REPLACE INTO memories (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+		"INSERT OR REPLACE INTO memories (key, value, category, importance, source, updated_at) VALUES (?, ?, ?, 3, 'manual', CURRENT_TIMESTAMP)",
 		key, value, category,
+	)
+	return err
+}
+
+func (d *Database) SaveMemoryWithMeta(key, value, category, source string, importance int) error {
+	if category == "" {
+		category = "general"
+	}
+	if importance < 1 || importance > 5 {
+		importance = 3
+	}
+	_, err := d.db.Exec(
+		"INSERT OR REPLACE INTO memories (key, value, category, importance, source, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+		key, value, category, importance, source,
 	)
 	return err
 }

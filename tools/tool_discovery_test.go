@@ -9,8 +9,8 @@ import (
 func TestNewRegistryExposesToolSearch(t *testing.T) {
 	r := newTestRegistry()
 	defs := r.Definitions()
-	if len(defs) != 2 {
-		t.Fatalf("expected exactly 2 exposed tools, got %d", len(defs))
+	if len(defs) != 1 {
+		t.Fatalf("expected exactly 1 exposed tool (tool_search), got %d", len(defs))
 	}
 	if defs[0].Name != ToolSearchToolName {
 		t.Fatalf("expected exposed tool %q, got %q", ToolSearchToolName, defs[0].Name)

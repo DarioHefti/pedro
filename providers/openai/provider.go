@@ -37,13 +37,20 @@ type Provider struct {
 	authenticated      bool
 }
 
-func (p *Provider) Name() string                    { return "openai" }
-func (p *Provider) IsAuthenticated() bool            { return p.authenticated }
-func (p *Provider) SetAuthenticated(a bool)          { p.authenticated = a }
-func (p *Provider) SetBaseSystemPrompt(s string)     { p.baseSystemPrompt = s }
-func (p *Provider) SetCustomSystemPrompt(s string)   { p.customSystemPrompt = s }
-func (p *Provider) SetPersonaPrompt(s string)        { p.personaPrompt = s }
-func (p *Provider) SetMemoryContext(s string)        { p.memoryContext = s }
+func (p *Provider) Name() string                   { return "openai" }
+func (p *Provider) IsAuthenticated() bool          { return p.authenticated }
+func (p *Provider) SetAuthenticated(a bool)        { p.authenticated = a }
+func (p *Provider) SetBaseSystemPrompt(s string)   { p.baseSystemPrompt = s }
+func (p *Provider) SetCustomSystemPrompt(s string) { p.customSystemPrompt = s }
+func (p *Provider) SetPersonaPrompt(s string)      { p.personaPrompt = s }
+func (p *Provider) SetMemoryContext(s string)      { p.memoryContext = s }
+func (p *Provider) ExtractionClient() any          { return p.client }
+func (p *Provider) ModelName() string {
+	if p.config.Model != "" {
+		return p.config.Model
+	}
+	return "gpt-4o"
+}
 
 func ParseConfig(settings map[string]string) (shared.Config, error) {
 	return OpenAIConfig{

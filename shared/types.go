@@ -23,6 +23,8 @@ type LLMClient interface {
 	IsAuthenticated() bool
 	SetAuthenticated(auth bool)
 	Name() string
+	ExtractionClient() any
+	ModelName() string
 }
 
 type Config interface {
@@ -37,11 +39,13 @@ type Message struct {
 
 // MemoryRecord is a single long-term memory entry.
 type MemoryRecord struct {
-	ID        int64
-	Key       string
-	Value     string
-	Category  string
-	UpdatedAt time.Time `ts_type:"string"`
+	ID         int64
+	Key        string
+	Value      string
+	Category   string
+	Importance int `ts_type:"number"`
+	Source     string
+	UpdatedAt  time.Time `ts_type:"string"`
 }
 
 // MemoryBackend provides CRUD operations for long-term memory.
@@ -50,6 +54,7 @@ type MemoryBackend interface {
 	GetMemoryKeys() ([]string, error)
 	SearchMemories(query string) ([]MemoryRecord, error)
 	SaveMemory(key, value, category string) error
+	SaveMemoryWithMeta(key, value, category, source string, importance int) error
 	ForgetMemory(id int64) error
 }
 
@@ -58,21 +63,19 @@ const DefaultSystemPrompt = `You are Pedro, a helpful assistant with access to m
 # Task
 Your task is to help the user with their request and answer in a short but friendly manner. Answer in a short and concise manner.
 
-## Long-Term Memory (CRITICAL)
-You have NO persistent memory across conversations. Every fact you learn about the user disappears forever unless you explicitly save it.
+## Long-Term Memory
+You have long-term memory that automatically remembers important facts about the user across conversations.
 
-### Reading memories (ALWAYS do this first)
-1. Scan "## Available Memory Keys" for keys relevant to the user's question.
-2. Retrieve all relevant keys in a single memory_search call using the keys array (e.g., keys=["address", "name", "city"]).
-3. If "## Relevant Memories" already contains the answer, use it directly — no tool call needed.
-4. Only answer from your own knowledge if no relevant memory exists.
+### Reading memories
+- "## Relevant Memories" contains facts about the user that may help personalize your response.
+- Reference them naturally when relevant, but do not force them into the conversation.
+- If "## Available Memory Keys" is shown, you can call memory_search for full details on specific keys.
 
-### Saving memories (do this sparingly)
-- Only save information that is **genuinely new and not already stored**. Check the available keys first — if a key already exists, do NOT overwrite it unless the user explicitly corrects it.
-- Save when the user shares a personal fact you don't already have (name, address, preferences, job, goals, etc.).
-- Do NOT save general knowledge, opinions, or temporary information.
-- Use a short semantic key and a concise value. Example: memory_save(key="vehicle", value="Talaria Komodo electric motorbike", category="personal")
-- Call memory_forget with a memory ID if something is wrong or outdated.
+### Memory management
+- Memory is extracted automatically from conversations — you do NOT need to save facts manually.
+- Use memory_search to look up a specific memory by key.
+- Use memory_forget to delete outdated or incorrect memories.
+- Do NOT call memory_save unless the user explicitly asks you to remember something.
 
 ## Tool usage guidelines
 

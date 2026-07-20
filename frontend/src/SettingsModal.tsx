@@ -1149,6 +1149,8 @@ export default function SettingsModal({
                           <div className="memory-row-summary">
                             <div className="memory-row-text">
                               <span className="memory-row-key">{m.Key}</span>
+                              {m.Importance >= 5 && <span className="memory-importance memory-importance--critical">critical</span>}
+                              {m.Importance >= 4 && m.Importance < 5 && <span className="memory-importance memory-importance--important">important</span>}
                               <span className="memory-row-value" title={m.Value}>
                                 {m.Value.length > 120 ? `${m.Value.slice(0, 120)}…` : m.Value}
                               </span>

@@ -173,7 +173,7 @@ func New(backend shared.MemoryBackend) *Registry {
 	// Tool search is always available immediately (never deferred)
 	r.Register(NewToolSearchTool(r))
 
-	// Memory save is always available so the model can store facts immediately.
+	// Memory save is deferred — use tool_search to unlock when user explicitly asks to remember something.
 	r.Register(NewMemorySaveTool(backend))
 
 	// All other tools are deferred (DeferLoading=true) - they do not appear in

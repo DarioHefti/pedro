@@ -229,3 +229,28 @@ func handleToolSearchResult(result string, unlocked map[string]struct{}) {
 		}
 	}
 }
+
+// ExtractCompletion runs a non-streaming completion for memory extraction.
+func ExtractCompletion(
+	ctx context.Context,
+	client openai.Client,
+	model string,
+	systemPrompt string,
+	userContent string,
+) (string, error) {
+	params := openai.ChatCompletionNewParams{
+		Model: openai.ChatModel(model),
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(systemPrompt),
+			openai.UserMessage(userContent),
+		},
+	}
+	resp, err := client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("extraction completion error: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("extraction returned no choices")
+	}
+	return resp.Choices[0].Message.Content, nil
+}

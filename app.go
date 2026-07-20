@@ -12,8 +12,11 @@ import (
 	goruntime "runtime"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
+	"github.com/openai/openai-go"
+	"pedro/memory"
 	"pedro/providers"
 	"pedro/shared"
 	"pedro/tools"
@@ -34,6 +37,7 @@ type App struct {
 	factory    *providers.Factory
 	cancelMu   sync.Mutex
 	cancelFunc context.CancelFunc
+	extractor  *memory.Extractor
 }
 
 func NewApp() *App {
@@ -95,6 +99,11 @@ func (a *App) initLLM() {
 	}
 
 	a.llm = llm
+
+	// Create memory extractor
+	if client, ok := llm.ExtractionClient().(openai.Client); ok {
+		a.extractor = memory.NewExtractor(client, llm.ModelName(), a.store)
+	}
 }
 
 func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, string, error) {
@@ -203,11 +212,33 @@ func (a *App) relevantMemoriesSection(content string) string {
 	if err != nil || len(records) == 0 {
 		return ""
 	}
+
+	// Group by category
+	byCategory := make(map[string][]shared.MemoryRecord)
+	for _, r := range records {
+		cat := r.Category
+		if cat == "" {
+			cat = "other"
+		}
+		byCategory[cat] = append(byCategory[cat], r)
+	}
+
 	var b strings.Builder
 	b.WriteString("## Relevant Memories\n")
 	b.WriteString("The following memories may help personalize your response. Reference them naturally when relevant, but do not force them into the conversation.\n\n")
-	for _, r := range records {
-		b.WriteString(fmt.Sprintf("- %s: %s\n", r.Key, r.Value))
+
+	for cat, items := range byCategory {
+		b.WriteString(fmt.Sprintf("### %s\n", cat))
+		for _, r := range items {
+			label := ""
+			switch {
+			case r.Importance >= 5:
+				label = " [critical]"
+			case r.Importance >= 4:
+				label = " [important]"
+			}
+			b.WriteString(fmt.Sprintf("- %s: %s%s\n", r.Key, r.Value, label))
+		}
 	}
 	return b.String()
 }
@@ -216,15 +247,22 @@ func (a *App) memoryKeysSection() string {
 	if a.store == nil {
 		return ""
 	}
-	keys, err := a.store.GetMemoryKeys()
-	if err != nil || len(keys) == 0 {
+	memories, err := a.store.GetMemories()
+	if err != nil || len(memories) == 0 {
 		return ""
 	}
+
+	// Limit to top 20 by importance
+	limit := 20
+	if len(memories) > limit {
+		memories = memories[:limit]
+	}
+
 	var b strings.Builder
 	b.WriteString("## Available Memory Keys\n")
 	b.WriteString("You have the following saved memories. Call memory_search with a key to retrieve its full value.\n\n")
-	for _, k := range keys {
-		b.WriteString(fmt.Sprintf("- %s\n", k))
+	for _, m := range memories {
+		b.WriteString(fmt.Sprintf("- %s\n", m.Key))
 	}
 	return b.String()
 }
@@ -238,6 +276,18 @@ func (a *App) buildMemoryContext(content string) string {
 		parts = append(parts, section)
 	}
 	return strings.Join(parts, "\n")
+}
+
+func (a *App) triggerMemoryExtraction(conversationID int64, userContent, assistantResponse string) {
+	if a.extractor == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	go func() {
+		a.extractor.ExtractAndSave(ctx, userContent, assistantResponse, conversationID)
+		cancel()
+	}()
 }
 
 func (a *App) requireStore() error {
@@ -284,6 +334,9 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
+
+	a.triggerMemoryExtraction(conversationID, content, resp)
+
 	return resp
 }
 
@@ -437,6 +490,9 @@ func (a *App) ResendMessage(conversationID int64, messageIndex int, selectedPers
 	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
+
+	a.triggerMemoryExtraction(conversationID, userMsg.Content, resp)
+
 	return resp
 }
 
@@ -493,6 +549,9 @@ func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selected
 	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
 		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
+
+	a.triggerMemoryExtraction(conversationID, lastUserContent, resp)
+
 	return resp
 }
 

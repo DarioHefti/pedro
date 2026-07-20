@@ -19,8 +19,9 @@ func NewMemorySaveTool(backend shared.MemoryBackend) *MemorySaveTool {
 
 func (t *MemorySaveTool) Definition() Definition {
 	return Definition{
-		Name: "memory_save",
-		Description: "Save an important fact about the user to long-term memory. Call this whenever you learn something about the user that would be useful to remember in future conversations (name, preferences, job, tech stack, goals, etc.)",
+		Name:         "memory_save",
+		DeferLoading: true,
+		Description:  "Save a fact about the user to long-term memory. Use ONLY when the user explicitly asks you to remember something.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

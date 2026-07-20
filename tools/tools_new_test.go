@@ -21,8 +21,9 @@ func (s *stubMemoryBackend) GetMemoryKeys() ([]string, error) {
 func (s *stubMemoryBackend) SearchMemories(string) ([]shared.MemoryRecord, error) {
 	return nil, nil
 }
-func (s *stubMemoryBackend) SaveMemory(_, _, _ string) error { return nil }
-func (s *stubMemoryBackend) ForgetMemory(_ int64) error      { return nil }
+func (s *stubMemoryBackend) SaveMemory(_, _, _ string) error                   { return nil }
+func (s *stubMemoryBackend) SaveMemoryWithMeta(_, _, _, _ string, _ int) error { return nil }
+func (s *stubMemoryBackend) ForgetMemory(_ int64) error                        { return nil }
 
 func newTestRegistry() *Registry {
 	return New(&stubMemoryBackend{})

@@ -47,13 +47,15 @@ type Provider struct {
 	authenticated      bool
 }
 
-func (p *Provider) Name() string                    { return "azure_apikey" }
-func (p *Provider) IsAuthenticated() bool            { return p.authenticated }
-func (p *Provider) SetAuthenticated(a bool)          { p.authenticated = a }
-func (p *Provider) SetBaseSystemPrompt(s string)     { p.baseSystemPrompt = s }
-func (p *Provider) SetCustomSystemPrompt(s string)   { p.customSystemPrompt = s }
-func (p *Provider) SetPersonaPrompt(s string)        { p.personaPrompt = s }
-func (p *Provider) SetMemoryContext(s string)        { p.memoryContext = s }
+func (p *Provider) Name() string                   { return "azure_apikey" }
+func (p *Provider) IsAuthenticated() bool          { return p.authenticated }
+func (p *Provider) SetAuthenticated(a bool)        { p.authenticated = a }
+func (p *Provider) SetBaseSystemPrompt(s string)   { p.baseSystemPrompt = s }
+func (p *Provider) SetCustomSystemPrompt(s string) { p.customSystemPrompt = s }
+func (p *Provider) SetPersonaPrompt(s string)      { p.personaPrompt = s }
+func (p *Provider) SetMemoryContext(s string)      { p.memoryContext = s }
+func (p *Provider) ExtractionClient() any          { return p.client }
+func (p *Provider) ModelName() string              { return p.config.Deployment }
 
 func ParseConfig(settings map[string]string) (shared.Config, error) {
 	cfg := Config{

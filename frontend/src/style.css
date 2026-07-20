@@ -1295,6 +1295,25 @@ body {
   font-weight: 500;
 }
 
+.settings-panel--memory .memory-importance {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.settings-panel--memory .memory-importance--critical {
+  background: var(--color-error-subtle, rgba(220, 38, 38, 0.1));
+  color: var(--color-error, #dc2626);
+}
+
+.settings-panel--memory .memory-importance--important {
+  background: var(--color-warning-subtle, rgba(234, 179, 8, 0.1));
+  color: var(--color-warning, #eab308);
+}
+
 .settings-panel--memory .memory-row-actions {
   display: flex;
   gap: 10px;

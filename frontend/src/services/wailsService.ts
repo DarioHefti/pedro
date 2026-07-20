@@ -49,13 +49,13 @@ import {
   GetCurrentVersion,
 } from '../../wailsjs/go/main/Updater'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { main } from '../../wailsjs/go/models'
+import { main, shared } from '../../wailsjs/go/models'
 
 // Re-export generated types so the rest of the app never imports from wailsjs.
 export type Conversation = main.Conversation
 export type Message = main.Message
 export type Persona = main.Persona
-export type MemoryRecord = main.MemoryRecord
+export type MemoryRecord = shared.MemoryRecord
 export type UpdateInfo = main.UpdateInfo
 
 function hasWailsBridge(): boolean {
@@ -309,7 +309,7 @@ export const personaService = {
 // Memory (SQLite-backed)
 // ---------------------------------------------------------------------------
 export const memoryService = {
-  getAll: async (): Promise<main.MemoryRecord[]> => {
+  getAll: async (): Promise<shared.MemoryRecord[]> => {
     const raw = useDevStub ? [] : await GetMemories()
     return raw ?? []
   },
