@@ -3,6 +3,7 @@ package providers
 import (
 	"pedro/providers/azure"
 	"pedro/providers/azure_apikey"
+	"pedro/providers/compat"
 	"pedro/providers/openai"
 )
 
@@ -19,4 +20,8 @@ func RegisterProviders(factory *Factory) {
 		ID:   ProviderOpenAI,
 		Name: "OpenAI",
 	}, openai.Build, openai.ParseConfig)
+	factory.Register(ProviderCompat, ProviderDescriptor{
+		ID:   ProviderCompat,
+		Name: "Local / OpenAI-compatible (LM Studio, llama.cpp)",
+	}, compat.Build, compat.ParseConfig)
 }

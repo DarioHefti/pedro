@@ -58,6 +58,10 @@ func connectionSettingsFingerprint(settings map[string]string) string {
 			mo = "gpt-4o"
 		}
 		rec["openai_model"] = mo
+	case "compat":
+		rec["compat_base_url"] = settings["compat_base_url"]
+		rec["compat_api_key"] = settings["compat_api_key"]
+		rec["compat_model"] = settings["compat_model"]
 	}
 
 	keys := make([]string, 0, len(rec))
@@ -107,6 +111,9 @@ func settingsKeyInvalidatesConnectionTest(key string) bool {
 		"azure_api_key",
 		"openai_api_key",
 		"openai_model",
+		"compat_base_url",
+		"compat_api_key",
+		"compat_model",
 		"system_prompt",
 		"custom_system_prompt",
 		"welcome_message",

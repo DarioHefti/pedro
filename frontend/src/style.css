@@ -671,17 +671,7 @@ body {
   gap: 6px;
 }
 
-.tool-call-icon {
-  font-size: 1.12em;
-  line-height: 1;
-}
-
-.tool-call-label {
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.tool-call-chevron-btn {
+.tool-call-header-toggle {
   appearance: none;
   border: 0;
   background: transparent;
@@ -689,9 +679,20 @@ body {
   cursor: pointer;
   padding: 0;
   margin: 0;
-  margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 6px;
+  font-size: inherit;
+}
+
+.tool-call-icon {
+  font-size: inherit;
+  line-height: 1;
+}
+
+.tool-call-label {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .tool-call-chevron {

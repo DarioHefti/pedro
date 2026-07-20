@@ -635,14 +635,14 @@ export default function Chat({
       <div className="message tool" key={key}>
         <div className="tool-call-card">
           <div className="tool-call-header">
-            <span className="tool-call-icon">🔧</span>
-            <span className="tool-call-label">tools used</span>
             <button
               type="button"
-              className="tool-call-chevron-btn"
+              className="tool-call-header-toggle"
               aria-expanded={collapsed ? 'false' : 'true'}
               onClick={onToggleCollapsed}
             >
+              <span className="tool-call-icon">🔧</span>
+              <span className="tool-call-label">tools used</span>
               <svg className="tool-call-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden><path fill="currentColor" d="M2 4l4 4 4-4"/></svg>
             </button>
           </div>
@@ -743,12 +743,12 @@ export default function Chat({
           <div className="message-wrapper assistant">
             <div className="assistant-bubble-shell">
               <div className="message assistant assistant-reply-bubble">
-                {streamingContent ? (
-                  <MessageRenderer content={streamingContent} role="assistant" isStreaming={true} />
-                ) : (
+                {streamingContent.trim() === '' ? (
                   <div className="message-content typing">
                     Thinking<span className="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
                   </div>
+                ) : (
+                  <MessageRenderer content={streamingContent} role="assistant" isStreaming={true} />
                 )}
               </div>
             </div>

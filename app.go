@@ -320,10 +320,9 @@ func (a *App) triggerMemoryExtraction(conversationID int64, userContent, assista
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	go func() {
+		defer cancel()
 		a.extractor.ExtractAndSave(ctx, userContent, assistantResponse, conversationID)
-		cancel()
 	}()
 }
 

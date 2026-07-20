@@ -14,6 +14,7 @@ const (
 	ProviderAzure       ProviderType = "azure"
 	ProviderAzureAPIKey ProviderType = "azure_apikey"
 	ProviderOpenAI      ProviderType = "openai"
+	ProviderCompat      ProviderType = "compat"
 )
 
 var ErrInvalidProvider = errors.New("invalid provider type")

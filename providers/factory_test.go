@@ -21,7 +21,7 @@ func (c stubConfig) Validate() error { return c.validateErr }
 
 type stubClient struct{}
 
-func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(string), func(string, string)) error {
+func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(string), func(string, string), func(shared.RequestUsage)) error {
 	return nil
 }
 func (s *stubClient) SetBaseSystemPrompt(string)   {}
@@ -154,7 +154,7 @@ func TestRegisterProvidersStableOrderAndIDs(t *testing.T) {
 	RegisterProviders(f)
 
 	got := f.RegisteredProviders()
-	want := []ProviderType{ProviderAzure, ProviderAzureAPIKey, ProviderOpenAI}
+	want := []ProviderType{ProviderAzure, ProviderAzureAPIKey, ProviderOpenAI, ProviderCompat}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("provider order: got %v want %v", got, want)
 	}

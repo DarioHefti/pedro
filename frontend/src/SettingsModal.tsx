@@ -36,6 +36,9 @@ interface FullSettingsSnapshot {
   azureTenantId: string
   apiKey: string
   model: string
+  compatBaseURL: string
+  compatApiKey: string
+  compatModel: string
   systemPrompt: string
   customSystemPrompt: string
   welcomeMessage: string
@@ -68,6 +71,10 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
   } else if (s.providerType === 'openai') {
     settings.openai_api_key = s.apiKey
     settings.openai_model = s.model
+  } else if (s.providerType === 'compat') {
+    settings.compat_base_url = s.compatBaseURL.trim()
+    settings.compat_api_key = s.compatApiKey
+    settings.compat_model = s.compatModel.trim()
   }
 
   return settings
@@ -190,6 +197,9 @@ export default function SettingsModal({
   const [azureTenantId, setAzureTenantId] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('gpt-4o')
+  const [compatBaseURL, setCompatBaseURL] = useState('http://localhost:1234/v1')
+  const [compatApiKey, setCompatApiKey] = useState('')
+  const [compatModel, setCompatModel] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -258,6 +268,9 @@ export default function SettingsModal({
       azureTenantId,
       apiKey,
       model,
+      compatBaseURL,
+      compatApiKey,
+      compatModel,
       systemPrompt,
       customSystemPrompt,
       welcomeMessage,
@@ -274,6 +287,9 @@ export default function SettingsModal({
       azureTenantId,
       apiKey,
       model,
+      compatBaseURL,
+      compatApiKey,
+      compatModel,
       systemPrompt,
       customSystemPrompt,
       welcomeMessage,
@@ -298,6 +314,9 @@ export default function SettingsModal({
       const tid = s.azure_tenant_id ?? ''
       const ok = s.openai_api_key ?? ''
       const m = s.openai_model ?? 'gpt-4o'
+      const cbu = s.compat_base_url ?? 'http://localhost:1234/v1'
+      const cak = s.compat_api_key ?? ''
+      const cm = s.compat_model ?? ''
       const sp = s.system_prompt ?? ''
       const csp = s.custom_system_prompt ?? ''
       const wm = s.welcome_message ?? DEFAULT_WELCOME_MESSAGE
@@ -313,6 +332,9 @@ export default function SettingsModal({
       setAzureTenantId(tid)
       setApiKey(ok)
       setModel(m)
+      setCompatBaseURL(cbu)
+      setCompatApiKey(cak)
+      setCompatModel(cm)
       setAuthenticated(auth)
       setSystemPrompt(sp)
       setCustomSystemPrompt(csp)
@@ -334,6 +356,9 @@ export default function SettingsModal({
         azureTenantId: tid,
         apiKey: ok,
         model: m,
+        compatBaseURL: cbu,
+        compatApiKey: cak,
+        compatModel: cm,
         systemPrompt: sp,
         customSystemPrompt: csp,
         welcomeMessage: wm,
@@ -364,7 +389,7 @@ export default function SettingsModal({
   }, [designLightBaseColor, designDarkBaseColor, uiFontSizePx, messageFontSizePx])
 
   function buildProviderSettings(): Record<string, string> {
-    const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo } =
+    const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo, compatBaseURL: cbu, compatApiKey: cak, compatModel: cm } =
       snapshot
     const settings: Record<string, string> = {
       provider_type: pt,
@@ -381,6 +406,10 @@ export default function SettingsModal({
     } else if (pt === 'openai') {
       settings.openai_api_key = ok
       settings.openai_model = mo
+    } else if (pt === 'compat') {
+      settings.compat_base_url = cbu.trim()
+      settings.compat_api_key = cak
+      settings.compat_model = cm.trim()
     }
 
     return settings
@@ -761,6 +790,7 @@ export default function SettingsModal({
                     <option value="azure">Azure OpenAI (Login)</option>
                     <option value="azure_apikey">Azure OpenAI (API Key)</option>
                     <option value="openai">OpenAI</option>
+                    <option value="compat">Local / OpenAI-compatible</option>
                   </select>
                   <div
                     className="settings-connection-badge"
@@ -853,12 +883,54 @@ export default function SettingsModal({
                 </>
               )}
 
+              {providerType === 'compat' && (
+                <>
+                  <label>Base URL</label>
+                  <p className="settings-description">
+                    OpenAI-compatible endpoint (e.g. LM Studio: http://localhost:1234/v1,
+                    llama.cpp: http://localhost:8080/v1, Ollama: http://localhost:11434/v1).
+                  </p>
+                  <input
+                    type="text"
+                    value={compatBaseURL}
+                    onChange={e => setCompatBaseURL(e.target.value)}
+                    placeholder="http://localhost:1234/v1"
+                  />
+                  <label>API Key — optional</label>
+                  <p className="settings-description">
+                    Most local servers don't require a key. Leave empty if yours doesn't.
+                  </p>
+                  <input
+                    type="password"
+                    value={compatApiKey}
+                    onChange={e => setCompatApiKey(e.target.value)}
+                    placeholder="(optional)"
+                  />
+                  <label>Model</label>
+                  <input
+                    type="text"
+                    value={compatModel}
+                    onChange={e => setCompatModel(e.target.value)}
+                    placeholder="e.g. llama-3.2-8b-instruct"
+                  />
+                </>
+              )}
+
               {/* Auth status */}
               <div className="auth-status">
-                <span className={`auth-dot ${authenticated ? 'auth-dot--signed-in' : 'auth-dot--signed-out'}`} />
-                <span className="auth-status-text">
-                  {authenticated ? 'Signed in' : 'Not signed in'}
-                </span>
+                {providerType === 'compat' ? (
+                  <>
+                    <span className="auth-dot auth-dot--signed-in" />
+                    <span className="auth-status-text">Local server (no sign-in required)</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={`auth-dot ${authenticated ? 'auth-dot--signed-in' : 'auth-dot--signed-out'}`} />
+                    <span className="auth-status-text">
+                      {authenticated ? 'Signed in' : 'Not signed in'}
+                    </span>
+                  </>
+                )}
               </div>
 
               <div className="settings-test-row">
