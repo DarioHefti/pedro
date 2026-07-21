@@ -3178,6 +3178,7 @@ button.attachment-name.attachment-name--open:focus-visible {
   right: var(--space-4);
   z-index: 9999;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -3265,6 +3266,61 @@ button.attachment-name.attachment-name--open:focus-visible {
 
 .update-error {
   color: var(--error);
+}
+
+.update-exclusion {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.update-exclusion-hint {
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.update-exclusion-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.update-exclusion-code {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-ui-secondary);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-copy-btn {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-ui-secondary);
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background var(--transition-smooth);
+}
+
+.update-copy-btn:hover {
+  background: var(--btn-ghost-hover-bg);
 }
 
 /* ===== Request Counter (live LLM request tally) ===== */

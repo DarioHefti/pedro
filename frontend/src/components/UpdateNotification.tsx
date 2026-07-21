@@ -8,8 +8,12 @@ export default function UpdateNotification() {
   const [state, setState] = useState<UpdateState>('idle')
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [dismissed, setDismissed] = useState(false)
+  const [defenderExclusion, setDefenderExclusion] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
+    if (import.meta.env.DEV) return
+
     const timer = setTimeout(async () => {
       try {
         const info = await updaterService.checkForUpdate()
@@ -24,6 +28,14 @@ export default function UpdateNotification() {
 
     return () => clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    if (state === 'available') {
+      updaterService.getWindowsDefenderExclusion().then(cmd => {
+        if (cmd) setDefenderExclusion(cmd)
+      })
+    }
+  }, [state])
 
   useEffect(() => {
     const cancel = eventService.on('update_progress', (_percent: number, status: string) => {
@@ -45,6 +57,17 @@ export default function UpdateNotification() {
     }
   }, [updateInfo])
 
+  const handleCopy = useCallback(async () => {
+    if (!defenderExclusion) return
+    try {
+      await navigator.clipboard.writeText(defenderExclusion)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API may fail in restricted contexts
+    }
+  }, [defenderExclusion])
+
   if (dismissed || state === 'idle') return null
 
   return (
@@ -62,6 +85,19 @@ export default function UpdateNotification() {
               Later
             </button>
           </div>
+          {defenderExclusion && (
+            <div className="update-exclusion">
+              <span className="update-exclusion-hint">
+                Run this in PowerShell as Admin to prevent Defender from blocking Pedro:
+              </span>
+              <div className="update-exclusion-row">
+                <code className="update-exclusion-code">{defenderExclusion}</code>
+                <button className="update-copy-btn" onClick={handleCopy}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
       {state === 'downloading' && (

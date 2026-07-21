@@ -34,3 +34,8 @@ func getWindowsInstallDir() string {
 
 	return filepath.Join(`C:\Program Files`, windowsCompanyName, windowsProductName)
 }
+
+func (u *Updater) GetWindowsDefenderExclusion() string {
+	dir := getWindowsInstallDir()
+	return `Add-MpPreference -AttackSurfaceReductionOnlyExclusions "` + dir + `\pedro.exe"`
+}

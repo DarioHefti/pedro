@@ -7,3 +7,5 @@ export function CheckForUpdate():Promise<main.UpdateInfo>;
 export function DownloadAndInstall(arg1:string,arg2:string):Promise<void>;
 
 export function GetCurrentVersion():Promise<string>;
+
+export function GetWindowsDefenderExclusion():Promise<string>;

@@ -52,6 +52,7 @@ import {
   CheckForUpdate,
   DownloadAndInstall,
   GetCurrentVersion,
+  GetWindowsDefenderExclusion,
 } from '../../wailsjs/go/main/Updater'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { main, shared } from '../../wailsjs/go/models'
@@ -351,6 +352,8 @@ export const updaterService = {
     useDevStub ? Promise.resolve() : DownloadAndInstall(assetURL, assetName),
   getCurrentVersion: (): Promise<string> =>
     useDevStub ? Promise.resolve('dev') : GetCurrentVersion(),
+  getWindowsDefenderExclusion: (): Promise<string> =>
+    useDevStub ? Promise.resolve('') : GetWindowsDefenderExclusion(),
 }
 
 // ---------------------------------------------------------------------------

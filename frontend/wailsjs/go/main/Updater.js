@@ -13,3 +13,7 @@ export function DownloadAndInstall(arg1, arg2) {
 export function GetCurrentVersion() {
   return window['go']['main']['Updater']['GetCurrentVersion']();
 }
+
+export function GetWindowsDefenderExclusion() {
+  return window['go']['main']['Updater']['GetWindowsDefenderExclusion']();
+}
