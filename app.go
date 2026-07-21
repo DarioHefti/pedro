@@ -154,13 +154,51 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 	}
 
 	// Persist each generated message (tool roundtrips + final assistant).
+	// Merge all tool-calling assistant messages into a single one so the
+	// frontend groups every tool call under one "tools used" card.
+	var mergedToolCalls []toolCallRecord
+	var toolResultMsgs []shared.Message
 	for _, m := range generatedMessages {
-		var toolCalls string
 		if m.Role == "assistant" && m.ToolCalls != "" {
-			toolCalls = m.ToolCalls
+			var tcs []toolCallRecord
+			if err := json.Unmarshal([]byte(m.ToolCalls), &tcs); err == nil {
+				mergedToolCalls = append(mergedToolCalls, tcs...)
+			}
+			continue
 		}
-		if _, saveErr := a.store.AddMessage(conversationID, m.Role, m.Content, "", toolCalls, m.ToolCallID); saveErr != nil {
+		if m.Role == "tool" {
+			toolResultMsgs = append(toolResultMsgs, m)
+			continue
+		}
+		// Flush the merged assistant message before the first non-tool
+		// message (tool result or final assistant).
+		if len(mergedToolCalls) > 0 {
+			mergedJSON, _ := json.Marshal(mergedToolCalls)
+			if _, saveErr := a.store.AddMessage(conversationID, "assistant", "", "", string(mergedJSON), ""); saveErr != nil {
+				fmt.Println("Warning: Failed to save merged tool-call message:", saveErr.Error())
+			}
+			for _, tr := range toolResultMsgs {
+				if _, saveErr := a.store.AddMessage(conversationID, tr.Role, tr.Content, "", "", tr.ToolCallID); saveErr != nil {
+					fmt.Println("Warning: Failed to save tool result message:", saveErr.Error())
+				}
+			}
+			mergedToolCalls = nil
+			toolResultMsgs = nil
+		}
+		if _, saveErr := a.store.AddMessage(conversationID, m.Role, m.Content, "", "", m.ToolCallID); saveErr != nil {
 			fmt.Println("Warning: Failed to save message:", saveErr.Error())
+		}
+	}
+	// Edge case: conversation ended with tool calls (shouldn't happen but be safe).
+	if len(mergedToolCalls) > 0 {
+		mergedJSON, _ := json.Marshal(mergedToolCalls)
+		if _, saveErr := a.store.AddMessage(conversationID, "assistant", "", "", string(mergedJSON), ""); saveErr != nil {
+			fmt.Println("Warning: Failed to save merged tool-call message:", saveErr.Error())
+		}
+		for _, tr := range toolResultMsgs {
+			if _, saveErr := a.store.AddMessage(conversationID, tr.Role, tr.Content, "", "", tr.ToolCallID); saveErr != nil {
+				fmt.Println("Warning: Failed to save tool result message:", saveErr.Error())
+			}
 		}
 	}
 

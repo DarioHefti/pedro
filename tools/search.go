@@ -10,7 +10,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// SearchTool searches the web via DuckDuckGo (falls back to Brave).
+// SearchTool searches the web via DuckDuckGo, OpenAlex (scholarly), and Brave.
 // No API key required.
 type SearchTool struct{}
 
@@ -55,17 +55,42 @@ func (s SearchTool) Execute(argsJSON string) (string, error) {
 }
 
 func (s SearchTool) search(query string) ([]searchResult, error) {
+	var errs []string
+
 	results, err := searchDuckDuckGo(query)
-	if err == nil && len(results) > 0 {
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("DuckDuckGo error: %v", err))
+	} else if len(results) > 0 {
 		return results, nil
+	} else {
+		errs = append(errs, "DuckDuckGo returned no results")
 	}
+
 	braveResults, braveErr := searchBrave(query)
-	if braveErr == nil && len(braveResults) > 0 {
+	if braveErr != nil {
+		errs = append(errs, fmt.Sprintf("Brave error: %v", braveErr))
+	} else if len(braveResults) > 0 {
 		return braveResults, nil
+	} else {
+		errs = append(errs, "Brave returned no results")
+	}
+
+	openalexResults, openalexErr := searchOpenAlex(query)
+	if openalexErr != nil {
+		errs = append(errs, fmt.Sprintf("OpenAlex error: %v", openalexErr))
+	} else if len(openalexResults) > 0 {
+		return openalexResults, nil
+	} else {
+		errs = append(errs, "OpenAlex returned no results")
+	}
+
+	errMsg := "No results found"
+	if len(errs) > 0 {
+		errMsg = fmt.Sprintf("%s. Details: %s", errMsg, strings.Join(errs, "; "))
 	}
 	return []searchResult{{
 		title:   "No results found",
-		snippet: "Both DuckDuckGo and Brave returned no results. Try a different query.",
+		snippet: fmt.Sprintf("%s. Try a different query.", errMsg),
 	}}, nil
 }
 
@@ -122,7 +147,7 @@ func searchDuckDuckGo(query string) ([]searchResult, error) {
 			childCls := getAttr(c, "class")
 			if hasClass(childCls, "result__a") && title == "" {
 				title = textContent(c)
-				link = getAttr(c, "href")
+				link = extractDDGURL(getAttr(c, "href"))
 			}
 			if hasClass(childCls, "result__snippet") && snippet == "" {
 				snippet = textContent(c)
@@ -136,6 +161,107 @@ func searchDuckDuckGo(query string) ([]searchResult, error) {
 		}
 		return true
 	})
+
+	return results, nil
+}
+
+// ── OpenAlex (scholarly works) ────────────────────────────────────────────────
+
+// openalexResponse represents the JSON response from the OpenAlex API.
+type openalexResponse struct {
+	Meta struct {
+		Count int `json:"count"`
+	} `json:"meta"`
+	Results []openalexWork `json:"results"`
+}
+
+// openalexWork represents a single scholarly work from OpenAlex.
+type openalexWork struct {
+	ID               string `json:"id"`
+	DOI              string `json:"doi"`
+	DisplayName      string `json:"display_name"`
+	PublicationYear  int    `json:"publication_year"`
+	CitedByCount     int    `json:"cited_by_count"`
+	OpenAccess       struct {
+		IsOA    bool   `json:"is_oa"`
+		OAURL   string `json:"oa_url"`
+		OAStatus string `json:"oa_status"`
+	} `json:"open_access"`
+	PrimaryLocation struct {
+		Source struct {
+			DisplayName string `json:"display_name"`
+		} `json:"source"`
+	} `json:"primary_location"`
+}
+
+func searchOpenAlex(query string) ([]searchResult, error) {
+	u := "https://api.openalex.org/works?search=" + url.QueryEscape(query) + "&per-page=5&sort=relevance_score:desc&mailto=opencode@example.com"
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", UserAgent)
+
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenAlex returned status %d", resp.StatusCode)
+	}
+
+	var apiResp openalexResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAlex response: %w", err)
+	}
+
+	var results []searchResult
+	for _, w := range apiResp.Results {
+		title := w.DisplayName
+		if title == "" {
+			continue
+		}
+
+		link := w.DOI
+		if link == "" {
+			link = w.ID
+		}
+
+		var sb strings.Builder
+		if w.PublicationYear > 0 {
+			fmt.Fprintf(&sb, "Published %d", w.PublicationYear)
+		}
+		if w.CitedByCount > 0 {
+			if sb.Len() > 0 {
+				sb.WriteString(" · ")
+			}
+			fmt.Fprintf(&sb, "Cited by %d", w.CitedByCount)
+		}
+		if w.PrimaryLocation.Source.DisplayName != "" {
+			if sb.Len() > 0 {
+				sb.WriteString(" · ")
+			}
+			sb.WriteString(w.PrimaryLocation.Source.DisplayName)
+		}
+		if w.OpenAccess.IsOA {
+			if sb.Len() > 0 {
+				sb.WriteString(" · ")
+			}
+			sb.WriteString("Open Access")
+			if w.OpenAccess.OAURL != "" {
+				fmt.Fprintf(&sb, " (%s)", w.OpenAccess.OAURL)
+			}
+		}
+
+		results = append(results, searchResult{
+			title:   fmt.Sprintf("[Scholarly] %s", title),
+			url:     link,
+			snippet: sb.String(),
+		})
+	}
 
 	return results, nil
 }
@@ -261,4 +387,38 @@ func textContent(n *html.Node) string {
 		return true
 	})
 	return strings.TrimSpace(sb.String())
+}
+
+// extractDDGURL extracts the actual destination URL from a DuckDuckGo redirect link.
+// DDG wraps URLs as //duckduckgo.com/l/?uddg=<encoded-url>&rut=...
+func extractDDGURL(rawURL string) string {
+	if rawURL == "" {
+		return rawURL
+	}
+
+	// Handle protocol-relative URLs
+	u := rawURL
+	if strings.HasPrefix(u, "//") {
+		u = "https:" + u
+	}
+
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return rawURL
+	}
+
+	// Check if this is a DDG redirect link
+	if !strings.Contains(parsed.Host, "duckduckgo.com") || !strings.HasSuffix(parsed.Path, "/l/") {
+		return rawURL
+	}
+
+	// Extract the uddg parameter which contains the actual URL
+	uddg := parsed.Query().Get("uddg")
+	if uddg != "" {
+		if decoded, err := url.QueryUnescape(uddg); err == nil {
+			return decoded
+		}
+	}
+
+	return rawURL
 }
