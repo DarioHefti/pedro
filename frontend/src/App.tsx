@@ -204,6 +204,7 @@ export default function App() {
         composerFocusPaused={settingsOpen}
         requestCount={perChatRequestCount}
         requestTokens={perChatTokens}
+        onViewDetails={() => setDetailsOpen(true)}
       />
       {settingsOpen && (
         <SettingsModal
@@ -229,7 +230,7 @@ export default function App() {
           onViewDetails={() => setDetailsOpen(true)}
         />
       )}
-      <Details open={detailsOpen} onClose={() => setDetailsOpen(false)} />
+      <Details open={detailsOpen} onClose={() => setDetailsOpen(false)} conversationID={currentConvID} />
       <Toaster />
       <UpdateNotification />
     </div>

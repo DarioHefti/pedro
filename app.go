@@ -214,7 +214,7 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 	// Persist the finalized payload actually sent to the provider together with
 	// the assistant's reply (one row per top-level request, capturing the final
 	// assembled context incl. tools and the resulting response).
-	if captured.Messages != nil {
+	if captured.RequestBody != "" {
 		a.recordLLMDetails(conversationID, captured, finalText)
 	}
 
@@ -228,9 +228,10 @@ func (a *App) recordLLMDetails(conversationID int64, captured shared.CapturedReq
 	if a.store == nil {
 		return
 	}
+	// captured.RequestBody is already JSON. Use json.RawMessage to embed
+	// it directly without double-encoding.
 	payload := map[string]any{
-		"messages": captured.Messages,
-		"tools":    captured.Tools,
+		"request":  json.RawMessage(captured.RequestBody),
 		"response": responseText,
 	}
 	msgsJSON, err := json.Marshal(payload)

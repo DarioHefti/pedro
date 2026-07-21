@@ -6,7 +6,6 @@ import (
 	"fmt"
 	goruntime "runtime"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -83,86 +82,7 @@ func toOpenAIToolDefinitions(defs []tools.Definition) []openai.ChatCompletionToo
 	return result
 }
 
-// CaptureToolNames returns the function names of the supplied tool definitions.
-// The full JSON schema is omitted to keep the persisted payload lean.
-func CaptureToolNames(toolDefs []openai.ChatCompletionToolParam) []string {
-	names := make([]string, 0, len(toolDefs))
-	for _, t := range toolDefs {
-		names = append(names, t.Function.Name)
-	}
-	return names
-}
 
-// CaptureMessages flattens OpenAI message params into a serializable,
-// human-readable form (role + content) suitable for persistence and display.
-func CaptureMessages(apiMessages []openai.ChatCompletionMessageParamUnion) []shared.Message {
-	out := make([]shared.Message, 0, len(apiMessages))
-	for _, m := range apiMessages {
-		role := ""
-		content := ""
-		toolCallID := ""
-		switch {
-		case m.OfSystem != nil:
-			role = "system"
-			content = m.OfSystem.Content.OfString.Value
-		case m.OfUser != nil:
-			role = "user"
-			content = renderUserContent(m.OfUser.Content)
-		case m.OfAssistant != nil:
-			if len(m.OfAssistant.ToolCalls) > 0 {
-				role = "tool_call"
-				content = renderToolCalls(m.OfAssistant.ToolCalls)
-			} else {
-				role = "assistant"
-				content = m.OfAssistant.Content.OfString.Value
-			}
-		case m.OfTool != nil:
-			role = "tool"
-			content = m.OfTool.Content.OfString.Value
-			toolCallID = m.OfTool.ToolCallID
-		}
-		if role == "" {
-			continue
-		}
-		out = append(out, shared.Message{Role: role, Content: content, ToolCallID: toolCallID})
-	}
-	return out
-}
-
-func renderUserContent(content openai.ChatCompletionUserMessageParamContentUnion) string {
-	if s := content.OfString.Value; s != "" {
-		return s
-	}
-	if content.OfArrayOfContentParts != nil {
-		var sb strings.Builder
-		for _, part := range content.OfArrayOfContentParts {
-			if part.OfText != nil {
-				sb.WriteString(part.OfText.Text)
-				sb.WriteString("\n")
-			} else if part.OfImageURL != nil {
-				sb.WriteString("[image: ")
-				sb.WriteString(part.OfImageURL.ImageURL.URL)
-				sb.WriteString("]\n")
-			}
-		}
-		return strings.TrimRight(sb.String(), "\n")
-	}
-	return ""
-}
-
-func renderToolCalls(calls []openai.ChatCompletionMessageToolCallParam) string {
-	var sb strings.Builder
-	for i, c := range calls {
-		if i > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString(c.Function.Name)
-		sb.WriteString("(")
-		sb.WriteString(c.Function.Arguments)
-		sb.WriteString(")")
-	}
-	return sb.String()
-}
 
 type toolCallRecord struct {
 	Name     string `json:"name"`
@@ -274,13 +194,11 @@ func StreamingChat(
 			},
 		}
 
-		// Capture the exact payload about to be sent (system prompt, all turns,
-		// tool round-trips, and the active tool definitions) for inspection.
+		// Capture the exact HTTP request body about to be sent to the provider.
 		if onRequestCaptured != nil {
-			onRequestCaptured(shared.CapturedRequest{
-				Messages: CaptureMessages(apiMessages),
-				Tools:    CaptureToolNames(toolDefs),
-			})
+			if body, err := json.Marshal(params); err == nil {
+				onRequestCaptured(shared.CapturedRequest{RequestBody: string(body)})
+			}
 		}
 
 		stream := client.Chat.Completions.NewStreaming(ctx, params)

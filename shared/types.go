@@ -46,12 +46,12 @@ type RequestUsage struct {
 	CompletionTokens int
 }
 
-// CapturedRequest carries the exact final payload sent to the LLM provider for a
-// single HTTP request, so it can be persisted for inspection. Role is one of
-// system/user/assistant/tool/tool_call; Content is a human-readable rendering.
+// CapturedRequest carries the raw JSON of the ChatCompletionNewParams struct
+// that is about to be sent as the HTTP request body to the LLM provider.
+// This captures the exact payload including model, messages, tools with full
+// schemas, and all request parameters (temperature, max_tokens, etc.).
 type CapturedRequest struct {
-	Messages []Message
-	Tools    []string
+	RequestBody string // JSON-serialized ChatCompletionNewParams
 }
 
 // MemoryRecord is a single long-term memory entry.

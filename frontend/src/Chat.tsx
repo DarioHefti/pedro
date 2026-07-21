@@ -45,6 +45,8 @@ interface ChatProps {
   requestCount?: number
   /** Cumulative token usage for the current conversation. */
   requestTokens?: number
+  /** Opens the LLM request details modal. */
+  onViewDetails?: () => void
 }
 
 /**
@@ -109,6 +111,7 @@ export default function Chat({
   composerFocusPaused = false,
   requestCount = 0,
   requestTokens = 0,
+  onViewDetails,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -688,6 +691,19 @@ export default function Chat({
           <span className="chat-request-bar-sep" aria-hidden>·</span>
           <span className="chat-request-bar-value">{requestTokens.toLocaleString()}</span>
           <span className="chat-request-bar-label">tokens in this chat</span>
+          {onViewDetails && (
+            <button
+              type="button"
+              className="chat-request-bar-details"
+              title="View request details"
+              onClick={onViewDetails}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
 
