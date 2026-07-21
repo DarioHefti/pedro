@@ -21,8 +21,8 @@ func (c stubConfig) Validate() error { return c.validateErr }
 
 type stubClient struct{}
 
-func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(string), func(string, string), func(shared.RequestUsage)) error {
-	return nil
+func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(string), func(string, string, string), func(shared.RequestUsage), func(shared.CapturedRequest)) ([]shared.Message, error) {
+	return nil, nil
 }
 func (s *stubClient) SetBaseSystemPrompt(string)   {}
 func (s *stubClient) SetCustomSystemPrompt(string) {}

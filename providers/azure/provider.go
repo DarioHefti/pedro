@@ -231,9 +231,9 @@ func (p *Provider) ensureAuthenticated(ctx context.Context) error {
 	return p.SignIn(ctx)
 }
 
-func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(shared.RequestUsage)) error {
+func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(shared.RequestUsage), onRequestCaptured func(shared.CapturedRequest)) ([]shared.Message, error) {
 	if err := p.ensureAuthenticated(ctx); err != nil {
-		return err
+		return nil, err
 	}
 
 	base := p.baseSystemPrompt
@@ -241,19 +241,19 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 		base = shared.DefaultSystemPrompt
 	}
 	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt, p.memoryContext)
-	err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
+	generated, err := openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone, onRequestCaptured)
 	if err == nil {
-		return nil
+		return generated, nil
 	}
 
 	// If streaming still fails with an interaction-required token error, sign in once and retry.
 	if !requiresInteractiveAuth(err) {
-		return err
+		return generated, err
 	}
 	if signInErr := p.SignIn(ctx); signInErr != nil {
-		return fmt.Errorf("interactive authentication required: %w", signInErr)
+		return nil, fmt.Errorf("interactive authentication required: %w", signInErr)
 	}
-	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
+	return openaiutil.StreamingChat(ctx, p.client, p.config.Deployment, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone, onRequestCaptured)
 }
 
 func requiresInteractiveAuth(err error) bool {

@@ -713,8 +713,14 @@ export default function Chat({
           </div>
         )}
         {messages.map((msg, i) => {
+          if (msg.Role === 'tool') return null
           const rows: JSX.Element[] = []
           const persistedToolCalls = messageToolCalls.get(i)
+          const isEmptyToolCallingAssistant =
+            msg.Role === 'assistant' &&
+            !(msg.Content || '').trim() &&
+            persistedToolCalls != null &&
+            persistedToolCalls.length > 0
           if (msg.Role === 'assistant' && persistedToolCalls && persistedToolCalls.length > 0) {
             const isExpanded = expandedToolCallSummaries.has(i)
             const summaryRow = renderToolCallsBubble(
@@ -731,7 +737,9 @@ export default function Chat({
             )
             if (summaryRow) rows.push(summaryRow)
           }
-          rows.push(renderMessageRow(i))
+          if (!isEmptyToolCallingAssistant) {
+            rows.push(renderMessageRow(i))
+          }
           if (splitMessagesForToolCalls && i === lastUserMessageIndex && inFlightToolCallsRow) {
             rows.push(inFlightToolCallsRow)
           }

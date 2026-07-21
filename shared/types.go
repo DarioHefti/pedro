@@ -13,7 +13,7 @@ type SettingsStore interface {
 }
 
 type LLMClient interface {
-	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(RequestUsage)) error
+	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(RequestUsage), onRequestCaptured func(CapturedRequest)) ([]Message, error)
 	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
 	SetPersonaPrompt(prompt string)
@@ -33,8 +33,10 @@ type Config interface {
 }
 
 type Message struct {
-	Role    string
-	Content string
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	ToolCalls  string `json:"tool_calls,omitempty"`
 }
 
 // RequestUsage carries the token accounting for a single completed HTTP request
@@ -42,6 +44,14 @@ type Message struct {
 type RequestUsage struct {
 	PromptTokens     int
 	CompletionTokens int
+}
+
+// CapturedRequest carries the exact final payload sent to the LLM provider for a
+// single HTTP request, so it can be persisted for inspection. Role is one of
+// system/user/assistant/tool/tool_call; Content is a human-readable rendering.
+type CapturedRequest struct {
+	Messages []Message
+	Tools    []string
 }
 
 // MemoryRecord is a single long-term memory entry.
@@ -74,13 +84,11 @@ Your task is to help the user with their request and answer in a short but frien
 You have long-term memory that automatically remembers important facts about the user across conversations.
 
 ### Reading memories
-- "## Relevant Memories" contains facts about the user that may help personalize your response.
+- "## Memories" contains facts about the user that are automatically injected into every conversation.
 - Reference them naturally when relevant, but do not force them into the conversation.
-- If "## Available Memory Keys" is shown, you can call memory_search for full details on specific keys.
 
 ### Memory management
 - Memory is extracted automatically from conversations — you do NOT need to save facts manually.
-- Use memory_search to look up a specific memory by key.
 - Use memory_forget to delete outdated or incorrect memories.
 - Do NOT call memory_save unless the user explicitly asks you to remember something.
 

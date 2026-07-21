@@ -186,7 +186,7 @@ func New(backend shared.MemoryBackend) *Registry {
 	r.Register(NewShowFileTreeTool())
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
-	r.Register(NewMemorySearchTool(backend))
+	r.RegisterHidden(NewMemorySearchTool(backend))
 	r.Register(NewMemoryForgetTool(backend))
 
 	// tool_discovery is truly hidden: deprecated, not discoverable via tool_search,

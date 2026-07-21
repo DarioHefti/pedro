@@ -45,6 +45,8 @@ import {
   GetRequestCounts,
   GetGlobalRequestCount,
   GetLifetimeStats,
+  GetLLMDetails,
+  ClearLLMDetails,
 } from '../../wailsjs/go/main/App'
 import {
   CheckForUpdate,
@@ -60,6 +62,7 @@ export type Message = main.Message
 export type Persona = main.Persona
 export type MemoryRecord = shared.MemoryRecord
 export type UpdateInfo = main.UpdateInfo
+export type LLMDetailsEntry = main.LLMDetailsEntry
 
 function hasWailsBridge(): boolean {
   if (typeof window === 'undefined') return false
@@ -362,6 +365,16 @@ export const statsService = {
     useDevStub
       ? Promise.resolve(new main.LifetimeStats({ TotalRequests: 0, TotalTokens: 0 }))
       : GetLifetimeStats(),
+}
+
+// ---------------------------------------------------------------------------
+// LLM request details (final payloads sent to the provider)
+// ---------------------------------------------------------------------------
+export const detailsService = {
+  getAll: (): Promise<main.LLMDetailsEntry[]> =>
+    useDevStub ? Promise.resolve([]) : GetLLMDetails(),
+  clear: (): Promise<void> =>
+    useDevStub ? Promise.resolve() : ClearLLMDetails(),
 }
 
 // ---------------------------------------------------------------------------

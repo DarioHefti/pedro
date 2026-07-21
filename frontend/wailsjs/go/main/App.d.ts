@@ -5,6 +5,8 @@ import {shared} from '../models';
 
 export function AbortMessage():Promise<void>;
 
+export function ClearLLMDetails():Promise<void>;
+
 export function CreateConversation():Promise<main.Conversation>;
 
 export function CreatePersona(arg1:string,arg2:string):Promise<main.Persona>;
@@ -28,6 +30,8 @@ export function GetConversations():Promise<Array<main.Conversation>>;
 export function GetDefaultSystemPrompt():Promise<string>;
 
 export function GetGlobalRequestCount():Promise<number>;
+
+export function GetLLMDetails():Promise<Array<main.LLMDetailsEntry>>;
 
 export function GetLifetimeStats():Promise<main.LifetimeStats>;
 

@@ -15,11 +15,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/openai/openai-go"
 	"pedro/memory"
 	"pedro/providers"
 	"pedro/shared"
 	"pedro/tools"
+
+	"github.com/openai/openai-go"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -27,6 +28,7 @@ import (
 type toolCallRecord struct {
 	Name     string `json:"name"`
 	ArgsJSON string `json:"argsJSON"`
+	ID       string `json:"id"`
 }
 
 type App struct {
@@ -106,7 +108,7 @@ func (a *App) initLLM() {
 	}
 }
 
-func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, string, error) {
+func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []string) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancelMu.Lock()
 	a.cancelFunc = cancel
@@ -121,13 +123,12 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 
 	llmMessages := make([]providers.Message, len(messages))
 	for i, m := range messages {
-		llmMessages[i] = providers.Message{Role: m.Role, Content: m.Content}
+		llmMessages[i] = providers.Message{Role: m.Role, Content: m.Content, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID}
 	}
 
 	var response []byte
-	var toolCalls []toolCallRecord
-	var toolCallsMu sync.Mutex
-	err := a.llm.Chat(
+	var captured shared.CapturedRequest
+	generatedMessages, err := a.llm.Chat(
 		ctx,
 		llmMessages,
 		imageDataURLs,
@@ -135,29 +136,80 @@ func (a *App) runChat(conversationID int64, messages []Message, imageDataURLs []
 			response = append(response, chunk...)
 			runtime.EventsEmit(a.ctx, "stream_chunk", conversationID, chunk)
 		},
-		func(name, argsJSON string) {
-			toolCallsMu.Lock()
-			toolCalls = append(toolCalls, toolCallRecord{Name: name, ArgsJSON: argsJSON})
-			toolCallsMu.Unlock()
+		func(name, argsJSON, id string) {
 			runtime.EventsEmit(a.ctx, "tool_call", conversationID, name, argsJSON)
 		},
 		func(usage shared.RequestUsage) {
 			a.recordRequest(conversationID, usage)
 		},
+		func(capturedReq shared.CapturedRequest) {
+			captured = capturedReq
+		},
 	)
-	toolCallsJSON := ""
-	if len(toolCalls) > 0 {
-		if b, mErr := json.Marshal(toolCalls); mErr == nil {
-			toolCallsJSON = string(b)
-		}
-	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			return string(response), toolCallsJSON, nil
+			return string(response), nil
 		}
-		return "", "", err
+		return "", err
 	}
-	return string(response), toolCallsJSON, nil
+
+	// Persist each generated message (tool roundtrips + final assistant).
+	for _, m := range generatedMessages {
+		var toolCalls string
+		if m.Role == "assistant" && m.ToolCalls != "" {
+			toolCalls = m.ToolCalls
+		}
+		if _, saveErr := a.store.AddMessage(conversationID, m.Role, m.Content, "", toolCalls, m.ToolCallID); saveErr != nil {
+			fmt.Println("Warning: Failed to save message:", saveErr.Error())
+		}
+	}
+
+	// Determine the final assistant text response.
+	var finalText string
+	for i := len(generatedMessages) - 1; i >= 0; i-- {
+		if generatedMessages[i].Role == "assistant" && generatedMessages[i].ToolCalls == "" {
+			finalText = generatedMessages[i].Content
+			break
+		}
+	}
+
+	// Persist the finalized payload actually sent to the provider together with
+	// the assistant's reply (one row per top-level request, capturing the final
+	// assembled context incl. tools and the resulting response).
+	if captured.Messages != nil {
+		a.recordLLMDetails(conversationID, captured, finalText)
+	}
+
+	return finalText, nil
+}
+
+// recordLLMDetails stores the fully assembled request sent to the LLM plus the
+// assistant's response, correlated with the conversation. No-op when the store
+// is nil.
+func (a *App) recordLLMDetails(conversationID int64, captured shared.CapturedRequest, responseText string) {
+	if a.store == nil {
+		return
+	}
+	payload := map[string]any{
+		"messages": captured.Messages,
+		"tools":    captured.Tools,
+		"response": responseText,
+	}
+	msgsJSON, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	model := ""
+	if a.llm != nil {
+		model = a.llm.ModelName()
+	}
+	global, err := a.store.GetGlobalRequestCount()
+	if err != nil {
+		global = 0
+	}
+	if err := a.store.AddLLMDetails(conversationID, model, global, string(msgsJSON)); err != nil {
+		fmt.Println("AddLLMDetails error:", err.Error())
+	}
 }
 
 // recordRequest is invoked once per completed HTTP request to the LLM provider.
@@ -240,14 +292,17 @@ func (a *App) relevantMemoriesSection(content string) string {
 	if a.store == nil {
 		return ""
 	}
-	keywords := extractKeywords(content)
-	if len(keywords) == 0 {
-		return ""
-	}
-	query := strings.Join(keywords, " ")
-	records, err := a.store.SearchMemories(query)
+
+	// Retrieve all memories sorted by importance (highest first).
+	records, err := a.store.GetMemories()
 	if err != nil || len(records) == 0 {
 		return ""
+	}
+
+	const maxMemories = 30
+	const maxTokens = 1500
+	if len(records) > maxMemories {
+		records = records[:maxMemories]
 	}
 
 	// Group by category
@@ -261,9 +316,10 @@ func (a *App) relevantMemoriesSection(content string) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("## Relevant Memories\n")
-	b.WriteString("The following memories may help personalize your response. Reference them naturally when relevant, but do not force them into the conversation.\n\n")
+	b.WriteString("## Memories\n")
+	b.WriteString("The following memories are automatically available to personalize your response. Reference them naturally when relevant, but do not force them into the conversation.\n\n")
 
+	totalTokens := 0
 	for cat, items := range byCategory {
 		b.WriteString(fmt.Sprintf("### %s\n", cat))
 		for _, r := range items {
@@ -274,45 +330,23 @@ func (a *App) relevantMemoriesSection(content string) string {
 			case r.Importance >= 4:
 				label = " [important]"
 			}
-			b.WriteString(fmt.Sprintf("- %s: %s%s\n", r.Key, r.Value, label))
+			line := fmt.Sprintf("- %s: %s%s\n", r.Key, r.Value, label)
+			totalTokens += len(line) / 4 // rough token estimator
+			if totalTokens > maxTokens {
+				b.WriteString("\n... (additional memories omitted to stay within context window)\n")
+				return b.String()
+			}
+			b.WriteString(line)
 		}
 	}
 	return b.String()
 }
 
-func (a *App) memoryKeysSection() string {
-	if a.store == nil {
-		return ""
-	}
-	memories, err := a.store.GetMemories()
-	if err != nil || len(memories) == 0 {
-		return ""
-	}
-
-	// Limit to top 20 by importance
-	limit := 20
-	if len(memories) > limit {
-		memories = memories[:limit]
-	}
-
-	var b strings.Builder
-	b.WriteString("## Available Memory Keys\n")
-	b.WriteString("You have the following saved memories. Call memory_search with a key to retrieve its full value.\n\n")
-	for _, m := range memories {
-		b.WriteString(fmt.Sprintf("- %s\n", m.Key))
-	}
-	return b.String()
-}
-
 func (a *App) buildMemoryContext(content string) string {
-	var parts []string
 	if section := a.relevantMemoriesSection(content); section != "" {
-		parts = append(parts, section)
+		return section
 	}
-	if section := a.memoryKeysSection(); section != "" {
-		parts = append(parts, section)
-	}
-	return strings.Join(parts, "\n")
+	return ""
 }
 
 func (a *App) triggerMemoryExtraction(conversationID int64, userContent, assistantResponse string) {
@@ -345,7 +379,7 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 		return "Error: " + err.Error()
 	}
 
-	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON, ""); err != nil {
+	if _, err := a.store.AddMessage(conversationID, "user", content, attachmentsJSON, "", ""); err != nil {
 		return "Error: Failed to save message: " + err.Error()
 	}
 	runtime.EventsEmit(a.ctx, "conversation_updated", conversationID)
@@ -362,13 +396,9 @@ func (a *App) sendMessage(conversationID int64, content string, imageDataURLs []
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
 	a.llm.SetMemoryContext(a.buildMemoryContext(content))
 	mergedImages := mergeImageDataURLsFromFileRefs(imageDataURLs, attachmentsJSON, content)
-	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
+	resp, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
 		return "Error: " + err.Error()
-	}
-
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
-		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 
 	a.triggerMemoryExtraction(conversationID, content, resp)
@@ -518,13 +548,9 @@ func (a *App) ResendMessage(conversationID int64, messageIndex int, selectedPers
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
 	a.llm.SetMemoryContext(a.buildMemoryContext(userMsg.Content))
-	resp, toolCallsJSON, err := a.runChat(conversationID, messages, mergedImages)
+	resp, err := a.runChat(conversationID, messages, mergedImages)
 	if err != nil {
 		return "Error: " + err.Error()
-	}
-
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
-		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 
 	a.triggerMemoryExtraction(conversationID, userMsg.Content, resp)
@@ -577,13 +603,9 @@ func (a *App) RegenerateMessage(conversationID int64, messageIndex int, selected
 
 	a.llm.SetPersonaPrompt(a.personaPromptFromDB(selectedPersonaID))
 	a.llm.SetMemoryContext(a.buildMemoryContext(lastUserContent))
-	resp, toolCallsJSON, err := a.runChat(conversationID, messages, nil)
+	resp, err := a.runChat(conversationID, messages, nil)
 	if err != nil {
 		return "Error: " + err.Error()
-	}
-
-	if _, saveErr := a.store.AddMessage(conversationID, "assistant", resp, "", toolCallsJSON); saveErr != nil {
-		fmt.Println("Warning: Failed to save assistant message:", saveErr.Error())
 	}
 
 	a.triggerMemoryExtraction(conversationID, lastUserContent, resp)
@@ -754,7 +776,7 @@ func (a *App) TestConnection() string {
 	}
 
 	testMsg := []providers.Message{{Role: "user", Content: "Hi"}}
-	if err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil, nil); err != nil {
+	if _, err := a.llm.Chat(context.Background(), testMsg, nil, func(string) {}, nil, nil, nil); err != nil {
 		ret := "Error: " + err.Error()
 		a.persistConnectionTest(false, connectionTestFailureMessageForStore(ret), fp)
 		return ret
@@ -809,9 +831,9 @@ func (a *App) ForgetMemory(id int64) error {
 
 // RequestCounts bundles the per-chat and global request tallies for a conversation.
 type RequestCounts struct {
-	PerChat  int `json:"perChat"`
+	PerChat       int `json:"perChat"`
 	PerChatTokens int `json:"perChatTokens"`
-	Global  int `json:"global"`
+	Global        int `json:"global"`
 }
 
 // GetRequestCounts returns the per-chat and global LLM request counts.
@@ -866,4 +888,25 @@ func (a *App) GetLifetimeStats() LifetimeStats {
 		totalTokens = 0
 	}
 	return LifetimeStats{TotalRequests: totalRequests, TotalTokens: totalTokens}
+}
+
+// GetLLMDetails returns the persisted final payloads (newest-first), capped at 20.
+func (a *App) GetLLMDetails() []LLMDetailsEntry {
+	if a.store == nil {
+		return []LLMDetailsEntry{}
+	}
+	entries, err := a.store.GetLLMDetails()
+	if err != nil {
+		fmt.Println("GetLLMDetails error:", err.Error())
+		return []LLMDetailsEntry{}
+	}
+	return entries
+}
+
+// ClearLLMDetails empties the persisted request details.
+func (a *App) ClearLLMDetails() error {
+	if a.store == nil {
+		return nil
+	}
+	return a.store.ClearLLMDetails()
 }

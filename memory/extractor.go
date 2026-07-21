@@ -7,50 +7,65 @@ import (
 	"log"
 	"strings"
 
-	"github.com/openai/openai-go"
 	"pedro/providers/openaiutil"
 	"pedro/shared"
+
+	"github.com/openai/openai-go"
 )
 
-const extractionSystemPrompt = `You are a memory extraction agent. Your ONLY job is to extract durable personal facts from a conversation.
+const extractionSystemPrompt = `You are a memory extraction agent. Your ONLY job is to write long-term memories about the USER that will remain useful in future chats.
 
-RULES:
-1. ONLY extract facts that are:
-   - Personal to the user (name, preferences, habits, goals, relationships, location, job, etc.)
-   - Durable (will remain true across future conversations)
-   - NOT general knowledge or opinions about topics
-   - NOT temporary information (weather, current events, one-time requests)
-2. NEVER extract:
-   - What the user asked about (questions ≠ facts)
-   - Technical explanations or how-to information
-   - Opinions about technology, products, etc.
-   - Anything that changes frequently
-3. If a fact already exists in "Existing Memories" and hasn't changed, skip it.
-4. Keep keys short and semantic (e.g., "user_name", "favorite_color", "job_title").
-5. Keep values concise (one sentence max).
-6. Assign importance 1-5:
-   - 5: name, location, job (critical personal identity)
-   - 4: preferences, goals, family (important context)
-   - 3: habits, routines, tools used (useful context)
-   - 2: minor details, passing mentions
-   - 1: rarely useful information
+DEFAULT: DO NOT SAVE. When unsure, output [].
 
-OUTPUT: Return ONLY a JSON array. If nothing to extract, return [].
+HARD GATE (must pass ALL):
+A) The fact is about the USER (not assistant, not general info, not third parties unless directly relevant to user).
+B) The user stated it as true about themselves (self-disclosure), not a question, not speculation.
+C) It is stable for months/years OR a long-term preference/goal. If it could change within weeks, do not store.
+D) It is likely useful for personalization later. If it's merely interesting, do not store.
+E) It is specific and unambiguous.
 
+DO NOT STORE (examples):
+- The users questions, tasks, or one-off plans (“I am going to X today”)
+- Ephemeral states (mood today, temporary location, current problem, purchases unless clearly enduring)
+- Random favorites mentioned once (“I like pizza”) unless strongly emphasized as enduring (“my favorite food is…”)
+- Technical content, instructions, code, or product opinions unless it's a stable preference/tool choice (“I always use zsh”, “I prefer OpenCode”)
+- Sensitive data (exact address, passwords, API keys, health details) unless user explicitly asks to remember AND it is safe/minimal
+
+QUALITY REQUIREMENTS:
+1) Provide "confidence" 0.0-1.0. If < 0.8, do not store.
+2) Do not create memories with importance 1-2. Only store importance 3-5.
+3) Skip anything already present in Existing Memories unless it has changed.
+
+KEYS/VALUES:
+- key: short semantic snake_case (e.g., user_location_country, preferred_language)
+- value: one sentence, no extra details, no speculation
+- category: personal|preference|goal|technical
+
+IMPORTANCE (3-5 only):
+5: identity anchors (name, country/region, primary job/role)
+4: strong enduring preferences, long-term goals, close relationships
+3: stable habits/routines, consistently used tools/platforms
+
+OUTPUT: Return ONLY a JSON array. If nothing qualifies, return [].
+
+Schema:
 [
   {
     "key": "short_semantic_key",
-    "value": "concise fact",
-    "category": "personal|preference|goal|technical|other",
-    "importance": 3
+    "value": "concise durable fact",
+    "category": "personal|preference|goal|technical",
+    "importance": 3,
+    "confidence": 0.0
   }
-]`
+];
+`
 
 type ExtractedMemory struct {
-	Key        string `json:"key"`
-	Value      string `json:"value"`
-	Category   string `json:"category"`
-	Importance int    `json:"importance"`
+	Key        string  `json:"key"`
+	Value      string  `json:"value"`
+	Category   string  `json:"category"`
+	Importance int     `json:"importance"`
+	Confidence float64 `json:"confidence"`
 }
 
 type Extractor struct {
@@ -91,7 +106,7 @@ func (e *Extractor) ExtractAndSave(
 
 	memories := parseExtractionResponse(response)
 	for _, m := range memories {
-		if m.Key == "" || m.Value == "" {
+		if m.Key == "" || m.Value == "" || m.Confidence < 0.8 {
 			continue
 		}
 		importance := m.Importance

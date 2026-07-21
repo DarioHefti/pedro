@@ -6,6 +6,10 @@ export function AbortMessage() {
   return window['go']['main']['App']['AbortMessage']();
 }
 
+export function ClearLLMDetails() {
+  return window['go']['main']['App']['ClearLLMDetails']();
+}
+
 export function CreateConversation() {
   return window['go']['main']['App']['CreateConversation']();
 }
@@ -52,6 +56,10 @@ export function GetDefaultSystemPrompt() {
 
 export function GetGlobalRequestCount() {
   return window['go']['main']['App']['GetGlobalRequestCount']();
+}
+
+export function GetLLMDetails() {
+  return window['go']['main']['App']['GetLLMDetails']();
 }
 
 export function GetLifetimeStats() {

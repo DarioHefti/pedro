@@ -4,11 +4,11 @@ Your friendly desktop AI chat companion. Built with Wails, Go.
 
 ## What is this?
 
-A desktop app for chatting with Azure AI models. It stores your conversations locally in sqlite, renders pretty markdown, and occasionally hums while it thinks. 
+A desktop app for chatting with Openai any compatible AI models (azure, lm studio, openai). It stores your conversations locally in sqlite, renders pretty markdown, and occasionally hums while it thinks. 
 
 ## Features
 
-- Chat with Azure AI
+- Chat with Openai Compatible LLM's
 - Multimodal support - drop images in and ask questions
 - Conversations that persist (SQLite is watching)
 - Markdown rendering + Mermaid diagrams (because why not)
@@ -19,7 +19,7 @@ A desktop app for chatting with Azure AI models. It stores your conversations lo
 
 ## Quick Start
 
-1. Configure your Azure AI credentials in Settings
+1. Configure your LLM provider with credentials in Settings
 2. Start chatting
 3. Hope the AI is feeling helpful
 

@@ -20,6 +20,7 @@ type Message struct {
 	Content        string
 	Attachments    string
 	ToolCalls      string
+	ToolCallID     string
 	CreatedAt      time.Time `ts_type:"string"`
 }
 
@@ -39,7 +40,7 @@ type Store interface {
 	DeleteAllConversations() error
 	GetMessages(conversationID int64) ([]Message, error)
 	SearchMessages(query string) (map[int64][]Message, error)
-	AddMessage(conversationID int64, role, content, attachments, toolCalls string) (*Message, error)
+	AddMessage(conversationID int64, role, content, attachments, toolCalls, toolCallID string) (*Message, error)
 	DeleteMessage(conversationID int64, messageIndex int) error
 	IncrementRequestCount(conversationID int64) (int, error)
 	GetRequestCount(conversationID int64) (int, error)
@@ -57,6 +58,9 @@ type Store interface {
 	CreatePersona(name, prompt string) (*Persona, error)
 	UpdatePersona(id int64, name, prompt string) error
 	DeletePersona(id int64) error
+	AddLLMDetails(conversationID int64, model string, requestCount int, messagesJSON string) error
+	GetLLMDetails() ([]LLMDetailsEntry, error)
+	ClearLLMDetails() error
 	shared.MemoryBackend
 	Close() error
 }

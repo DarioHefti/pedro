@@ -165,6 +165,7 @@ interface SettingsModalProps {
   getMemories: () => Promise<MemoryRecord[]>
   saveMemory: (key: string, value: string, category: string) => Promise<void>
   deleteMemory: (id: number) => Promise<void>
+  onViewDetails: () => void
 }
 
 export default function SettingsModal({
@@ -185,6 +186,7 @@ export default function SettingsModal({
   getMemories,
   saveMemory,
   deleteMemory,
+  onViewDetails,
 }: SettingsModalProps) {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('llm')
@@ -1401,18 +1403,26 @@ export default function SettingsModal({
               {statsLoading ? (
                 <p className="settings-description">Loading stats…</p>
               ) : (
-                <div className="stats-grid">
-                  <div className="stats-card">
-                    <div className="stats-card-value">{lifetimeStats.totalRequests}</div>
-                    <div className="stats-card-label">Total LLM requests</div>
-                  </div>
-                  <div className="stats-card">
-                    <div className="stats-card-value">
-                      {lifetimeStats.totalTokens.toLocaleString()}
+                <>
+                  <div className="stats-grid">
+                    <div className="stats-card">
+                      <div className="stats-card-value">{lifetimeStats.totalRequests}</div>
+                      <div className="stats-card-label">Total LLM requests</div>
                     </div>
-                    <div className="stats-card-label">Estimated total tokens</div>
+                    <div className="stats-card">
+                      <div className="stats-card-value">
+                        {lifetimeStats.totalTokens.toLocaleString()}
+                      </div>
+                      <div className="stats-card-label">Estimated total tokens</div>
+                    </div>
                   </div>
-                </div>
+
+                  <div className="stats-details-row">
+                    <button type="button" className="details-open-btn" onClick={onViewDetails}>
+                      View request details
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           )}

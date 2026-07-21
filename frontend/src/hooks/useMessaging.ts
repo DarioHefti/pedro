@@ -18,6 +18,7 @@ import type { Message } from '../services/wailsService'
 export interface ToolCall {
   name: string
   argsJSON: string
+  id?: string
 }
 
 export interface Attachment {
@@ -438,7 +439,7 @@ This shows the key derivation and encryption flow.` } as Message,
       const msg = messages[index]
       if (msg?.Role !== 'user') return
 
-      const messagesToDelete = messages.slice(index).filter(m => m.Role === 'user' || m.Role === 'assistant')
+      const messagesToDelete = messages.slice(index).filter(m => m.Role === 'user' || m.Role === 'assistant' || m.Role === 'tool')
 
       for (let i = messagesToDelete.length - 1; i >= 0; i--) {
         await messageService.deleteMessage(convID, index + i)

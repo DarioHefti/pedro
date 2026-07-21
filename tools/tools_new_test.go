@@ -336,7 +336,7 @@ func TestDeferredDefinitionsWorksWithProductionRegistry(t *testing.T) {
 			t.Errorf("tool %q in DeferredDefinitions() has DeferLoading=false", d.Name)
 		}
 	}
-	for _, expected := range []string{"web_search", "webclaw", "read_file", "glob", "grep", "memory_search", "memory_forget"} {
+	for _, expected := range []string{"web_search", "webclaw", "read_file", "glob", "grep", "memory_forget"} {
 		if !seen[expected] {
 			t.Errorf("expected deferred tool %q not found in DeferredDefinitions()", expected)
 		}

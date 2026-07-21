@@ -95,9 +95,9 @@ func (p *Provider) SignOut() error {
 	return nil
 }
 
-func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON string), onRequestDone func(shared.RequestUsage)) error {
+func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(shared.RequestUsage), onRequestCaptured func(shared.CapturedRequest)) ([]shared.Message, error) {
 	if !p.authenticated {
-		return fmt.Errorf("not authenticated")
+		return nil, fmt.Errorf("not authenticated")
 	}
 
 	base := p.baseSystemPrompt
@@ -105,5 +105,5 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 		base = shared.DefaultSystemPrompt
 	}
 	prompt := openaiutil.FullSystemPrompt(base, p.personaPrompt, p.customSystemPrompt, p.memoryContext)
-	return openaiutil.StreamingChat(ctx, p.client, p.config.Model, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone)
+	return openaiutil.StreamingChat(ctx, p.client, p.config.Model, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone, onRequestCaptured)
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Chat from './Chat'
 import SettingsModal from './SettingsModal'
+import Details from './Details'
 import Toaster from './components/Toaster'
 import UpdateNotification from './components/UpdateNotification'
 import { useConversations } from './hooks/useConversations'
@@ -28,6 +29,7 @@ export default function App() {
     uiConversationService.initialConversationID(),
   )
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [activePersonaId, setActivePersonaId] = useState<string>('')
@@ -224,8 +226,10 @@ export default function App() {
           getMemories={memoryService.getAll}
           saveMemory={memoryService.save}
           deleteMemory={memoryService.delete}
+          onViewDetails={() => setDetailsOpen(true)}
         />
       )}
+      <Details open={detailsOpen} onClose={() => setDetailsOpen(false)} />
       <Toaster />
       <UpdateNotification />
     </div>

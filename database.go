@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -72,6 +73,7 @@ func (d *Database) init() error {
 			content TEXT NOT NULL,
 			attachments TEXT NOT NULL DEFAULT '',
 			tool_calls TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		);
@@ -93,12 +95,25 @@ func (d *Database) init() error {
 			category TEXT NOT NULL DEFAULT 'general',
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE IF NOT EXISTS llm_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			conversation_id INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			request_count INTEGER NOT NULL DEFAULT 0,
+			model TEXT NOT NULL DEFAULT '',
+			messages TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_llm_history_created ON llm_history(created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
 		CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 	`)
 	if err != nil {
 		return err
 	}
+
+	// Conversation-id index on llm_history (separate statement so it doesn't
+	// break init when the table already exists without the column).
+	d.db.Exec("CREATE INDEX IF NOT EXISTS idx_llm_history_conv ON llm_history(conversation_id)")
 
 	// FTS5 virtual table for full-text search on memories.
 	_, err = d.db.Exec(`
@@ -155,7 +170,33 @@ func (d *Database) migrate() {
 	d.db.Exec("ALTER TABLE conversations ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0")
 	// Add request_tokens column to track the cumulative token usage per chat.
 	d.db.Exec("ALTER TABLE conversations ADD COLUMN request_tokens INTEGER NOT NULL DEFAULT 0")
+	// Add tool_call_id column for persisting tool roundtrip messages.
+	d.db.Exec("ALTER TABLE messages ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT ''")
+	// Recreate llm_history with conversation_id column if missing (data is ephemeral, safe to drop).
+	if !d.columnExists("llm_history", "conversation_id") {
+		d.db.Exec("DROP TABLE IF EXISTS llm_history")
+		d.db.Exec(`
+			CREATE TABLE llm_history (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				conversation_id INTEGER NOT NULL DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				request_count INTEGER NOT NULL DEFAULT 0,
+				model TEXT NOT NULL DEFAULT '',
+				messages TEXT NOT NULL
+			)
+		`)
+		d.db.Exec("CREATE INDEX IF NOT EXISTS idx_llm_history_created ON llm_history(created_at DESC)")
+		d.db.Exec("CREATE INDEX IF NOT EXISTS idx_llm_history_conv ON llm_history(conversation_id)")
+	}
 	d.sanitizeExistingConversationTitles()
+}
+
+// columnExists checks whether a column exists in the given table.
+func (d *Database) columnExists(table, column string) bool {
+	var count int
+	query := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = '%s'", table, column)
+	err := d.db.QueryRow(query).Scan(&count)
+	return err == nil && count > 0
 }
 
 // IncrementRequestCount increments the per-conversation request counter by one
@@ -338,7 +379,7 @@ func (d *Database) GetConversations() ([]Conversation, error) {
 }
 
 func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +388,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.ToolCallID, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
@@ -356,7 +397,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 }
 
 func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +406,7 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	result := make(map[int64][]Message)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.Attachments, &m.ToolCalls, &m.ToolCallID, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		result[m.ConversationID] = append(result[m.ConversationID], m)
@@ -373,8 +414,8 @@ func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
 	return result, nil
 }
 
-func (d *Database) AddMessage(conversationID int64, role, content, attachments, toolCalls string) (*Message, error) {
-	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content, attachments, tool_calls) VALUES (?, ?, ?, ?, ?)", conversationID, role, content, attachments, toolCalls)
+func (d *Database) AddMessage(conversationID int64, role, content, attachments, toolCalls, toolCallID string) (*Message, error) {
+	_, err := d.db.Exec("INSERT INTO messages (conversation_id, role, content, attachments, tool_calls, tool_call_id) VALUES (?, ?, ?, ?, ?, ?)", conversationID, role, content, attachments, toolCalls, toolCallID)
 	if err != nil {
 		return nil, err
 	}
@@ -397,6 +438,7 @@ func (d *Database) AddMessage(conversationID int64, role, content, attachments, 
 		Content:        content,
 		Attachments:    attachments,
 		ToolCalls:      toolCalls,
+		ToolCallID:     toolCallID,
 	}, nil
 }
 
@@ -443,6 +485,8 @@ func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
 }
 
 func (d *Database) DeleteConversation(id int64) error {
+	// Clean up llm_history entries for this conversation.
+	d.db.Exec("DELETE FROM llm_history WHERE conversation_id = ?", id)
 	// ON DELETE CASCADE (enforced via _foreign_keys=on DSN option) handles
 	// the child messages rows automatically.
 	_, err := d.db.Exec("DELETE FROM conversations WHERE id = ?", id)
@@ -450,6 +494,7 @@ func (d *Database) DeleteConversation(id int64) error {
 }
 
 func (d *Database) DeleteAllConversations() error {
+	d.db.Exec("DELETE FROM llm_history")
 	_, err := d.db.Exec("DELETE FROM conversations")
 	return err
 }
@@ -489,6 +534,64 @@ func (d *Database) GetSettings() (map[string]string, error) {
 		settings[key] = value
 	}
 	return settings, nil
+}
+
+// LLMDetailsEntry is a single persisted final payload handed to the LLM provider.
+type LLMDetailsEntry struct {
+	ID             int64
+	ConversationID int64
+	ConversationTitle string
+	CreatedAt      time.Time
+	RequestCount   int
+	Model          string
+	Messages       string
+}
+
+// AddLLMDetails inserts a finalized LLM request payload for a conversation,
+// replacing any previous entry for the same conversation (one row per conversation).
+func (d *Database) AddLLMDetails(conversationID int64, model string, requestCount int, messagesJSON string) error {
+	// Delete existing entry for this conversation before inserting (upsert).
+	if _, err := d.db.Exec(
+		"DELETE FROM llm_history WHERE conversation_id = ?",
+		conversationID,
+	); err != nil {
+		return err
+	}
+	_, err := d.db.Exec(
+		"INSERT INTO llm_history (conversation_id, model, request_count, messages) VALUES (?, ?, ?, ?)",
+		conversationID, model, requestCount, messagesJSON,
+	)
+	return err
+}
+
+// GetLLMDetails returns the most recent entries, newest first, with conversation titles.
+func (d *Database) GetLLMDetails() ([]LLMDetailsEntry, error) {
+	rows, err := d.db.Query(`
+		SELECT h.id, h.conversation_id, COALESCE(c.title, ''), h.created_at, h.request_count, h.model, h.messages
+		FROM llm_history h
+		LEFT JOIN conversations c ON c.id = h.conversation_id
+		ORDER BY h.id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []LLMDetailsEntry
+	for rows.Next() {
+		var e LLMDetailsEntry
+		if err := rows.Scan(&e.ID, &e.ConversationID, &e.ConversationTitle, &e.CreatedAt, &e.RequestCount, &e.Model, &e.Messages); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// ClearLLMDetails removes every persisted request payload.
+func (d *Database) ClearLLMDetails() error {
+	_, err := d.db.Exec("DELETE FROM llm_history")
+	return err
 }
 
 func (d *Database) Close() error {
