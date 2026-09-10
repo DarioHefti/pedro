@@ -125,7 +125,6 @@ export default function Chat({
     () => new Set(),
   )
 
-  const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const inputAreaRef = useRef<HTMLDivElement>(null)
@@ -144,7 +143,17 @@ export default function Chat({
   const prevLoadingRef = useRef(loading)
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
-    bottomRef.current?.scrollIntoView({ block: 'end', behavior })
+    const el = messagesRef.current
+    if (!el) return
+    // Scroll .messages only — scrollIntoView also moves overflow:hidden ancestors.
+    const pane = el.parentElement
+    if (pane && pane.scrollTop !== 0) pane.scrollTop = 0
+    const top = el.scrollHeight
+    if (behavior === 'smooth') {
+      el.scrollTo({ top, behavior: 'smooth' })
+    } else {
+      el.scrollTop = top
+    }
   }, [])
 
   /**
@@ -305,7 +314,7 @@ export default function Chat({
     prevLoadingRef.current = loading
     const loadingEnded = prevLoading && !loading
 
-    if (stickToBottom) {
+    if (stickToBottom && !suppressStickBreakRef.current) {
       scrollMessagesToBottom('auto')
     } else if (loadingEnded) {
       // Keep viewport stable: only clamp if the thread shrank (browser would clamp scrollTop).
@@ -323,6 +332,7 @@ export default function Chat({
     const el = messagesRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(() => {
+      if (suppressStickBreakRef.current) return
       scrollMessagesToBottom('auto')
     })
     ro.observe(el)
@@ -709,7 +719,7 @@ export default function Chat({
 
       {showJumpButton && messages.length > 0 && (
         <div className="jump-buttons">
-          <button onClick={jumpToBottom} title="Jump to bottom">
+          <button type="button" onClick={jumpToBottom} title="Jump to bottom">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
@@ -778,7 +788,6 @@ export default function Chat({
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {attachments.length > 0 && (
