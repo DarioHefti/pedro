@@ -6,12 +6,46 @@ import (
 	"fmt"
 	goruntime "runtime"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
 	"pedro/shared"
 	"pedro/tools"
 )
+
+// reasoningEffortNone disables reasoning. Some reasoning models (e.g. gpt-5/gpt-6
+// on Azure) reject function tools on the Chat Completions API unless reasoning
+// is turned off with this exact value.
+const reasoningEffortNone = openai.ReasoningEffort("none")
+
+// modelsRequiringReasoningNone remembers models that rejected function tools
+// because of a non-none reasoning effort, so follow-up requests skip straight
+// to reasoning_effort="none" instead of failing once per request.
+var modelsRequiringReasoningNone sync.Map
+
+func requiresReasoningNone(model string) bool {
+	_, ok := modelsRequiringReasoningNone.Load(model)
+	return ok
+}
+
+func markRequiresReasoningNone(model string) {
+	modelsRequiringReasoningNone.Store(model, struct{}{})
+}
+
+// isToolReasoningConflict reports whether err is the provider rejecting
+// function tools combined with reasoning effort on the chat completions API.
+func isToolReasoningConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "reasoning_effort") {
+		return false
+	}
+	return strings.Contains(msg, "function tools")
+}
 
 func userFacingOSName() string {
 	switch goruntime.GOOS {
@@ -193,6 +227,9 @@ func StreamingChat(
 				IncludeUsage: openai.Bool(true),
 			},
 		}
+		if len(toolDefs) > 0 && requiresReasoningNone(model) {
+			params.ReasoningEffort = reasoningEffortNone
+		}
 
 		// Capture the exact HTTP request body about to be sent to the provider.
 		if onRequestCaptured != nil {
@@ -215,6 +252,13 @@ func StreamingChat(
 		}
 
 		if err := stream.Err(); err != nil {
+			// The provider refuses function tools together with reasoning on the
+			// chat completions API. Remember the model and retry with
+			// reasoning_effort="none" so runs keep working with tools.
+			if len(toolDefs) > 0 && params.ReasoningEffort == "" && len(acc.Choices) == 0 && isToolReasoningConflict(err) {
+				markRequiresReasoningNone(model)
+				continue
+			}
 			return generated, fmt.Errorf("streaming error: %w", err)
 		}
 
