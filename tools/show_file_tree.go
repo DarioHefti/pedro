@@ -25,7 +25,7 @@ func NewShowFileTreeTool() *ShowFileTreeTool { return &ShowFileTreeTool{} }
 func (ShowFileTreeTool) Definition() Definition {
 	return Definition{
 		Name:         "show_file_tree",
-		Description:  "List files and subfolders under a local directory up to a given depth. Output is paginated (default 500 tree lines per call). If the response says there is more, call again with the same path and depth and the given offset to continue. Use when the user gives a folder path and you need to find a file by name or structure. Common development folders like node_modules, .git, vendor, etc. are ignored by default.",
+		Description:  "List files and subfolders under a specific local directory provided by the user. Absolute paths are required. Listing filesystem roots, top-level system directories, user home directories or their parents is forbidden, including through symlinks. Do not explore the computer to guess a folder path; ask the user instead. Output is paginated (default 500 tree lines per call). If the response says there is more, call again with the same path and depth and the given offset to continue. Common development folders like node_modules, .git, vendor, etc. are ignored by default.",
 		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
@@ -109,7 +109,7 @@ func (ShowFileTreeTool) Execute(argsJSON string) (string, error) {
 }
 
 func buildFileTree(root string, maxDepth, offset, limit int, ignoredSet map[string]bool) (string, error) {
-	absRoot, err := filepath.Abs(filepath.Clean(root))
+	absRoot, err := newFileTreePathPolicy().ValidateRoot(root)
 	if err != nil {
 		return "", err
 	}
@@ -140,11 +140,17 @@ func buildFileTree(root string, maxDepth, offset, limit int, ignoredSet map[stri
 
 		realDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			realDir = dir
+			return err
 		}
 		realDir, err = filepath.Abs(realDir)
 		if err != nil {
 			return err
+		}
+		// Never recurse outside the validated root, even if a directory is
+		// replaced by a symlink between reading its parent and visiting it.
+		rel, err := filepath.Rel(absRoot, realDir)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("access denied: show_file_tree cannot follow directories outside the requested folder")
 		}
 		if _, seen := visited[realDir]; seen {
 			globalLine++
