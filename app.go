@@ -64,6 +64,15 @@ func (a *App) startup(ctx context.Context) {
 	a.initLLM()
 }
 
+// shutdown releases resources held by the tools, such as the headless browser.
+func (a *App) shutdown(ctx context.Context) {
+	if a.registry != nil {
+		if err := a.registry.Close(); err != nil {
+			fmt.Println("Tool shutdown error:", err.Error())
+		}
+	}
+}
+
 func (a *App) initLLM() {
 	settings, err := a.store.GetSettings()
 	if err != nil {

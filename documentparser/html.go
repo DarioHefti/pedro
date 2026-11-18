@@ -4,7 +4,10 @@ import (
 	"os"
 	"strings"
 
-	htmlmd "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
 )
 
 func extractHTML(path string) (*Result, error) {
@@ -18,9 +21,14 @@ func extractHTML(path string) (*Result, error) {
 	}
 	fileSizeMB := float64(stat.Size()) / (1024 * 1024)
 
-	conv := htmlmd.NewConverter("", true, nil)
-	conv.Remove("script", "style", "noscript", "nav", "header",
-		"footer", "aside", "iframe", "svg", "canvas")
+	conv := converter.NewConverter(converter.WithPlugins(
+		base.NewBasePlugin(), // already drops script, style, noscript, iframe, ...
+		commonmark.NewCommonmarkPlugin(),
+		table.NewTablePlugin(table.WithCellPaddingBehavior(table.CellPaddingBehaviorMinimal)),
+	))
+	for _, tag := range []string{"nav", "header", "footer", "aside", "svg", "canvas"} {
+		conv.Register.TagType(tag, converter.TagTypeRemove, converter.PriorityStandard)
+	}
 	md, err := conv.ConvertString(string(b))
 	if err != nil {
 		return nil, err

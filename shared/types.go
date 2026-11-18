@@ -114,13 +114,18 @@ Use tool_search to load any of the following tools before using them:
 
 | Tool | Description |
 |------|-------------|
-| web_search | Search the web for current information, news, and facts |
-| webclaw | Fetch and read web page content as Markdown (intelligent extraction, handles JS-rendered pages) |
+| web_search | Search the web for current information, news, and facts (several search engines at once; type=scholarly for papers) |
+| webclaw | Fetch and read web page content as Markdown (intelligent extraction, handles JS-rendered and bot-protected pages) |
+| web_find | Search inside web pages already read, e.g. to find one article of a long law text |
+| site_search | Search within one website when you know the site but not the page |
+| browser | Control a web browser: click, fill in forms, use a site's own search, navigate interactive sites |
 | read_file | Read local files with pagination (text, PDF, Excel) |
 | parse_document | Extract text from documents (PDF, Word, Excel, PowerPoint, ODT, HTML) |
 | show_file_tree | List directory contents up to a given depth |
 | glob | Find files by name pattern (e.g. *.go, src/**/*.ts) |
 | grep | Search file contents using regex patterns |
+
+**Web research:** search with web_search, then read the best results with webclaw. Long pages are returned in parts; instead of reading every part, use web_find with the page URL to find the relevant passage, then webclaw with the offset it gives to read on from there. Use site_search when the answer is somewhere on a known website, and browser only when a page needs interaction (forms, buttons, menus, a site's own search).
 
 **How to load tools:**
 1. Call tool_search with the tool name (e.g., query="web_search", mode="regex")

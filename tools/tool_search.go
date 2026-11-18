@@ -74,6 +74,10 @@ func (t ToolSearchTool) Execute(argsJSON string) (string, error) {
 	}
 
 	references := t.search(query, mode)
+	if len(references) == 0 && mode == "regex" {
+		// Models often send a natural-language description in regex mode.
+		references = t.search(query, "bm25")
+	}
 	if len(references) == 0 {
 		return `{"tool_references": []}`, nil
 	}

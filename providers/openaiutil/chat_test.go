@@ -94,8 +94,8 @@ func TestToolDefinitionsNilRegistry(t *testing.T) {
 
 func TestToolDefinitionsFromRegistry(t *testing.T) {
 	r := tools.NewRegistry()
-	r.Register(tools.NewSearchTool())
-	r.Register(tools.NewWebclawTool())
+	r.Register(tools.NewSearchTool(nil, nil))
+	r.Register(tools.NewWebclawTool(nil, nil))
 	defs := ToolDefinitions(r)
 
 	seen := map[string]bool{}

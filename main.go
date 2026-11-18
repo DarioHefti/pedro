@@ -32,6 +32,7 @@ func main() {
 			app.startup(ctx)
 			updater.startup(ctx)
 		},
+		OnShutdown: app.shutdown,
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop: true,
 		},

@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -9,10 +11,9 @@ import (
 	"pedro/shared"
 )
 
-// UserAgent is the browser UA sent with every outbound HTTP request.
-const UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
-
-// HTTPClient is shared by all tools.
+// HTTPClient is a plain (non-impersonating) client. Web tools use the
+// Chrome-impersonating client from tools/web/fetch and fall back to this one
+// only where announcing a non-browser agent helps.
 var HTTPClient = &http.Client{
 	Timeout: 30 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -42,7 +43,8 @@ type Tool interface {
 type Registry struct {
 	tools   map[string]Tool
 	visible map[string]bool
-	order   []string // preserves registration order for tool definitions
+	order   []string    // preserves registration order for tool definitions
+	closers []io.Closer // resources released by Close
 }
 
 func NewRegistry() *Registry {
@@ -73,6 +75,21 @@ func (r *Registry) registerWithVisibility(t Tool, visible bool) {
 		}
 	}
 	r.order = append(r.order, name)
+}
+
+// OnClose registers a resource (e.g. the headless browser) to release when
+// the registry is closed.
+func (r *Registry) OnClose(c io.Closer) {
+	r.closers = append(r.closers, c)
+}
+
+// Close releases all resources held by the tools.
+func (r *Registry) Close() error {
+	var errs []error
+	for _, c := range r.closers {
+		errs = append(errs, c.Close())
+	}
+	return errors.Join(errs...)
 }
 
 // Execute dispatches a tool call by name with the given JSON arguments.
@@ -179,8 +196,13 @@ func New(backend shared.MemoryBackend) *Registry {
 	// All other tools are deferred (DeferLoading=true) - they do not appear in
 	// the initial tool list sent to the model, but are discoverable via tool_search
 	// and are appended to the tool list once unlocked.
-	r.Register(NewSearchTool())
-	r.Register(NewWebclawTool())
+	web := newWebToolkit()
+	r.OnClose(web)
+	r.Register(NewSearchTool(web.search, web.scholarly))
+	r.Register(NewWebclawTool(web.reader, web.index))
+	r.Register(NewWebFindTool(web.index))
+	r.Register(NewSiteSearchTool(web.crawler, web.index))
+	r.Register(NewBrowserTool(web.session, web.extractor, web.index))
 	r.Register(NewReadFileTool())
 	r.Register(NewParseDocumentTool())
 	r.Register(NewShowFileTreeTool())

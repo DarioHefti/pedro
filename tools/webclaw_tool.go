@@ -1,34 +1,45 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"pedro/tools/webclaw"
-
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
+	"pedro/tools/web/extract"
+	"pedro/tools/web/pageindex"
+	"pedro/tools/web/reader"
 )
 
-const maxWebclawChars = 30000
-const webclawRenderWait = 1200 * time.Millisecond
-const webclawOpTimeout = 20 * time.Second
+const (
+	maxWebclawChars = 30000
+	// freshPageAge is how long a read page is served from the index instead
+	// of downloading it again (the model often re-requests URL variants such
+	// as page#section).
+	freshPageAge = 10 * time.Minute
+	// pageCacheAge is how long a read page is served from the index when the
+	// model continues reading it with an offset.
+	pageCacheAge = 30 * time.Minute
+)
 
-// WebclawTool fetches a URL and extracts structured content using webclaw
-// (Readability-style scoring, noise stripping, Reddit thread extraction).
-// Falls back to a headless browser for JS-rendered or bot-blocked pages.
-type WebclawTool struct{}
+// WebclawTool reads a web page as Markdown. Pages are fetched with a
+// Chrome-impersonating client, rendered in a stealth headless browser when
+// they need JavaScript or show a bot check, and indexed for web_find.
+type WebclawTool struct {
+	reader reader.Reader
+	index  pageindex.Index
+}
 
-func NewWebclawTool() *WebclawTool { return &WebclawTool{} }
+func NewWebclawTool(r reader.Reader, index pageindex.Index) *WebclawTool {
+	return &WebclawTool{reader: r, index: index}
+}
 
 func (WebclawTool) Definition() Definition {
 	return Definition{
 		Name:         "webclaw",
-		Description:  "Fetch and read the text content of a web page as Markdown. Uses intelligent content extraction (Readability-style scoring, noise stripping, Reddit thread parsing). Automatically handles JavaScript-rendered pages with a headless browser. Always try this tool first before assuming a page cannot be read. Do not fetch homepages.",
+		Description:  "Fetch and read the text content of a web page (or an online PDF, Word or PowerPoint document) as Markdown. Extracts the main content, handles JavaScript-rendered and bot-protected pages with a headless browser. Long pages are returned in parts: pass offset to continue reading, or use web_find to search the page. Always try this tool first before assuming a page cannot be read. Do not fetch homepages.",
 		DeferLoading: true,
 		Parameters: map[string]any{
 			"type": "object",
@@ -36,6 +47,10 @@ func (WebclawTool) Definition() Definition {
 				"url": map[string]any{
 					"type":        "string",
 					"description": "The full URL to fetch",
+				},
+				"offset": map[string]any{
+					"type":        "integer",
+					"description": "Position to continue reading a long page from (given at the end of the previous part)",
 				},
 			},
 			"required": []string{"url"},
@@ -45,178 +60,93 @@ func (WebclawTool) Definition() Definition {
 
 func (w WebclawTool) Execute(argsJSON string) (string, error) {
 	var args struct {
-		URL string `json:"url"`
+		URL    string `json:"url"`
+		Offset int    `json:"offset"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
-	return w.fetch(args.URL)
-}
 
-func (w WebclawTool) fetch(rawURL string) (string, error) {
-	if needsJSRendering(rawURL) {
-		return webclawFetchWithBrowser(rawURL)
+	maxAge := freshPageAge
+	if args.Offset > 0 {
+		maxAge = pageCacheAge
+	}
+	if cached, ok := w.index.Get(args.URL, maxAge); ok {
+		return formatPagePart(cached.URL, &extract.Article{Title: cached.Title, Markdown: cached.Markdown}, args.Offset), nil
 	}
 
-	body, contentType, err := doWebclawFetch(rawURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	defer cancel()
+	page, err := w.reader.Read(ctx, args.URL)
 	if err != nil {
 		return fmt.Sprintf("Fetch error: %v", err), nil
 	}
-	raw := string(body)
-
-	if looksLikeBlockedPage(raw) {
-		return webclawFetchWithBrowser(rawURL)
+	indexArticle(w.index, page.URL, page.Article)
+	if page.Status >= 400 {
+		return fmt.Sprintf("[HTTP %d]\n\n%s", page.Status, formatPagePart(page.URL, page.Article, args.Offset)), nil
 	}
-
-	if looksLikeJSRequired(raw) {
-		return webclawFetchWithBrowser(rawURL)
-	}
-
-	ct := strings.ToLower(contentType)
-	if strings.Contains(ct, "text/html") || looksLikeHTML(raw) {
-		result, err := extractWithWebclaw(raw, rawURL)
-		if err != nil || len(strings.TrimSpace(result)) < 100 {
-			return webclawFetchWithBrowser(rawURL)
-		}
-		if len(result) > maxWebclawChars {
-			result = result[:maxWebclawChars] + "\n\n...(truncated)"
-		}
-		return result, nil
-	}
-
-	if len(raw) > maxWebclawChars {
-		raw = raw[:maxWebclawChars] + "\n\n...(truncated)"
-	}
-	return raw, nil
+	return formatPagePart(page.URL, page.Article, args.Offset), nil
 }
 
-// extractWithWebclaw runs webclaw.Extract on raw HTML and returns formatted output.
-func extractWithWebclaw(htmlStr string, rawURL string) (string, error) {
-	result, err := webclaw.Extract(htmlStr, &rawURL, nil)
-	if err != nil {
-		return "", err
-	}
-	return formatWebclawResult(result), nil
-}
-
-// formatWebclawResult turns an ExtractionResult into a readable string for the LLM.
-func formatWebclawResult(r *webclaw.ExtractionResult) string {
+// formatPagePart renders a header with the page metadata followed by the
+// part of the content starting at offset.
+func formatPagePart(pageURL string, a *extract.Article, offset int) string {
 	var sb strings.Builder
-
-	if r.Metadata.Title != nil && *r.Metadata.Title != "" {
-		sb.WriteString("# " + *r.Metadata.Title + "\n\n")
+	if a.Title != "" {
+		sb.WriteString("# " + a.Title + "\n")
 	}
+	sb.WriteString("URL: " + pageURL + "\n")
 
-	sb.WriteString(r.Content.Markdown)
-
-	if len(r.Content.Links) > 0 {
-		sb.WriteString("\n\n---\n\n## Links\n\n")
-		for _, link := range r.Content.Links {
-			if link.Href != "" {
-				sb.WriteString(fmt.Sprintf("- [%s](%s)\n", link.Text, link.Href))
-			}
-		}
+	var meta []string
+	if a.Author != "" {
+		meta = append(meta, "Author: "+a.Author)
 	}
+	if !a.Published.IsZero() {
+		meta = append(meta, "Published: "+a.Published.Format("2006-01-02"))
+	}
+	if a.Language != "" {
+		meta = append(meta, "Language: "+a.Language)
+	}
+	if len(meta) > 0 {
+		sb.WriteString(strings.Join(meta, " · ") + "\n")
+	}
+	sb.WriteString("\n")
 
-	return strings.TrimSpace(sb.String())
+	part, next := sliceText(a.Markdown, offset, maxWebclawChars)
+	if part == "" && offset > 0 {
+		fmt.Fprintf(&sb, "[No content after offset %d; the page has %d characters.]", offset, len(a.Markdown))
+		return sb.String()
+	}
+	sb.WriteString(part)
+	if next < len(a.Markdown) {
+		fmt.Fprintf(&sb, "\n\n[Showing characters %d-%d of %d. To continue reading call webclaw with offset=%d, or use web_find with url=%q to search the rest of this page.]",
+			offset, next, len(a.Markdown), next, pageURL)
+	}
+	return sb.String()
 }
 
-// ── HTTP fetch (browser-like headers, Cloudflare retry) ─────────────────────
-
-func doWebclawFetch(rawURL string) ([]byte, string, error) {
-	req, err := http.NewRequest("GET", rawURL, nil)
-	if err != nil {
-		return nil, "", err
+// sliceText returns up to limit bytes of s starting at offset, ending on a
+// line break when one is near the limit and never splitting a UTF-8 rune.
+// next is the offset where the following part starts.
+func sliceText(s string, offset, limit int) (part string, next int) {
+	if offset < 0 {
+		offset = 0
 	}
-	applyWebclawFetchHeaders(req, UserAgent)
-
-	resp, err := HTTPClient.Do(req)
-	if err != nil {
-		return nil, "", err
+	for offset < len(s) && !utf8.RuneStart(s[offset]) {
+		offset++
 	}
-
-	if resp.StatusCode == 403 && resp.Header.Get("cf-mitigated") == "challenge" {
-		resp.Body.Close()
-		req2, _ := http.NewRequest("GET", rawURL, nil)
-		applyWebclawFetchHeaders(req2, "pedro")
-		resp, err = HTTPClient.Do(req2)
-		if err != nil {
-			return nil, "", err
-		}
+	if offset >= len(s) {
+		return "", len(s)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
-	if err != nil {
-		return nil, "", err
+	end := offset + limit
+	if end >= len(s) {
+		return s[offset:], len(s)
 	}
-	return body, resp.Header.Get("Content-Type"), nil
-}
-
-func applyWebclawFetchHeaders(req *http.Request, ua string) {
-	req.Header.Set("User-Agent", ua)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-}
-
-// ── Headless browser fallback ────────────────────────────────────────────────
-
-func webclawFetchWithBrowser(rawURL string) (string, error) {
-	path, exists := launcher.LookPath()
-	if !exists {
-		fmt.Println("[Info] No Chrome/Chromium found. Downloading embedded browser (~150MB, one-time download)...")
-		fmt.Println("[Info] This may take a few minutes depending on your connection...")
-
-		b := launcher.NewBrowser()
-		var err error
-		path, err = b.Get()
-		if err != nil {
-			return fmt.Sprintf("[Failed to download browser: %v. Please install Chrome/Chromium manually, or check if antivirus is blocking the download.]", err), nil
-		}
-		fmt.Println("[Info] Browser download complete!")
+	if nl := strings.LastIndexByte(s[offset:end], '\n'); nl > limit*9/10 {
+		end = offset + nl + 1
 	}
-
-	l := launcher.New().Bin(path).Leakless(false)
-	u, err := l.Launch()
-	if err != nil {
-		return fmt.Sprintf("[Failed to launch browser: %v]", err), nil
+	for end > offset && !utf8.RuneStart(s[end]) {
+		end--
 	}
-
-	browser := rod.New().ControlURL(u).MustConnect().Timeout(webclawOpTimeout)
-	defer browser.MustClose()
-
-	page := browser.MustPage(rawURL).Timeout(webclawOpTimeout)
-	defer page.MustClose()
-
-	err = page.WaitLoad()
-	if err != nil {
-		return fmt.Sprintf("[Headless browser error: %v]", err), nil
-	}
-
-	time.Sleep(webclawRenderWait)
-
-	html, err := page.Evaluate(rod.Eval(`() => document.documentElement.outerHTML`))
-	if err != nil {
-		return fmt.Sprintf("[Could not extract page content: %v]", err), nil
-	}
-
-	htmlStr := html.Value.String()
-	if htmlStr == "" {
-		return "[Headless browser returned empty content]", nil
-	}
-
-	result, err := extractWithWebclaw(htmlStr, rawURL)
-	if err != nil {
-		return fmt.Sprintf("[Webclaw extraction error: %v]", err), nil
-	}
-
-	if len(strings.TrimSpace(result)) < 50 {
-		return "[Page content too short or empty after JS rendering]", nil
-	}
-
-	if len(result) > maxWebclawChars {
-		result = result[:maxWebclawChars] + "\n\n...(truncated)"
-	}
-
-	return result, nil
+	return s[offset:end], end
 }

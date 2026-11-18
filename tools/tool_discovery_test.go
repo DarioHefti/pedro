@@ -62,3 +62,11 @@ func TestToolDiscoveryListDescribeAndExecute(t *testing.T) {
 		t.Fatalf("expected read_file argument error, got: %q", execOut)
 	}
 }
+
+func TestToolSearchFallsBackToKeywordsForNaturalLanguageRegex(t *testing.T) {
+	r := newTestRegistry()
+	out, err := NewToolSearchTool(r).Execute(`{"query":"webclaw fetch read web page content"}`)
+	if err != nil || !strings.Contains(out, `"tool_name":"webclaw"`) {
+		t.Fatalf("expected webclaw to be found, got %s (err %v)", out, err)
+	}
+}
