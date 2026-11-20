@@ -4,6 +4,9 @@ import attachmentIcon from './assets/attachment.svg'
 import pedroAvatar from './assets/images/pedro.svg'
 import type { Message, FileAttachment, ToolCall, Attachment } from './hooks/useMessaging'
 import { fileService, type Persona } from './services/wailsService'
+import { isAudioFilePath } from './utils/fileKinds'
+import { copyMessageContent } from './utils/clipboard'
+import { useToast } from './context/ToastContext'
 import MessageRenderer from './MessageRenderer'
 import AssistantMessageActions, { IconDelete, IconRegenerate } from './AssistantMessageActions'
 
@@ -58,6 +61,11 @@ function stripFileAnnotations(content: string): string {
   return content.replace(/\n\n\[(File|Folder): [\s\S]*$/, '')
 }
 
+function fileChipIcon(isFolder: boolean, path: string): string {
+  if (isFolder) return '📁'
+  return isAudioFilePath(path) ? '🎵' : '📄'
+}
+
 function toolCallArgDisplay(tc: ToolCall): string {
   let argsDisplay = ''
   try {
@@ -70,6 +78,8 @@ function toolCallArgDisplay(tc: ToolCall): string {
       argsDisplay = args.url
     } else if (typeof args.query === 'string') {
       argsDisplay = args.query
+    } else if (typeof args.prompt === 'string') {
+      argsDisplay = args.prompt
     } else if (typeof args.path === 'string') {
       argsDisplay = args.path
     } else if (typeof args.pattern === 'string') {
@@ -113,6 +123,7 @@ export default function Chat({
   requestTokens = 0,
   onViewDetails,
 }: ChatProps) {
+  const toast = useToast()
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -355,6 +366,20 @@ export default function Chat({
     onSend(content, attachments, activePersonaId)
   }
 
+  /** Image-only replies copy the image itself; everything else copies the text. */
+  const handleCopyMessage = useCallback(
+    (content: string) => {
+      copyMessageContent(content)
+        .then(kind => {
+          if (kind === 'image') toast.success('Image copied to clipboard')
+        })
+        .catch((err: unknown) => {
+          toast.error('Copy failed: ' + (err instanceof Error ? err.message : String(err)))
+        })
+    },
+    [toast],
+  )
+
   const processFile = useCallback((file: File) => {
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
@@ -574,7 +599,7 @@ export default function Chat({
                 }}
               >
                 <span className="message-file-icon" aria-hidden>
-                  {file.type === 'folder' ? '📁' : '📄'}
+                  {fileChipIcon(file.type === 'folder', file.path)}
                 </span>
                 <span className="message-file-name">{file.name}</span>
               </button>
@@ -595,7 +620,7 @@ export default function Chat({
             {bubble}
             <AssistantMessageActions
               visible
-              onCopy={() => void navigator.clipboard.writeText(msg.Content || '')}
+              onCopy={() => handleCopyMessage(msg.Content || '')}
               onRegenerate={() => void onRegenerate(i, activePersonaId)}
               copyDisabled={!(msg.Content || '').trim()}
               regenerateDisabled={streamingBusy}
@@ -824,7 +849,7 @@ export default function Chat({
                     })
                   }}
                 >
-                  📄 {att.name}
+                  {fileChipIcon(false, att.content)} {att.name}
                 </button>
               ) : (
                 <span className="attachment-name">📄 {att.name}</span>

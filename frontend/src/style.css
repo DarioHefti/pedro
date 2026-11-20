@@ -2271,6 +2271,14 @@ body {
   cursor: zoom-in;
 }
 
+/* Images created by the generate_image tool: shown larger than attachments. */
+.markdown-content .message-image--generated {
+  max-width: min(100%, 420px);
+  max-height: 420px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+}
+
 /* ===== Streamdown Code Blocks =====
    Streamdown ships rem-based Tailwind sizing (text-sm / text-xs / p-4).
    Because :root font-size is 12px, those render far too small, so we set

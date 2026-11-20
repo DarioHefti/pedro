@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"pedro/media"
 	"pedro/shared"
 )
 
@@ -184,7 +185,8 @@ func (r *Registry) DefinitionsByName(names []string) []Definition {
 
 // New builds and returns a Registry pre-loaded with all available tools.
 // Tools are marked as deferred (DeferLoading=true) and loaded on-demand via tool_search.
-func New(backend shared.MemoryBackend) *Registry {
+// mediaSource supplies the active provider's image/audio models; images stores generated images.
+func New(backend shared.MemoryBackend, mediaSource media.Source, images media.ImageStore) *Registry {
 	r := NewRegistry()
 
 	// Tool search is always available immediately (never deferred)
@@ -208,6 +210,8 @@ func New(backend shared.MemoryBackend) *Registry {
 	r.Register(NewShowFileTreeTool())
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
+	r.Register(NewGenerateImageTool(mediaSource, images))
+	r.Register(NewTranscribeAudioTool(mediaSource))
 	r.RegisterHidden(NewMemorySearchTool(backend))
 	r.Register(NewMemoryForgetTool(backend))
 

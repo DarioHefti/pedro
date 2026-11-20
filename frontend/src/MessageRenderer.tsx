@@ -6,6 +6,7 @@ import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 import { useTheme } from './ThemeContext'
 import { fileService, isWailsDevStub } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
+import { isGeneratedImageUrl } from './utils/fileKinds'
 import { HtmlPreviewBlock } from './components/HtmlPreviewBlock'
 
 interface MessageRendererProps {
@@ -157,25 +158,23 @@ function MessageRenderer({
         )
       },
       img({ src, alt, className, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
-        if (src?.startsWith('data:image')) {
-          return (
-            <img
-              src={src}
-              alt={alt ?? 'Image'}
-              className={`message-image ${className ?? ''}`.trim()}
-              onClick={() => {
-                setLightboxImage(src)
-                setLightboxOpen(true)
-              }}
-              {...props}
-            />
-          )
-        }
+        const zoomable = !!src && (src.startsWith('data:image') || isGeneratedImageUrl(src))
+        const classes = ['message-image', isGeneratedImageUrl(src) && 'message-image--generated', className]
+          .filter(Boolean)
+          .join(' ')
         return (
           <img
             src={src}
             alt={alt ?? 'Image'}
-            className={`message-image ${className ?? ''}`.trim()}
+            className={classes}
+            onClick={
+              zoomable
+                ? () => {
+                    setLightboxImage(src)
+                    setLightboxOpen(true)
+                  }
+                : undefined
+            }
             {...props}
           />
         )

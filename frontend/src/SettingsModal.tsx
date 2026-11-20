@@ -20,6 +20,9 @@ import type { Persona, MemoryRecord } from './services/wailsService'
 import { statsService } from './services/wailsService'
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome to Pedro'
+/** Defaults for never-saved media deployments (aligned with providers/azure_apikey). */
+const DEFAULT_IMAGE_DEPLOYMENT = 'gpt-image-2.5-sunburst'
+const DEFAULT_TRANSCRIPTION_DEPLOYMENT = 'gpt-transcribe'
 
 type Tab = 'llm' | 'prompt' | 'personas' | 'memory' | 'design' | 'stats'
 
@@ -34,6 +37,8 @@ interface FullSettingsSnapshot {
   deployment: string
   azureApiKey: string
   azureTenantId: string
+  imageDeployment: string
+  transcriptionDeployment: string
   apiKey: string
   model: string
   compatBaseURL: string
@@ -48,17 +53,9 @@ interface FullSettingsSnapshot {
   messageFontSizePx: number
 }
 
-function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
-  const settings: Record<string, string> = {
-    provider_type: s.providerType,
-    system_prompt: s.systemPrompt,
-    custom_system_prompt: s.customSystemPrompt,
-    welcome_message: s.welcomeMessage,
-    [getDesignSettingsKeys().light]: s.designLightBaseColor,
-    [getDesignSettingsKeys().dark]: s.designDarkBaseColor,
-    [getDesignSettingsKeys().uiFontSizePx]: String(s.uiFontSizePx),
-    [getDesignSettingsKeys().messageFontSizePx]: String(s.messageFontSizePx),
-  }
+/** Settings persisted via SaveSettings for the selected provider. */
+function buildProviderSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
+  const settings: Record<string, string> = { provider_type: s.providerType }
 
   if (s.providerType === 'azure') {
     settings.azure_endpoint = s.endpoint
@@ -68,6 +65,8 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
     settings.azure_endpoint = s.endpoint
     settings.azure_deployment = s.deployment
     settings.azure_api_key = s.azureApiKey
+    settings.azure_image_deployment = s.imageDeployment.trim()
+    settings.azure_transcription_deployment = s.transcriptionDeployment.trim()
   } else if (s.providerType === 'openai') {
     settings.openai_api_key = s.apiKey
     settings.openai_model = s.model
@@ -78,6 +77,19 @@ function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string
   }
 
   return settings
+}
+
+function buildFullSettingsRecord(s: FullSettingsSnapshot): Record<string, string> {
+  return {
+    ...buildProviderSettingsRecord(s),
+    system_prompt: s.systemPrompt,
+    custom_system_prompt: s.customSystemPrompt,
+    welcome_message: s.welcomeMessage,
+    [getDesignSettingsKeys().light]: s.designLightBaseColor,
+    [getDesignSettingsKeys().dark]: s.designDarkBaseColor,
+    [getDesignSettingsKeys().uiFontSizePx]: String(s.uiFontSizePx),
+    [getDesignSettingsKeys().messageFontSizePx]: String(s.messageFontSizePx),
+  }
 }
 
 function fingerprintFromSnapshot(s: FullSettingsSnapshot): string {
@@ -197,6 +209,8 @@ export default function SettingsModal({
   const [deployment, setDeployment] = useState('')
   const [azureApiKey, setAzureApiKey] = useState('')
   const [azureTenantId, setAzureTenantId] = useState('')
+  const [imageDeployment, setImageDeployment] = useState(DEFAULT_IMAGE_DEPLOYMENT)
+  const [transcriptionDeployment, setTranscriptionDeployment] = useState(DEFAULT_TRANSCRIPTION_DEPLOYMENT)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('gpt-4o')
   const [compatBaseURL, setCompatBaseURL] = useState('http://localhost:1234/v1')
@@ -268,6 +282,8 @@ export default function SettingsModal({
       deployment,
       azureApiKey,
       azureTenantId,
+      imageDeployment,
+      transcriptionDeployment,
       apiKey,
       model,
       compatBaseURL,
@@ -287,6 +303,8 @@ export default function SettingsModal({
       deployment,
       azureApiKey,
       azureTenantId,
+      imageDeployment,
+      transcriptionDeployment,
       apiKey,
       model,
       compatBaseURL,
@@ -314,6 +332,8 @@ export default function SettingsModal({
       const dep = s.azure_deployment ?? ''
       const ak = s.azure_api_key ?? ''
       const tid = s.azure_tenant_id ?? ''
+      const imgDep = s.azure_image_deployment ?? DEFAULT_IMAGE_DEPLOYMENT
+      const trDep = s.azure_transcription_deployment ?? DEFAULT_TRANSCRIPTION_DEPLOYMENT
       const ok = s.openai_api_key ?? ''
       const m = s.openai_model ?? 'gpt-4o'
       const cbu = s.compat_base_url ?? 'http://localhost:1234/v1'
@@ -332,6 +352,8 @@ export default function SettingsModal({
       setDeployment(dep)
       setAzureApiKey(ak)
       setAzureTenantId(tid)
+      setImageDeployment(imgDep)
+      setTranscriptionDeployment(trDep)
       setApiKey(ok)
       setModel(m)
       setCompatBaseURL(cbu)
@@ -356,6 +378,8 @@ export default function SettingsModal({
         deployment: dep,
         azureApiKey: ak,
         azureTenantId: tid,
+        imageDeployment: imgDep,
+        transcriptionDeployment: trDep,
         apiKey: ok,
         model: m,
         compatBaseURL: cbu,
@@ -390,35 +414,8 @@ export default function SettingsModal({
     applyMessageFontSizeToDocument(messageFontSizePx)
   }, [designLightBaseColor, designDarkBaseColor, uiFontSizePx, messageFontSizePx])
 
-  function buildProviderSettings(): Record<string, string> {
-    const { providerType: pt, endpoint: ep, deployment: dep, azureApiKey: aak, azureTenantId: tid, apiKey: ok, model: mo, compatBaseURL: cbu, compatApiKey: cak, compatModel: cm } =
-      snapshot
-    const settings: Record<string, string> = {
-      provider_type: pt,
-    }
-
-    if (pt === 'azure') {
-      settings.azure_endpoint = ep
-      settings.azure_deployment = dep
-      settings.azure_tenant_id = tid.trim()
-    } else if (pt === 'azure_apikey') {
-      settings.azure_endpoint = ep
-      settings.azure_deployment = dep
-      settings.azure_api_key = aak
-    } else if (pt === 'openai') {
-      settings.openai_api_key = ok
-      settings.openai_model = mo
-    } else if (pt === 'compat') {
-      settings.compat_base_url = cbu.trim()
-      settings.compat_api_key = cak
-      settings.compat_model = cm.trim()
-    }
-
-    return settings
-  }
-
   async function applyProviderSettings() {
-    await saveSettings(buildProviderSettings())
+    await saveSettings(buildProviderSettingsRecord(snapshot))
     await setSetting('system_prompt', systemPrompt)
     await setSetting('custom_system_prompt', customSystemPrompt)
     await setSetting('welcome_message', welcomeMessage)
@@ -862,6 +859,27 @@ export default function SettingsModal({
                     value={azureApiKey}
                     onChange={e => setAzureApiKey(e.target.value)}
                     placeholder="Enter your Azure OpenAI API key"
+                  />
+                  <label>Image deployment — optional</label>
+                  <p className="settings-description">
+                    Image model on the same resource, used by the generate_image tool. Leave empty to disable image generation.
+                  </p>
+                  <input
+                    type="text"
+                    value={imageDeployment}
+                    onChange={e => setImageDeployment(e.target.value)}
+                    placeholder={DEFAULT_IMAGE_DEPLOYMENT}
+                  />
+                  <label>Transcription deployment — optional</label>
+                  <p className="settings-description">
+                    Speech-to-text model on the same resource, used to transcribe attached audio files (mp3, m4a, wav, ...).
+                    Leave empty to disable transcription.
+                  </p>
+                  <input
+                    type="text"
+                    value={transcriptionDeployment}
+                    onChange={e => setTranscriptionDeployment(e.target.value)}
+                    placeholder={DEFAULT_TRANSCRIPTION_DEPLOYMENT}
                   />
                 </>
               )}

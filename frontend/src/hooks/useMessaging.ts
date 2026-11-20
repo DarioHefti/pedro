@@ -10,6 +10,7 @@ import {
 } from '../services/wailsService'
 export type { Message } from '../services/wailsService'
 import type { Message } from '../services/wailsService'
+import { isAudioFilePath, isRasterImageFilePath } from '../utils/fileKinds'
 
 // ---------------------------------------------------------------------------
 // Public types shared with components
@@ -494,11 +495,6 @@ This shows the key derivation and encryption flow.` } as Message,
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-/** Matches raster image paths for file-ref attachments (aligned with backend image_file_refs.go). */
-function isRasterImageFilePath(path: string): boolean {
-  return /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(path.trim())
-}
-
 function buildLLMContent(content: string, attachments?: Attachment[]): string {
   const fileText = (attachments ?? [])
     .filter(a => a.type !== 'image')
@@ -509,6 +505,13 @@ function buildLLMContent(content: string, attachments?: Attachment[]): string {
             `[File: ${a.name}]\n` +
             `[Path: ${a.content}]\n` +
             `[Raster image attached by path; the image pixels are also included in this message for vision.]`
+          )
+        }
+        if (isAudioFilePath(a.content)) {
+          return (
+            `[File: ${a.name}]\n` +
+            `[Path: ${a.content}]\n` +
+            `[Audio file attached by path. Use the transcribe_audio tool with this path to transcribe it.]`
           )
         }
         return (

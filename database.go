@@ -30,12 +30,17 @@ type Database struct {
 	db *sql.DB
 }
 
-func NewDatabase() (*Database, error) {
-	appDataDir, err := os.UserConfigDir()
+// appDataDir is the per-user directory holding Pedro's database and files.
+func appDataDir() string {
+	configDir, err := os.UserConfigDir()
 	if err != nil {
-		appDataDir = "."
+		configDir = "."
 	}
-	dbDir := filepath.Join(appDataDir, "Pedro")
+	return filepath.Join(configDir, "Pedro")
+}
+
+func NewDatabase() (*Database, error) {
+	dbDir := appDataDir()
 	os.MkdirAll(dbDir, 0755)
 	dbPath := filepath.Join(dbDir, "pedro.db")
 

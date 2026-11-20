@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"pedro/providers/azure_apikey"
 )
 
 const (
@@ -51,6 +53,8 @@ func connectionSettingsFingerprint(settings map[string]string) string {
 		rec["azure_endpoint"] = settings["azure_endpoint"]
 		rec["azure_deployment"] = settings["azure_deployment"]
 		rec["azure_api_key"] = settings["azure_api_key"]
+		rec["azure_image_deployment"] = settingOrDefault(settings, "azure_image_deployment", azure_apikey.DefaultImageDeployment)
+		rec["azure_transcription_deployment"] = settingOrDefault(settings, "azure_transcription_deployment", azure_apikey.DefaultTranscriptionDeployment)
 	case "openai":
 		rec["openai_api_key"] = settings["openai_api_key"]
 		mo := settings["openai_model"]
@@ -76,6 +80,14 @@ func connectionSettingsFingerprint(settings map[string]string) string {
 	}
 	b, _ := json.Marshal(pairs)
 	return string(b)
+}
+
+// settingOrDefault mirrors the frontend's `settings[key] ?? def`.
+func settingOrDefault(settings map[string]string, key, def string) string {
+	if v, ok := settings[key]; ok {
+		return v
+	}
+	return def
 }
 
 func (a *App) persistConnectionTest(ok bool, message, fingerprint string) {
@@ -109,6 +121,8 @@ func settingsKeyInvalidatesConnectionTest(key string) bool {
 		"azure_deployment",
 		"azure_tenant_id",
 		"azure_api_key",
+		"azure_image_deployment",
+		"azure_transcription_deployment",
 		"openai_api_key",
 		"openai_model",
 		"compat_base_url",

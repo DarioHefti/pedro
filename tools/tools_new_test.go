@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"pedro/media"
 	"pedro/shared"
 )
 
@@ -26,7 +27,7 @@ func (s *stubMemoryBackend) SaveMemoryWithMeta(_, _, _, _ string, _ int) error {
 func (s *stubMemoryBackend) ForgetMemory(_ int64) error                        { return nil }
 
 func newTestRegistry() *Registry {
-	return New(&stubMemoryBackend{})
+	return New(&stubMemoryBackend{}, media.NewSwitch(), media.NewDirImageStore(os.TempDir(), media.GeneratedImagesRoute))
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +337,7 @@ func TestDeferredDefinitionsWorksWithProductionRegistry(t *testing.T) {
 			t.Errorf("tool %q in DeferredDefinitions() has DeferLoading=false", d.Name)
 		}
 	}
-	for _, expected := range []string{"web_search", "webclaw", "read_file", "glob", "grep", "memory_forget"} {
+	for _, expected := range []string{"web_search", "webclaw", "read_file", "glob", "grep", "memory_forget", "generate_image", "transcribe_audio"} {
 		if !seen[expected] {
 			t.Errorf("expected deferred tool %q not found in DeferredDefinitions()", expected)
 		}
