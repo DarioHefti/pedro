@@ -126,9 +126,17 @@ jobs:
           # Create a simple DMG from the .app bundle
           APP_PATH="build/bin/pedro.app"
           DMG_NAME="Pedro-macos-${{ matrix.arch }}.dmg"
-          
+
           if [ -d "$APP_PATH" ]; then
-            hdiutil create -volname "Pedro" -srcfolder "$APP_PATH" -ov -format UDZO "build/bin/$DMG_NAME"
+            # hdiutil fails sporadically on hosted runners (e.g. "Resource busy"), so retry.
+            for attempt in 1 2 3 4 5; do
+              if hdiutil create -volname "Pedro" -srcfolder "$APP_PATH" -ov -format UDZO "build/bin/$DMG_NAME"; then
+                exit 0
+              fi
+              echo "hdiutil create failed (attempt $attempt/5), retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            done
+            exit 1
           fi
 
       - name: List build output
