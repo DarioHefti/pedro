@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,10 @@ type Tool interface {
 	Definition() Definition
 	// Execute receives the raw JSON arguments string and returns the result.
 	Execute(argsJSON string) (string, error)
+}
+
+type contextTool interface {
+	ExecuteContext(context.Context, string) (string, error)
 }
 
 // Registry holds all registered tools and dispatches calls to them.
@@ -97,11 +102,22 @@ func (r *Registry) Close() error {
 // Returns a user-visible error string (never a Go error) so the LLM always
 // gets a response even on failure.
 func (r *Registry) Execute(name, argsJSON string) string {
+	return r.ExecuteContext(context.Background(), name, argsJSON)
+}
+
+// ExecuteContext lets long-running tools honor cancellation from the caller.
+func (r *Registry) ExecuteContext(ctx context.Context, name, argsJSON string) string {
 	t, ok := r.tools[name]
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", name)
 	}
-	result, err := t.Execute(argsJSON)
+	var result string
+	var err error
+	if contextual, ok := t.(contextTool); ok {
+		result, err = contextual.ExecuteContext(ctx, argsJSON)
+	} else {
+		result, err = t.Execute(argsJSON)
+	}
 	if err != nil {
 		return fmt.Sprintf("Tool %s error: %v", name, err)
 	}
@@ -185,8 +201,8 @@ func (r *Registry) DefinitionsByName(names []string) []Definition {
 
 // New builds and returns a Registry pre-loaded with all available tools.
 // Tools are marked as deferred (DeferLoading=true) and loaded on-demand via tool_search.
-// mediaSource supplies the active provider's image/audio models; images stores generated images.
-func New(backend shared.MemoryBackend, mediaSource media.Source, images media.ImageStore) *Registry {
+// mediaSource supplies the active provider's image/audio models.
+func New(backend shared.MemoryBackend, mediaSource media.Source, images media.ImageStore, transcripts media.TranscriptStore) *Registry {
 	r := NewRegistry()
 
 	// Tool search is always available immediately (never deferred)
@@ -211,7 +227,7 @@ func New(backend shared.MemoryBackend, mediaSource media.Source, images media.Im
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
 	r.Register(NewGenerateImageTool(mediaSource, images))
-	r.Register(NewTranscribeAudioTool(mediaSource))
+	r.Register(NewTranscribeAudioTool(mediaSource, transcripts))
 	r.RegisterHidden(NewMemorySearchTool(backend))
 	r.Register(NewMemoryForgetTool(backend))
 

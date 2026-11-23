@@ -11,6 +11,7 @@ require (
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9
 	github.com/gocolly/colly/v2 v2.3.0
+	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/imroc/req/v3 v3.61.0
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/markusmobius/go-trafilatura/v2 v2.2.6

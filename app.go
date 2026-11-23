@@ -63,7 +63,7 @@ func NewApp() *App {
 
 	return &App{
 		store:    db,
-		registry: tools.New(db, mediaSwitch, images),
+		registry: tools.New(db, mediaSwitch, images, media.NewDirTranscriptStore(filepath.Join(appDataDir(), "transcripts"))),
 		factory:  factory,
 		media:    mediaSwitch,
 		images:   images,

@@ -125,7 +125,7 @@ Use tool_search to load any of the following tools before using them:
 | glob | Find files by name pattern (e.g. *.go, src/**/*.ts) |
 | grep | Search file contents using regex patterns |
 | generate_image | Generate a new image, or edit existing images, from a text description and show it in the chat |
-| transcribe_audio | Transcribe a local audio file (mp3, m4a, wav, ...) to text |
+| transcribe_audio | Transcribe local audio; long MP3s are split automatically, and long transcripts are saved to a local file |
 
 **Web research:** search with web_search, then read the best results with webclaw. Long pages are returned in parts; instead of reading every part, use web_find with the page URL to find the relevant passage, then webclaw with the offset it gives to read on from there. Use site_search when the answer is somewhere on a known website, and browser only when a page needs interaction (forms, buttons, menus, a site's own search).
 

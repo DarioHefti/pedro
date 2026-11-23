@@ -27,7 +27,7 @@ func (s *stubMemoryBackend) SaveMemoryWithMeta(_, _, _, _ string, _ int) error {
 func (s *stubMemoryBackend) ForgetMemory(_ int64) error                        { return nil }
 
 func newTestRegistry() *Registry {
-	return New(&stubMemoryBackend{}, media.NewSwitch(), media.NewDirImageStore(os.TempDir(), media.GeneratedImagesRoute))
+	return New(&stubMemoryBackend{}, media.NewSwitch(), media.NewDirImageStore(os.TempDir(), media.GeneratedImagesRoute), media.NewDirTranscriptStore(os.TempDir()))
 }
 
 // ---------------------------------------------------------------------------

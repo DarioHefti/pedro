@@ -116,8 +116,6 @@ func toOpenAIToolDefinitions(defs []tools.Definition) []openai.ChatCompletionToo
 	return result
 }
 
-
-
 type toolCallRecord struct {
 	Name     string `json:"name"`
 	ArgsJSON string `json:"argsJSON"`
@@ -310,7 +308,7 @@ func StreamingChat(
 			if onToolCall != nil {
 				onToolCall(tc.Function.Name, tc.Function.Arguments, tc.ID)
 			}
-			result := registry.Execute(tc.Function.Name, tc.Function.Arguments)
+			result := registry.ExecuteContext(ctx, tc.Function.Name, tc.Function.Arguments)
 
 			if tc.Function.Name == tools.ToolSearchToolName {
 				handleToolSearchResult(result, unlockedTools)

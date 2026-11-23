@@ -114,7 +114,7 @@ func TestLiveChatUsesMediaTools(t *testing.T) {
 	if imageDir == "" {
 		imageDir = t.TempDir()
 	}
-	registry := tools.New(noMemory{}, sw, media.NewDirImageStore(imageDir, media.GeneratedImagesRoute))
+	registry := tools.New(noMemory{}, sw, media.NewDirImageStore(imageDir, media.GeneratedImagesRoute), media.NewDirTranscriptStore(t.TempDir()))
 	defer registry.Close()
 	p := liveProvider(t, registry)
 	sw.Set(p.MediaServices())

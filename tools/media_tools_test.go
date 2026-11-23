@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -143,18 +144,22 @@ func TestImageAltTextTruncates(t *testing.T) {
 
 func TestTranscribeAudioTool(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "memo.mp3")
-	if err := os.WriteFile(path, []byte("audio-bytes"), 0o644); err != nil {
+	// MPEG-1 Layer III, 128 kbps, 44.1 kHz, with silent frames.
+	frame := make([]byte, 417)
+	copy(frame, []byte{0xff, 0xfb, 0x90, 0x64})
+	tag := []byte("ID3\x04\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00")
+	if err := os.WriteFile(path, append(tag, bytes.Repeat(frame, 3)...), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tr := &fakeTranscriber{}
-	tool := NewTranscribeAudioTool(switchWith(media.Services{Transcriber: tr}))
+	tool := NewTranscribeAudioTool(switchWith(media.Services{Transcriber: tr}), media.NewDirTranscriptStore(t.TempDir()))
 
 	out, err := tool.Execute(`{"path":` + jsonString(path) + `,"language":"de"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tr.got.Filename != "memo.mp3" || tr.got.Language != "de" || tr.audio != "audio-bytes" {
-		t.Fatalf("request not forwarded: %+v audio=%q", tr.got, tr.audio)
+	if tr.got.Filename != "chunk-0001.wav" || tr.got.Language != "de" || !strings.HasPrefix(tr.audio, "RIFF") {
+		t.Fatalf("request not forwarded as WAV: %+v (%d bytes)", tr.got, len(tr.audio))
 	}
 	if out != "Transcript of memo.mp3:\n\nhello world" {
 		t.Fatalf("unexpected output %q", out)
@@ -165,14 +170,15 @@ func TestTranscribeAudioToolValidation(t *testing.T) {
 	dir := t.TempDir()
 	txt := filepath.Join(dir, "notes.txt")
 	_ = os.WriteFile(txt, []byte("x"), 0o644)
-	big := filepath.Join(dir, "big.mp3")
+	big := filepath.Join(dir, "big.wav")
 	f, _ := os.Create(big)
 	_ = f.Truncate(transcribeMaxBytes + 1)
 	f.Close()
 	ok := filepath.Join(dir, "ok.wav")
 	_ = os.WriteFile(ok, []byte("x"), 0o644)
 
-	configured := NewTranscribeAudioTool(switchWith(media.Services{Transcriber: &fakeTranscriber{}}))
+	store := media.NewDirTranscriptStore(dir)
+	configured := NewTranscribeAudioTool(switchWith(media.Services{Transcriber: &fakeTranscriber{}}), store)
 	for name, args := range map[string]string{
 		"relative":    `{"path":"memo.mp3"}`,
 		"unsupported": `{"path":` + jsonString(txt) + `}`,
@@ -184,7 +190,7 @@ func TestTranscribeAudioToolValidation(t *testing.T) {
 		}
 	}
 
-	unconfigured := NewTranscribeAudioTool(media.NewSwitch())
+	unconfigured := NewTranscribeAudioTool(media.NewSwitch(), store)
 	if _, err := unconfigured.Execute(`{"path":` + jsonString(ok) + `}`); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("expected not configured error, got %v", err)
 	}
