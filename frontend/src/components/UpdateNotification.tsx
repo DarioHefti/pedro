@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
+import { CircleAlert, CircleCheck, Copy, Check, Download, X } from 'lucide-react'
 import { updaterService, eventService } from '../services/wailsService'
 import type { UpdateInfo } from '../services/wailsService'
+import { Button } from '../ui/button'
+import { Hint } from '../ui/hint'
 
 type UpdateState = 'idle' | 'available' | 'downloading' | 'installing' | 'done' | 'error'
 
@@ -13,7 +16,6 @@ export default function UpdateNotification() {
 
   useEffect(() => {
     if (import.meta.env.DEV) return
-
     const timer = setTimeout(async () => {
       try {
         const info = await updaterService.checkForUpdate()
@@ -22,19 +24,17 @@ export default function UpdateNotification() {
           setState('available')
         }
       } catch {
-        // Silently fail — update check is non-critical
+        /* the update check is best effort */
       }
     }, 3000)
-
     return () => clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    if (state === 'available') {
-      updaterService.getWindowsDefenderExclusion().then(cmd => {
-        if (cmd) setDefenderExclusion(cmd)
-      })
-    }
+    if (state !== 'available') return
+    updaterService.getWindowsDefenderExclusion().then(cmd => {
+      if (cmd) setDefenderExclusion(cmd)
+    })
   }, [state])
 
   useEffect(() => {
@@ -44,7 +44,9 @@ export default function UpdateNotification() {
       else if (status === 'done') setState('done')
       else if (status === 'error') setState('error')
     })
-    return () => { cancel() }
+    return () => {
+      cancel()
+    }
   }, [])
 
   const handleDownload = useCallback(async () => {
@@ -64,67 +66,89 @@ export default function UpdateNotification() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Clipboard API may fail in restricted contexts
+      /* clipboard may be unavailable */
     }
   }, [defenderExclusion])
 
   if (dismissed || state === 'idle') return null
 
+  const working = state === 'downloading' || state === 'installing'
+
   return (
-    <div className="update-notification">
-      {state === 'available' && (
-        <>
-          <span className="update-notification-text">
-            Update available: <strong>v{updateInfo?.latestVersion}</strong>
+    <aside className="update-card" data-state={state} role="status" aria-live="polite">
+      <div className="update-card-head">
+        <span className="update-card-icon" aria-hidden="true">
+          {working ? (
+            <span className="spinner" />
+          ) : state === 'done' ? (
+            <CircleCheck />
+          ) : state === 'error' ? (
+            <CircleAlert />
+          ) : (
+            <Download />
+          )}
+        </span>
+        <div className="update-card-text">
+          <strong>
+            {state === 'available'
+              ? `Pedro ${updateInfo?.latestVersion ? `v${updateInfo.latestVersion}` : ''} is available`
+              : state === 'downloading'
+                ? 'Downloading update…'
+                : state === 'installing'
+                  ? 'Installing update…'
+                  : state === 'done'
+                    ? 'Update installed'
+                    : 'Update failed'}
+          </strong>
+          <span>
+            {state === 'available'
+              ? 'Install now, or keep chatting and update later.'
+              : state === 'installing'
+                ? 'Pedro restarts when it finishes.'
+                : state === 'done'
+                  ? 'Restart Pedro to use the new version.'
+                  : state === 'error'
+                    ? 'Try again later, or download it from the releases page.'
+                    : 'This takes a moment.'}
           </span>
-          <div className="update-notification-actions">
-            <button className="update-btn-primary" onClick={handleDownload}>
-              Update
-            </button>
-            <button className="update-btn-dismiss" onClick={() => setDismissed(true)}>
-              Later
-            </button>
-          </div>
-          {defenderExclusion && (
+        </div>
+        {!working ? (
+          <Hint label="Dismiss">
+            <Button variant="ghost" size="icon-xs" onClick={() => setDismissed(true)}>
+              <X aria-hidden="true" />
+            </Button>
+          </Hint>
+        ) : null}
+      </div>
+
+      {working ? <div className="update-progress" aria-hidden="true" /> : null}
+
+      {state === 'available' ? (
+        <>
+          {defenderExclusion ? (
             <div className="update-exclusion">
-              <span className="update-exclusion-hint">
-                Run this in PowerShell as Admin to prevent Defender from blocking Pedro:
-              </span>
+              <span>Run in PowerShell as Admin so Defender doesn't block Pedro:</span>
               <div className="update-exclusion-row">
-                <code className="update-exclusion-code">{defenderExclusion}</code>
-                <button className="update-copy-btn" onClick={handleCopy}>
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
+                <code>{defenderExclusion}</code>
+                <Hint label={copied ? 'Copied' : 'Copy command'}>
+                  <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
+                    {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                  </Button>
+                </Hint>
               </div>
             </div>
-          )}
+          ) : null}
+          <div className="update-card-actions">
+            <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>
+              Later
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleDownload}>
+              <Download aria-hidden="true" />
+              Update now
+            </Button>
+          </div>
         </>
-      )}
-      {state === 'downloading' && (
-        <span className="update-notification-text">
-          <span className="update-spinner" /> Downloading update…
-        </span>
-      )}
-      {state === 'installing' && (
-        <span className="update-notification-text">
-          <span className="update-spinner" /> Installing… The app will restart.
-        </span>
-      )}
-      {state === 'done' && (
-        <span className="update-notification-text update-success">
-          Update installed! Please restart Pedro.
-        </span>
-      )}
-      {state === 'error' && (
-        <>
-          <span className="update-notification-text update-error">
-            Update failed.
-          </span>
-          <button className="update-btn-dismiss" onClick={() => setDismissed(true)}>
-            Dismiss
-          </button>
-        </>
-      )}
-    </div>
+      ) : null}
+    </aside>
   )
 }

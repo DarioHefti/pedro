@@ -1,0 +1,20 @@
+/* Declares UI SDK's cascade layer first, so every unlayered rule below wins over it. */
+@layer ui-sdk;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..750;1,14..32,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@import './tokens.css';
+@import './base.css';
+@import './ui.css';
+@import './shell.css';
+@import './chat.css';
+@import './markdown.css';
+@import './media.css';
+@import './palette.css';
+@import './settings.css';
+@import './details.css';
+
+/* Streamdown renders with Tailwind utilities mapped onto the tokens above. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

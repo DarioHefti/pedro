@@ -16,7 +16,6 @@ type LLMClient interface {
 	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(RequestUsage), onRequestCaptured func(CapturedRequest)) ([]Message, error)
 	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
-	SetPersonaPrompt(prompt string)
 	SetMemoryContext(ctx string)
 	SignIn(ctx context.Context) error
 	SignOut() error

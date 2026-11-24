@@ -14,10 +14,6 @@ export function CreateConversation() {
   return window['go']['main']['App']['CreateConversation']();
 }
 
-export function CreatePersona(arg1, arg2) {
-  return window['go']['main']['App']['CreatePersona'](arg1, arg2);
-}
-
 export function DeleteAllConversations() {
   return window['go']['main']['App']['DeleteAllConversations']();
 }
@@ -30,16 +26,8 @@ export function DeleteMessage(arg1, arg2) {
   return window['go']['main']['App']['DeleteMessage'](arg1, arg2);
 }
 
-export function DeletePersona(arg1) {
-  return window['go']['main']['App']['DeletePersona'](arg1);
-}
-
 export function ForgetMemory(arg1) {
   return window['go']['main']['App']['ForgetMemory'](arg1);
-}
-
-export function GetActivePersonaID() {
-  return window['go']['main']['App']['GetActivePersonaID']();
 }
 
 export function GetAvailableProviders() {
@@ -74,10 +62,6 @@ export function GetMessages(arg1) {
   return window['go']['main']['App']['GetMessages'](arg1);
 }
 
-export function GetPersonas() {
-  return window['go']['main']['App']['GetPersonas']();
-}
-
 export function GetRequestCounts(arg1) {
   return window['go']['main']['App']['GetRequestCounts'](arg1);
 }
@@ -94,16 +78,24 @@ export function OpenPath(arg1) {
   return window['go']['main']['App']['OpenPath'](arg1);
 }
 
-export function RegenerateMessage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RegenerateMessage'](arg1, arg2, arg3);
+export function RegenerateMessage(arg1, arg2) {
+  return window['go']['main']['App']['RegenerateMessage'](arg1, arg2);
 }
 
-export function ResendMessage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ResendMessage'](arg1, arg2, arg3);
+export function ResendMessage(arg1, arg2) {
+  return window['go']['main']['App']['ResendMessage'](arg1, arg2);
+}
+
+export function SaveBase64File(arg1, arg2) {
+  return window['go']['main']['App']['SaveBase64File'](arg1, arg2);
 }
 
 export function SaveFile(arg1, arg2) {
   return window['go']['main']['App']['SaveFile'](arg1, arg2);
+}
+
+export function SaveImage(arg1) {
+  return window['go']['main']['App']['SaveImage'](arg1);
 }
 
 export function SaveMemory(arg1, arg2, arg3) {
@@ -126,16 +118,12 @@ export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
 }
 
-export function SendMessage(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SendMessage'](arg1, arg2, arg3, arg4);
+export function SendMessage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SendMessage'](arg1, arg2, arg3);
 }
 
-export function SendMessageWithImages(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3, arg4, arg5);
-}
-
-export function SetActivePersonaID(arg1) {
-  return window['go']['main']['App']['SetActivePersonaID'](arg1);
+export function SendMessageWithImages(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SendMessageWithImages'](arg1, arg2, arg3, arg4);
 }
 
 export function SetSetting(arg1, arg2) {
@@ -152,8 +140,4 @@ export function SignOut() {
 
 export function TestConnection() {
   return window['go']['main']['App']['TestConnection']();
-}
-
-export function UpdatePersona(arg1, arg2, arg3) {
-  return window['go']['main']['App']['UpdatePersona'](arg1, arg2, arg3);
 }

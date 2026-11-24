@@ -24,15 +24,6 @@ type Message struct {
 	CreatedAt      time.Time `ts_type:"string"`
 }
 
-// Persona is a named instruction block prepended to outgoing user prompts when selected.
-type Persona struct {
-	ID        int64
-	Name      string
-	Prompt    string
-	CreatedAt time.Time `ts_type:"string"`
-	UpdatedAt time.Time `ts_type:"string"`
-}
-
 type Store interface {
 	GetConversations() ([]Conversation, error)
 	CreateConversation() (*Conversation, error)
@@ -54,10 +45,6 @@ type Store interface {
 	SetSetting(key, value string) error
 	DeleteSetting(key string) error
 	GetSettings() (map[string]string, error)
-	GetPersonas() ([]Persona, error)
-	CreatePersona(name, prompt string) (*Persona, error)
-	UpdatePersona(id int64, name, prompt string) error
-	DeletePersona(id int64) error
 	AddLLMDetails(conversationID int64, model string, requestCount int, messagesJSON string) error
 	GetLLMDetails() ([]LLMDetailsEntry, error)
 	ClearLLMDetails() error

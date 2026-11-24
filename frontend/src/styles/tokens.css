@@ -1,0 +1,175 @@
+/*
+ * Pedro design tokens.
+ * Colors are HSL channel triplets ("h s% l%") so they compose with alpha:
+ * hsl(var(--brand) / 0.2). designTheme.ts overrides the --custom-* inputs at
+ * runtime from the user's base colors; every other token derives from them.
+ */
+
+:root {
+  --font-sans: 'Inter', 'InterVariable', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  /* Settings → Appearance. 1rem follows the interface size, so the whole UI scales with it. */
+  --font-size-ui: var(--custom-ui-font-size, 13px);
+  --font-size-message: var(--custom-message-font-size, 14px);
+  --font-size-message-small: max(11px, calc(var(--font-size-message) * 0.86));
+
+  /* One corner radius for every surface and control (inputs, buttons, cards, bubbles,
+     menus, dialogs). sm and xs are for small things nested inside those, so inner corners
+     sit evenly in outer ones. full is only for true circles: avatars, dots, spinners. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-full: 999px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 340ms;
+
+  --header-height: 3.6rem;
+  /* The thread fills the chat area; its side margins grow gently with the space. */
+  --thread-gutter: clamp(1rem, 3.5cqi, 3.5rem);
+  /* Matches ::-webkit-scrollbar in base.css, so the composer lines up with the messages. */
+  --scrollbar-size: 10px;
+  --composer-max-height: 14rem;
+
+  /* Text for colours that content picks itself, like a diagram box with its own fill:
+     whichever of the two reads better on that colour is used. */
+  --ink-on-light: 229 45% 9%;
+  --ink-on-dark: 229 50% 97%;
+}
+
+/* ---------------------------------------------------------------- light */
+[data-theme='light'] {
+  --brand-h: var(--custom-light-h, 229);
+  --tint: var(--brand-h) var(--custom-light-ts, 46%);
+
+  --brand: var(--custom-light-brand, 229 46% 26%);
+  --brand-glow: var(--brand-h) 72% 60%;
+  --primary: var(--custom-light-primary, 229 46% 26%);
+  --primary-hover: var(--custom-light-primary-hover, 229 46% 20%);
+  --primary-foreground: var(--custom-light-primary-fg, 0 0% 100%);
+
+  --background: var(--tint) 97.6%;
+  --foreground: var(--brand-h) 38% 12%;
+  --surface: 0 0% 100%;
+  --surface-2: var(--tint) 96%;
+  --popover: 0 0% 100%;
+  --popover-foreground: var(--brand-h) 38% 12%;
+  --sidebar: var(--tint) 94.6%;
+  --sidebar-foreground: var(--brand-h) 32% 16%;
+  --sidebar-accent: var(--tint) 90.5%;
+  --muted: var(--tint) 93.5%;
+  --muted-foreground: var(--brand-h) 18% 37%;
+  /* Placeholders and hints: 4.5:1 or more on every surface. */
+  --faint-foreground: var(--brand-h) 14% 45%;
+  --accent: var(--tint) 92%;
+  --accent-foreground: var(--brand-h) 46% 24%;
+  --user-bubble: var(--tint) 93.5%;
+  --border: var(--tint) 88.5%;
+  --border-strong: var(--tint) 80%;
+  --input: var(--tint) 82%;
+  --ring: var(--brand-h) 70% 52%;
+  --code: var(--tint) 96%;
+  --code-header: var(--tint) 92.5%;
+  --tooltip: var(--brand-h) 42% 13%;
+  --tooltip-foreground: 0 0% 100%;
+  --overlay: var(--brand-h) 40% 12%;
+  --overlay-alpha: 0.32;
+  --shadow-color: var(--brand-h) 45% 18%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-text: 0 72% 45%;
+  --success: 152 68% 34%;
+  --warning: 32 92% 38%;
+  --warning-soft: 42 96% 52%;
+
+  --role-system: 220 9% 46%;
+  --role-user: 175 77% 26%;
+  --role-assistant: var(--brand);
+  --role-tool: 26 90% 37%;
+
+  --glass: 0 0% 100%;
+  --glass-alpha: 0.72;
+}
+
+/* ----------------------------------------------------------------- dark */
+[data-theme='dark'] {
+  --brand-h: var(--custom-dark-h, 229);
+  --tint: var(--brand-h) var(--custom-dark-ts, 42%);
+
+  --brand: var(--custom-dark-brand, 229 57% 66%);
+  --brand-glow: var(--brand-h) 85% 76%;
+  --primary: var(--custom-dark-primary, 229 57% 56%);
+  --primary-hover: var(--custom-dark-primary-hover, 229 57% 62%);
+  --primary-foreground: var(--custom-dark-primary-fg, 0 0% 100%);
+
+  /* Layers step up clearly in lightness, so cards, inputs and the sidebar read as distinct
+     shapes; text stays at 5.5:1 or more on every one of them. */
+  --background: var(--tint) 6.5%;
+  --foreground: var(--brand-h) 50% 95%;
+  --surface: var(--tint) 13.5%;
+  --surface-2: var(--tint) 16.5%;
+  --popover: var(--tint) 15.5%;
+  --popover-foreground: var(--brand-h) 50% 95%;
+  --sidebar: var(--tint) 10%;
+  --sidebar-foreground: var(--brand-h) 40% 90%;
+  --sidebar-accent: var(--tint) 17.5%;
+  --muted: var(--tint) 18.5%;
+  --muted-foreground: var(--brand-h) 24% 75%;
+  --faint-foreground: var(--brand-h) 16% 63%;
+  --accent: var(--brand-h) 38% 22%;
+  --accent-foreground: var(--brand-h) 80% 88%;
+  --user-bubble: var(--brand-h) 40% 23%;
+  --border: var(--tint) 25%;
+  --border-strong: var(--tint) 35%;
+  --input: var(--tint) 33%;
+  --ring: var(--brand-h) 85% 70%;
+  --code: var(--tint) 9%;
+  --code-header: var(--tint) 16%;
+  --tooltip: var(--brand-h) 30% 92%;
+  --tooltip-foreground: var(--brand-h) 45% 9%;
+  --overlay: var(--brand-h) 50% 3%;
+  --overlay-alpha: 0.62;
+  --shadow-color: var(--brand-h) 60% 2%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-text: 0 88% 71%;
+  --success: 158 64% 52%;
+  --warning: 43 96% 60%;
+  --warning-soft: 43 96% 56%;
+
+  --role-system: 220 10% 62%;
+  --role-user: 172 66% 60%;
+  --role-assistant: var(--brand);
+  --role-tool: 43 96% 60%;
+
+  --glass: var(--tint) 10%;
+  --glass-alpha: 0.7;
+}
+
+/* ------------------------------------------------- composite tokens */
+:root {
+  --gradient-brand: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(var(--brand-glow)) 100%);
+  --gradient-rail: linear-gradient(180deg, hsl(var(--brand-glow)) 0%, hsl(var(--brand)) 100%);
+  --gradient-sheen: linear-gradient(180deg, hsl(0 0% 100% / 0.14) 0%, hsl(0 0% 100% / 0) 100%);
+  --gradient-canvas:
+    radial-gradient(70rem 32rem at 50% -14rem, hsl(var(--brand) / 0.11), transparent 70%),
+    radial-gradient(40rem 22rem at 100% 0%, hsl(var(--brand-glow) / 0.06), transparent 70%);
+  --gradient-avatar: conic-gradient(from 210deg, hsl(var(--brand-glow)), hsl(var(--brand)), hsl(var(--brand-glow) / 0.4), hsl(var(--brand-glow)));
+
+  --shadow-xs: 0 1px 2px hsl(var(--shadow-color) / 0.06);
+  --shadow-sm: 0 1px 3px hsl(var(--shadow-color) / 0.08), 0 1px 2px -1px hsl(var(--shadow-color) / 0.06);
+  --shadow-md: 0 6px 16px -6px hsl(var(--shadow-color) / 0.16), 0 2px 4px -2px hsl(var(--shadow-color) / 0.08);
+  --shadow-lg: 0 18px 44px -14px hsl(var(--shadow-color) / 0.28), 0 4px 10px -4px hsl(var(--shadow-color) / 0.1);
+  --shadow-popover: 0 14px 36px -10px hsl(var(--shadow-color) / 0.3), 0 3px 8px -3px hsl(var(--shadow-color) / 0.12);
+  --shadow-dialog: 0 40px 90px -28px hsl(var(--shadow-color) / 0.5), 0 8px 24px -10px hsl(var(--shadow-color) / 0.2);
+  --shadow-glow: 0 0 0 1px hsl(var(--brand) / 0.18), 0 10px 28px -8px hsl(var(--brand) / 0.45);
+  --shadow-composer: 0 18px 48px -20px hsl(var(--shadow-color) / 0.3), 0 2px 6px -2px hsl(var(--shadow-color) / 0.08);
+  --ring-focus: 0 0 0 3px hsl(var(--ring) / 0.28);
+}

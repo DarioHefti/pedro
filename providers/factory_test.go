@@ -26,7 +26,6 @@ func (s *stubClient) Chat(context.Context, []shared.Message, []string, func(stri
 }
 func (s *stubClient) SetBaseSystemPrompt(string)   {}
 func (s *stubClient) SetCustomSystemPrompt(string) {}
-func (s *stubClient) SetPersonaPrompt(string)      {}
 func (s *stubClient) SetMemoryContext(string)      {}
 func (s *stubClient) SignIn(context.Context) error { return nil }
 func (s *stubClient) SignOut() error               { return nil }

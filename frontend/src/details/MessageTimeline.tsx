@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
-import { CopyButton, DetailsButton } from './DetailsButton'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
+import { Button } from '../ui/button'
+import { CopyButton } from './DetailsButton'
 import {
   COLLAPSE_THRESHOLD,
   MAX_RENDER,
@@ -65,14 +69,16 @@ function ToolCallList({ calls }: { calls: OAIToolCall[] }) {
   return (
     <div className="rd-toolcalls">
       {calls.map(tc => (
-        <details key={tc.id} className="rd-toolcall">
-          <summary className="rd-toolcall-head">
-            <span className="rd-toolcall-chevron" aria-hidden="true">▸</span>
+        <Collapsible key={tc.id} className="rd-toolcall">
+          <CollapsibleTrigger className="rd-toolcall-head">
+            <ChevronRight className="rd-chevron" aria-hidden="true" />
             <span className="rd-toolcall-name">{tc.function.name}</span>
             <span className="rd-toolcall-id">{tc.id}</span>
-          </summary>
-          <pre className="rd-code rd-code--compact">{prettyJson(tc.function.arguments)}</pre>
-        </details>
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <pre className="rd-code rd-code--compact">{prettyJson(tc.function.arguments)}</pre>
+          </CollapsiblePanel>
+        </Collapsible>
       ))}
     </div>
   )
@@ -120,7 +126,9 @@ function TimelineItem({ role, index, content, tag, toolCalls, expanded, onToggle
           <span className="rd-msg-actions">
             {content && <CopyButton text={content} title="Copy this message" />}
             {collapsible && (
-              <DetailsButton onClick={onToggle}>{expanded ? 'Collapse' : 'Expand'}</DetailsButton>
+              <Button variant="ghost" size="xs" onClick={onToggle}>
+                {expanded ? 'Collapse' : 'Expand'}
+              </Button>
             )}
           </span>
         </header>
@@ -185,32 +193,28 @@ export function MessageTimeline({ payload }: { payload: ParsedPayload }) {
   return (
     <div className="rd-timeline-wrap">
       <div className="rd-toolbar">
-        <div className="rd-segmented" role="tablist" aria-label="Filter by role">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={roleFilter === 'all'}
-            className="rd-segment"
-            onClick={() => setRoleFilter('all')}
-          >
+        <SegmentedControl<RoleFilter>
+          aria-label="Filter by role"
+          value={roleFilter}
+          onValueChange={v => v && setRoleFilter(v)}
+          data-size="sm"
+        >
+          <SegmentedControlIndicator />
+          <SegmentedControlItem value="all">
             All <span className="rd-segment-count">{messages.length}</span>
-          </button>
+          </SegmentedControlItem>
           {ROLE_ORDER.filter(r => roleCounts[r] > 0).map(r => (
-            <button
-              key={r}
-              type="button"
-              role="tab"
-              aria-selected={roleFilter === r}
-              className={`rd-segment rd-segment--${r}`}
-              onClick={() => setRoleFilter(r)}
-            >
+            <SegmentedControlItem key={r} value={r} className={`rd-segment--${r}`}>
               <span className="rd-segment-dot" aria-hidden="true" />
               {roleLabel(r)} <span className="rd-segment-count">{roleCounts[r]}</span>
-            </button>
+            </SegmentedControlItem>
           ))}
-        </div>
+        </SegmentedControl>
         {collapsibleIdx.length > 0 && (
-          <DetailsButton className="rd-toolbar-end" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</DetailsButton>
+          <Button variant="ghost" size="xs" className="rd-toolbar-end" onClick={toggleAll}>
+            {allExpanded ? <ChevronsDownUp aria-hidden="true" /> : <ChevronsUpDown aria-hidden="true" />}
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </Button>
         )}
       </div>
 

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { Braces, MessagesSquare, SlidersHorizontal, Wrench } from 'lucide-react'
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@ui-sdk/react/tabs'
 import { CopyButton } from './DetailsButton'
 import { MessageTimeline } from './MessageTimeline'
 import { ParamsTable } from './ParamsTable'
@@ -10,13 +11,8 @@ import type { ParsedPayload, RequestRow } from './types'
 
 type DetailTab = 'conversation' | 'tools' | 'params' | 'raw'
 
-/* -------------------------------------------------------------------------- */
-/*  Stats strip                                                                */
-/* -------------------------------------------------------------------------- */
-
 function RoleBreakdownBar({ payload }: { payload: ParsedPayload }) {
-  const total = payload.messages.length
-  if (total === 0) return null
+  if (payload.messages.length === 0) return null
   return (
     <span className="rd-rolebar" aria-hidden="true">
       {ROLE_ORDER.filter(r => payload.roleCounts[r] > 0).map(r => (
@@ -31,25 +27,19 @@ function RoleBreakdownBar({ payload }: { payload: ParsedPayload }) {
   )
 }
 
-function StatCard({ label, value, hint, children }: {
-  label: string
-  value: string
-  hint?: string
-  children?: ReactNode
-}) {
+function StatCard({ label, value, hint, children }: { label: string; value: string; hint?: string; children?: ReactNode }) {
   return (
     <div className="rd-stat">
       <span className="rd-stat-label">{label}</span>
       <span className="rd-stat-value">{value}</span>
-      {hint && <span className="rd-stat-hint">{hint}</span>}
+      {hint ? <span className="rd-stat-hint">{hint}</span> : null}
       {children}
     </div>
   )
 }
 
 function StatsStrip({ payload }: { payload: ParsedPayload }) {
-  const breakdown = ROLE_ORDER
-    .filter(r => payload.roleCounts[r] > 0)
+  const breakdown = ROLE_ORDER.filter(r => payload.roleCounts[r] > 0)
     .map(r => `${payload.roleCounts[r]} ${roleLabel(r).toLowerCase()}`)
     .join(' · ')
 
@@ -69,10 +59,6 @@ function StatsStrip({ payload }: { payload: ParsedPayload }) {
   )
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Detail view                                                                */
-/* -------------------------------------------------------------------------- */
-
 export function RequestDetailView({ row }: { row: RequestRow }) {
   const { entry, payload } = row
   const [tab, setTab] = useState<DetailTab>('conversation')
@@ -80,23 +66,25 @@ export function RequestDetailView({ row }: { row: RequestRow }) {
   const paramCount = Object.keys(payload.params).length + (payload.model ? 1 : 0)
   const title = entry.ConversationTitle || 'Untitled conversation'
 
-  const tabs: { id: DetailTab; label: string; count?: number }[] = [
-    { id: 'conversation', label: 'Conversation', count: payload.messages.length + (hasResponse ? 1 : 0) },
-    { id: 'tools', label: 'Tools', count: payload.tools.length },
-    { id: 'params', label: 'Parameters', count: paramCount },
-    { id: 'raw', label: 'Raw JSON' },
+  const tabs: { id: DetailTab; label: string; icon: typeof Braces; count?: number }[] = [
+    { id: 'conversation', label: 'Conversation', icon: MessagesSquare, count: payload.messages.length + (hasResponse ? 1 : 0) },
+    { id: 'tools', label: 'Tools', icon: Wrench, count: payload.tools.length },
+    { id: 'params', label: 'Parameters', icon: SlidersHorizontal, count: paramCount },
+    { id: 'raw', label: 'Raw JSON', icon: Braces },
   ]
 
   return (
     <div className="rd-detail">
       <header className="rd-detail-head">
         <div className="rd-detail-heading">
-          <h3 className="rd-detail-title" title={title}>{title}</h3>
+          <h3 className="rd-detail-title" title={title}>
+            {title}
+          </h3>
           <div className="rd-detail-sub">
-            {entry.Model && <span className="rd-model-chip">{entry.Model}</span>}
+            {entry.Model ? <span data-badge="brand">{entry.Model}</span> : null}
             <span className="rd-detail-time">{formatFull(row.createdAt)}</span>
-            <span className={`rd-pill${hasResponse ? ' rd-pill--ok' : ' rd-pill--muted'}`}>
-              <span className={`rd-status-dot${hasResponse ? ' rd-status-dot--ok' : ''}`} aria-hidden="true" />
+            <span data-badge={hasResponse ? 'success' : 'neutral'}>
+              <span className="status-dot" data-tone={hasResponse ? 'success' : undefined} aria-hidden="true" />
               {hasResponse ? 'Reply captured' : 'No reply captured'}
             </span>
           </div>
@@ -105,36 +93,41 @@ export function RequestDetailView({ row }: { row: RequestRow }) {
           text={entry.Messages}
           label="Copy full JSON"
           copiedLabel="Copied JSON"
-          variant="outline"
-          size="md"
+          variant="secondary"
+          size="sm"
           title={`Copy the full payload (${humanSize(entry.Messages.length)})`}
         />
       </header>
 
       <StatsStrip payload={payload} />
 
-      <nav className="rd-tabs" role="tablist" aria-label="Request sections">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className="rd-tab"
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.count != null && <span className="rd-tab-count">{t.count}</span>}
-          </button>
-        ))}
-      </nav>
-
-      <div className="rd-tab-panel" role="tabpanel" key={`${entry.ID}-${tab}`}>
-        {tab === 'conversation' && <MessageTimeline payload={payload} />}
-        {tab === 'tools' && <ToolDefinitionList tools={payload.tools} />}
-        {tab === 'params' && <ParamsTable params={payload.params} model={payload.model} />}
-        {tab === 'raw' && <RawJsonView json={entry.Messages} />}
-      </div>
+      <Tabs<DetailTab> value={tab} onValueChange={v => v && setTab(v)} className="rd-tabs-root">
+        <TabsList data-variant="underline" aria-label="Request sections" className="rd-tabs">
+          <TabsIndicator />
+          {tabs.map(t => {
+            const Icon = t.icon
+            return (
+              <TabsTab key={t.id} value={t.id}>
+                <Icon aria-hidden="true" />
+                {t.label}
+                {t.count != null ? <span className="tab-count">{t.count}</span> : null}
+              </TabsTab>
+            )
+          })}
+        </TabsList>
+        <TabsPanel value="conversation" className="rd-tab-panel">
+          <MessageTimeline payload={payload} />
+        </TabsPanel>
+        <TabsPanel value="tools" className="rd-tab-panel">
+          <ToolDefinitionList tools={payload.tools} />
+        </TabsPanel>
+        <TabsPanel value="params" className="rd-tab-panel">
+          <ParamsTable params={payload.params} model={payload.model} />
+        </TabsPanel>
+        <TabsPanel value="raw" className="rd-tab-panel">
+          <RawJsonView json={entry.Messages} />
+        </TabsPanel>
+      </Tabs>
     </div>
   )
 }
