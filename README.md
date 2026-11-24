@@ -48,8 +48,13 @@ No extra system dependencies needed beyond Go, Node, and the Wails CLI.
 
 ### Linux prerequisites
 
+Pedro builds against WebKitGTK 4.1 (the `webkit2_41` tag is set in `wails.json`, so plain `wails dev` / `wails build` just work).
+
 ```bash
-sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev build-essential pkg-config
+# Debian / Ubuntu (22.04+)
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+# Arch / Omarchy
+sudo pacman -S --needed gtk3 webkit2gtk-4.1 base-devel pkgconf
 ```
 
 ### UI without the Go backend
@@ -135,7 +140,21 @@ Then double-click the installer and it should finally work.
 
 **Data location:** `%AppData%\Pedro\pedro.db`
 
-### Linux
+### Linux (X11 and Wayland, incl. Hyprland / Omarchy)
+
+Pedro runs as a native Wayland client. Install it for your user so it shows up in the app launcher with its icon:
+
+```bash
+wails build
+build/linux/install.sh                 # or: build/linux/install.sh ~/Downloads/Pedro-linux-amd64
+build/linux/install.sh --uninstall
+```
+
+This puts the binary in `~/.local/bin/pedro` (the in-app updater replaces it in place), plus `pedro.desktop` and the icon under `~/.local/share`. The Wayland app-id / window class is always `pedro`, so you can target it in compositor window rules.
+
+- On tiling compositors the window takes the tile's size (the min size only applies on X11).
+- On Wayland Pedro sets `WEBKIT_DISABLE_COMPOSITING_MODE=1` (WebKit otherwise flashes stale frames, e.g. while a reply streams), and on the NVIDIA driver `WEBKIT_DISABLE_DMABUF_RENDERER=1` (avoids a blank window). Set either to `0` yourself to opt out.
+- To force XWayland: `GDK_BACKEND=x11 pedro`.
 
 **Data location:** `~/.config/Pedro/pedro.db`
 

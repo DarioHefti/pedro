@@ -17,8 +17,7 @@ func main() {
 	app := NewApp()
 	updater := NewUpdater()
 
-	// Create application with options
-	err := wails.Run(&options.App{
+	appOptions := &options.App{
 		Title:     "Pedro",
 		Width:     840,
 		Height:    640,
@@ -41,9 +40,11 @@ func main() {
 			app,
 			updater,
 		},
-	})
+	}
+	// Per-OS tweaks (Linux: Wayland app-id, tiling-friendly sizing, GPU workarounds).
+	applyPlatformOptions(appOptions)
 
-	if err != nil {
+	if err := wails.Run(appOptions); err != nil {
 		println("Error:", err.Error())
 	}
 }

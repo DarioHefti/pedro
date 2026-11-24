@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Pedro
+GenericName=AI Chat
+Comment=Your friendly desktop AI chat companion
+Exec=pedro %U
+Icon=pedro
+Terminal=false
+Categories=Network;Chat;
+Keywords=AI;LLM;Chat;OpenAI;Assistant;
+StartupWMClass=pedro
+StartupNotify=true
