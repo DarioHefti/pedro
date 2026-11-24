@@ -21,10 +21,10 @@ func DefaultOptions() *ExtractionOptions {
 
 // ExtractionResult is the full output of extraction.
 type ExtractionResult struct {
-	Metadata       Metadata            `json:"metadata"`
-	Content        Content             `json:"content"`
-	DomainData     *DomainData         `json:"domain_data,omitempty"`
-	StructuredData []map[string]any    `json:"structured_data,omitempty"`
+	Metadata       Metadata         `json:"metadata"`
+	Content        Content          `json:"content"`
+	DomainData     *DomainData      `json:"domain_data,omitempty"`
+	StructuredData []map[string]any `json:"structured_data,omitempty"`
 }
 
 // Content holds the extracted text and assets.

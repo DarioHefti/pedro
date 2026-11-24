@@ -10,17 +10,16 @@ import Sidebar from './components/sidebar/Sidebar'
 import UpdateNotification from './components/UpdateNotification'
 import Details from './Details'
 import { applyDesignAndTypographyFromSettings } from './designTheme'
+import { useChatStats } from './hooks/useChatStats'
 import { useConversations } from './hooks/useConversations'
 import { useMessaging } from './hooks/useMessaging'
 import { usePinnedSidebar } from './hooks/usePinnedSidebar'
 import {
   conversationService,
-  eventService,
   fileService,
   memoryService,
   settingsService,
   statsService,
-  uiConversationService,
   updaterService,
 } from './services/wailsService'
 import { SettingsDialog } from './settings/SettingsDialog'
@@ -54,14 +53,12 @@ const showError = (message: string) => toast.error(message)
 
 export default function App() {
   const { theme, toggleTheme } = useTheme()
-  const [currentConvID, setCurrentConvID] = useState<number | null>(() => uiConversationService.initialConversationID())
+  const [currentConvID, setCurrentConvID] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_WELCOME_MESSAGE)
   const [focusTrigger, setFocusTrigger] = useState(0)
-  const [perChatRequestCount, setPerChatRequestCount] = useState(0)
-  const [perChatTokens, setPerChatTokens] = useState(0)
   const [layout] = useState(() => createResizableController())
   const shellRef = useRef<HTMLDivElement>(null)
   const sidebar = usePinnedSidebar({
@@ -76,6 +73,7 @@ export default function App() {
 
   const { conversations, load: loadConversations, remove: removeConversation, removeAll: removeAllConversations } =
     useConversations()
+  const chatStats = useChatStats(currentConvID)
   useCodeBlockDownloads()
 
   const reloadSettings = useCallback(async () => {
@@ -84,11 +82,17 @@ export default function App() {
     applyDesignAndTypographyFromSettings(s)
   }, [])
 
+  /** Leaves a conversation that no longer exists. */
+  const forgetConversation = useCallback((id: number) => {
+    setCurrentConvID(current => (current === id ? null : current))
+  }, [])
+
   const messaging = useMessaging({
     currentConvID,
     createConversation: conversationService.create,
     onConversationCreated: setCurrentConvID,
     refreshConversations: loadConversations,
+    onConversationDeleted: forgetConversation,
     showError,
   })
 
@@ -96,51 +100,19 @@ export default function App() {
     void reloadSettings()
   }, [reloadSettings])
 
-  useEffect(() => {
-    const cancel = eventService.on(
-      'request_count_updated',
-      (conversationID: number, perChat: number, _global: number, chatTokens: number) => {
-        if (conversationID === currentConvID) {
-          setPerChatRequestCount(perChat)
-          setPerChatTokens(chatTokens)
-        }
-      },
-    )
-    return () => {
-      cancel()
-    }
-  }, [currentConvID])
-
-  useEffect(() => {
-    if (!uiConversationService.isVirtualConversation(currentConvID) || currentConvID === null) return
-    void messaging.load(currentConvID)
-    // Bootstraps the sample thread once when opening on the virtual conversation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // Loads messages only when the person picks a conversation, so programmatic setCurrentConvID
   // during a send never races the optimistic update.
   async function selectConversation(id: number) {
     setCurrentConvID(id)
     setFocusTrigger(n => n + 1)
-    if (!uiConversationService.isVirtualConversation(id)) {
-      try {
-        const counts = await statsService.getRequestCounts(id)
-        setPerChatRequestCount(counts.perChat)
-        setPerChatTokens(counts.perChatTokens)
-      } catch {
-        setPerChatRequestCount(0)
-        setPerChatTokens(0)
-      }
-    }
+    void chatStats.load(id)
     await messaging.load(id)
   }
 
   function newConversation() {
     setCurrentConvID(null)
     messaging.clear()
-    setPerChatRequestCount(0)
-    setPerChatTokens(0)
+    chatStats.reset()
     setFocusTrigger(n => n + 1)
   }
 
@@ -210,14 +182,9 @@ export default function App() {
         <ResizablePanel id="main" className="app-main" minSize="420px">
           <Chat
             title={currentTitle}
-            messages={messaging.messages}
-            loading={messaging.loading}
+            thread={messaging.thread}
+            stream={messaging.stream}
             streamingBusy={messaging.streamingBusy}
-            toolCalls={messaging.toolCalls}
-            messageToolCalls={messaging.messageToolCalls}
-            streamingContent={messaging.streamingContent}
-            messageImages={messaging.messageImages}
-            messageFiles={messaging.messageFiles}
             onSend={(content, attachments) => void messaging.send(content, attachments)}
             onStop={messaging.stop}
             onRegenerate={index => void messaging.regenerate(index)}
@@ -229,8 +196,7 @@ export default function App() {
             focusTrigger={focusTrigger}
             currentConvID={currentConvID}
             composerFocusPaused={settingsOpen || detailsOpen || paletteOpen}
-            requestCount={perChatRequestCount}
-            requestTokens={perChatTokens}
+            stats={chatStats.stats}
             onViewDetails={() => setDetailsOpen(true)}
             sidebarCollapsed={sidebar.collapsed}
             onShowSidebar={sidebar.expand}

@@ -31,3 +31,9 @@ Thumbs.db
 .task/
 # Runtime log files
 updater.log
+
+# Frontend tests
+frontend/e2e/.dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/

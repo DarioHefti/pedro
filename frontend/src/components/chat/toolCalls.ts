@@ -11,7 +11,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import type { ToolCall } from '../../hooks/useMessaging'
+import type { ToolCall } from '../../hooks/messageModel'
 
 interface ToolMeta {
   label: string

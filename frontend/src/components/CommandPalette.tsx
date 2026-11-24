@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Activity,
   MessageSquareText,
@@ -23,6 +23,7 @@ import {
   CommandList,
   CommandShortcut,
 } from '@ui-sdk/react/command'
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch'
 import type { Conversation, Message } from '../services/wailsService'
 import { AppDialog } from '../ui/dialog'
 import { SHORTCUTS } from '../shortcuts'
@@ -47,8 +48,15 @@ interface ActionEntry {
   keywords?: string[]
 }
 
+interface ContentHit {
+  conv: Conversation
+  snippet: string
+}
+
 const SNIPPET_RADIUS = 48
 const MAX_RECENT = 40
+const MAX_CONTENT_HITS = 12
+const NO_HITS: ContentHit[] = []
 
 function snippetFor(messages: Message[], query: string): string {
   const q = query.toLowerCase()
@@ -72,34 +80,18 @@ function PaletteBody({
   close,
 }: Omit<CommandPaletteProps, 'open' | 'onOpenChange'> & { close: () => void }) {
   const [query, setQuery] = useState('')
-  const [contentHits, setContentHits] = useState<{ conv: Conversation; snippet: string }[]>([])
-
-  useEffect(() => {
-    const q = query.trim()
-    if (q.length < 2) {
-      setContentHits([])
-      return
-    }
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      onSearchMessages(q)
-        .then(results => {
-          if (cancelled) return
-          const byId = new Map(conversations.map(c => [c.ID, c]))
-          const hits = Object.entries(results)
-            .map(([id, msgs]) => ({ conv: byId.get(Number(id)), snippet: snippetFor(msgs, q) }))
-            .filter((h): h is { conv: Conversation; snippet: string } => !!h.conv && !!h.snippet)
-          setContentHits(hits.slice(0, 12))
-        })
-        .catch(() => {
-          if (!cancelled) setContentHits([])
-        })
-    }, 180)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [query, conversations, onSearchMessages])
+  const searchHits = useCallback(
+    async (q: string): Promise<ContentHit[]> => {
+      const results = await onSearchMessages(q)
+      const byId = new Map(conversations.map(c => [c.ID, c]))
+      return Object.entries(results)
+        .map(([id, msgs]) => ({ conv: byId.get(Number(id)), snippet: snippetFor(msgs, q) }))
+        .filter((h): h is ContentHit => !!h.conv && !!h.snippet)
+        .slice(0, MAX_CONTENT_HITS)
+    },
+    [conversations, onSearchMessages],
+  )
+  const contentHits = useDebouncedSearch(query, searchHits, NO_HITS, { delayMs: 180, minLength: 2 })
 
   const actions = useMemo<ActionEntry[]>(
     () => [

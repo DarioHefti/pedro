@@ -25,7 +25,7 @@ A desktop app for chatting with Openai any compatible AI models (azure, lm studi
 
 ## Development
 
-Prerequisites: Go 1.25+, Node 20+, and the Wails CLI.
+Prerequisites: Go 1.25+, Node 22.12+ (for the frontend test tools; building alone works on Node 20.19+), and the Wails CLI.
 
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
@@ -51,6 +51,32 @@ No extra system dependencies needed beyond Go, Node, and the Wails CLI.
 ```bash
 sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev build-essential pkg-config
 ```
+
+### UI without the Go backend
+
+```bash
+cd frontend
+npm run dev:mock
+```
+
+Runs the UI in a browser against an in-memory fake backend (`frontend/e2e/fake-backend`) with demo chats and canned, streamed replies. No database, provider or API key is involved.
+
+## Tests
+
+```bash
+go test -race ./...          # backend: store, chat turns, App flows against a scripted fake LLM
+
+cd frontend
+npm run typecheck            # app + test code
+npm test                     # Vitest unit tests for the pure modules
+npx playwright install chromium   # once
+npm run test:e2e             # Playwright E2E against a production build and the fake backend
+```
+
+- The E2E suite never calls an LLM. Replies are scripted per test (`pedro.queueReply(...)`) or picked from `e2e/fake-backend/replies.ts`.
+- `E2E_DEV=1 npm run test:e2e` runs the specs against the Vite dev server, which is faster to iterate on. `npm run test:e2e:ui` opens Playwright's UI mode.
+- The fake backend is typed against the generated Wails bindings: after changing an `App` method, run `wails generate module` and `npm run typecheck` shows what the fake is missing.
+- `testdata/connection_fingerprints.json` is a contract shared by the Go and TypeScript tests. Both sides must fingerprint provider settings identically.
 
 ## Build
 

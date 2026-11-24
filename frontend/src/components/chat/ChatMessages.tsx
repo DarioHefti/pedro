@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, FileText, Folder, Music, RefreshCw, Trash2 } from 'lucide-react'
-import type { FileAttachment, ToolCall } from '../../hooks/useMessaging'
+import type { FileAttachment, ToolCall } from '../../hooks/messageModel'
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard'
 import MessageRenderer from '../../MessageRenderer'
 import { fileService } from '../../services/wailsService'
 import { Button } from '../../ui/button'
@@ -10,12 +10,6 @@ import { isAudioFilePath } from '../../utils/fileKinds'
 import { lightbox } from '../ImageLightbox'
 import { ToolCallGroup } from './ToolCallGroup'
 
-function openPath(path: string) {
-  void fileService.openPath(path).then(err => {
-    if (err) console.warn('[OpenPath]', err)
-  })
-}
-
 export function FileKindIcon({ folder, path }: { folder: boolean; path: string }) {
   if (folder) return <Folder aria-hidden="true" />
   if (isAudioFilePath(path)) return <Music aria-hidden="true" />
@@ -23,9 +17,8 @@ export function FileKindIcon({ folder, path }: { folder: boolean; path: string }
 }
 
 function CopyAction({ onCopy, label = 'Copy', disabled }: { onCopy: () => Promise<unknown>; label?: string; disabled?: boolean }) {
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(timer.current), [])
+  // onCopy reports its own failures.
+  const { copied, copyWith } = useCopyToClipboard()
 
   return (
     <Hint label={copied ? 'Copied' : label}>
@@ -34,16 +27,7 @@ function CopyAction({ onCopy, label = 'Copy', disabled }: { onCopy: () => Promis
         size="icon-xs"
         disabled={disabled}
         data-copied={copied ? '' : undefined}
-        onClick={async () => {
-          try {
-            await onCopy()
-            setCopied(true)
-            window.clearTimeout(timer.current)
-            timer.current = window.setTimeout(() => setCopied(false), 1400)
-          } catch {
-            /* the caller reports failures */
-          }
-        }}
+        onClick={() => void copyWith(onCopy)}
       >
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </Button>
@@ -89,7 +73,7 @@ export function UserMessage({ content, images, files, busy, onResend, onDelete }
                 type="button"
                 className="file-chip"
                 title={file.path}
-                onClick={() => openPath(file.path)}
+                onClick={() => void fileService.open(file.path)}
                 aria-label={`Open ${file.type === 'folder' ? 'folder' : 'file'} ${file.name}`}
               >
                 <FileKindIcon folder={file.type === 'folder'} path={file.path} />

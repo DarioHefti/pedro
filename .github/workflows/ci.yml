@@ -10,7 +10,8 @@ env:
   GO_VERSION: '1.27'
   # Keep in sync with github.com/wailsapp/wails/v2 in go.mod.
   WAILS_VERSION: 'v2.17.1'
-  NODE_VERSION: '20'
+  # Vitest needs Node 22.12+.
+  NODE_VERSION: '22'
 
 jobs:
   test:
@@ -44,19 +45,47 @@ jobs:
         run: npm install
         working-directory: frontend
 
-      - name: Build frontend
+      - name: Build frontend (typecheck + bundle)
         run: npm run build
         working-directory: frontend
+
+      - name: Frontend unit tests
+        run: npm test
+        working-directory: frontend
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      # The UI runs against the in-memory fake backend: no Wails window, database or LLM.
+      - name: E2E tests
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
 
       - name: Go mod tidy check
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
 
+      - name: Go format check
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then echo "Run gofmt -w on:"; echo "$unformatted"; exit 1; fi
+
       - name: Build backend
         run: go build -v ./...
         env:
           CGO_ENABLED: 1
 
-      - name: Test
-        run: go test -v ./...
+      - name: Go tests
+        run: go test -race ./...

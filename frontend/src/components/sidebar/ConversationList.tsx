@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { Conversation } from '../../services/wailsService'
-import { uiConversationService } from '../../services/wailsService'
 import { Button } from '../../ui/button'
 import { Hint } from '../../ui/hint'
 import { groupConversations } from './conversationGroups'
@@ -37,19 +36,17 @@ export function ConversationList({ conversations, currentConvID, onSelect, onDel
                   >
                     <span className="conv-row-title">{title}</span>
                   </button>
-                  {uiConversationService.canDeleteConversation(conv.ID) ? (
-                    <Hint label="Delete chat">
-                      <Button
-                        variant="danger-quiet"
-                        size="icon-xs"
-                        className="conv-row-delete"
-                        aria-label={`Delete ${title}`}
-                        onClick={() => onDelete(conv.ID)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </Hint>
-                  ) : null}
+                  <Hint label="Delete chat">
+                    <Button
+                      variant="danger-quiet"
+                      size="icon-xs"
+                      className="conv-row-delete"
+                      aria-label={`Delete ${title}`}
+                      onClick={() => onDelete(conv.ID)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </Hint>
                 </li>
               )
             })}

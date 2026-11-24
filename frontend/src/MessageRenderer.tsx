@@ -1,8 +1,7 @@
 import { useMemo, useCallback, memo } from 'react'
 import { Streamdown } from 'streamdown'
 import { code } from '@streamdown/code'
-import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
-import { fileService, isWailsDevStub } from './services/wailsService'
+import { browserService, fileService } from './services/wailsService'
 import { looksLikeLocalFilesystemPath } from './utils/localPath'
 import { HtmlPreviewBlock } from './components/HtmlPreviewBlock'
 import { MermaidBlock } from './components/diagram/MermaidBlock'
@@ -28,9 +27,9 @@ function MessageRenderer({
 }: MessageRendererProps) {
   const handleLinkClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, href?: string) => {
-      if (href && !isWailsDevStub) {
+      if (href && browserService.canOpenExternally) {
         e.preventDefault()
-        BrowserOpenURL(href)
+        browserService.openURL(href)
       }
     },
     [],
@@ -62,11 +61,7 @@ function MessageRenderer({
               title="Open file or folder"
               onClick={e => {
                 e.preventDefault()
-                void fileService.openPath(inline).then(err => {
-                  if (err) {
-                    console.warn('[OpenPath]', err)
-                  }
-                })
+                void fileService.open(inline)
               }}
               {...props}
             >

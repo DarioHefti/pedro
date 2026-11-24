@@ -1,5 +1,20 @@
-import { mermaid } from '@streamdown/mermaid'
 import type { Theme } from '../../ThemeContext'
+
+type MermaidPlugin = (typeof import('@streamdown/mermaid'))['mermaid']
+
+let mermaidPlugin: Promise<MermaidPlugin> | null = null
+
+/** Mermaid is large, so it loads with the first diagram instead of at startup. */
+function loadMermaid(): Promise<MermaidPlugin> {
+  mermaidPlugin ??= import('@streamdown/mermaid').then(
+    m => m.mermaid,
+    err => {
+      mermaidPlugin = null // let a later diagram retry
+      throw err
+    },
+  )
+  return mermaidPlugin
+}
 
 /** A rendered Mermaid diagram: its SVG markup, the element id inside it, and its natural size. */
 export interface RenderedDiagram {
@@ -142,7 +157,7 @@ async function fontReady(fontFamily: string): Promise<void> {
 
 async function render(code: string, theme: Theme, { forExport = false }: RenderOptions): Promise<RenderedDiagram> {
   const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim()
-  await fontReady(fontFamily || 'sans-serif')
+  const [mermaid] = await Promise.all([loadMermaid(), fontReady(fontFamily || 'sans-serif')])
   const instance = mermaid.getMermaid({
     theme: 'base',
     themeVariables: themeVariables(theme === 'dark', fontFamily || 'sans-serif'),

@@ -1,50 +1,27 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { conversationService, eventService, messageService, type Conversation } from '../services/wailsService'
 import {
-  conversationService,
-  messageService,
-  eventService,
-  uiConversationService,
-  isWailsDevStub,
-  type Conversation,
-} from '../services/wailsService'
+  appendUserMessage,
+  buildLLMContent,
+  buildThreadState,
+  emptyThread,
+  imageDataURLs,
+  isErrorResponse,
+  truncateThread,
+  type Attachment,
+  type ThreadState,
+  type ToolCall,
+} from './messageModel'
+
 export type { Message } from '../services/wailsService'
-import type { Message } from '../services/wailsService'
-import { isAudioFilePath, isRasterImageFilePath } from '../utils/fileKinds'
+export type { Attachment, FileAttachment, ThreadState, ToolCall } from './messageModel'
 
-// ---------------------------------------------------------------------------
-// Public types shared with components
-// ---------------------------------------------------------------------------
-
-export interface ToolCall {
-  name: string
-  argsJSON: string
-  id?: string
-}
-
-export interface Attachment {
-  type: 'text' | 'image' | 'file-ref' | 'folder-ref'
-  /** For file-ref / folder-ref: full OS path. For text: file content. For image: data URL. */
+/** What an in-flight reply has streamed so far. */
+export interface StreamBuffer {
   content: string
-  name: string
+  toolCalls: ToolCall[]
 }
-
-export interface FileAttachment {
-  name: string
-  path: string
-  /** "file" | "folder" — drives LLM hints (read_file vs show_file_tree). */
-  type: string
-}
-
-function isDebugMockMermaid(): boolean {
-  return typeof window !== 'undefined' && localStorage.getItem('debug_mock_mermaid') === 'true'
-}
-
-type StreamBuffer = { content: string; toolCalls: ToolCall[] }
-
-// ---------------------------------------------------------------------------
-// Hook options
-// ---------------------------------------------------------------------------
 
 interface UseMessagingOptions {
   /** Resolved current conversation ID (null when no conversation is open). */
@@ -55,41 +32,42 @@ interface UseMessagingOptions {
   onConversationCreated: (id: number) => void
   /** Refresh the conversation list (e.g. to reflect the auto-generated title). */
   refreshConversations: () => Promise<void>
+  /** Called after deleting messages emptied a conversation and it was deleted. */
+  onConversationDeleted: (id: number) => void
   /** Surface an error message to the user. */
   showError: (message: string) => void
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
+/**
+ * Owns the open thread and every in-flight reply. Replies stream per conversation, so a reply
+ * keeps arriving in the background while another chat is open; only one runs at a time.
+ */
 export function useMessaging({
   currentConvID,
   createConversation,
   onConversationCreated,
   refreshConversations,
+  onConversationDeleted,
   showError,
 }: UseMessagingOptions) {
-  const [messages, setMessages] = useState<Message[]>([])
-  /** Per-conversation streaming buffers while the LLM is responding (supports background streams). */
-  const [streamingStreams, setStreamingStreams] = useState<Map<number, StreamBuffer>>(() => new Map())
-  const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
-  const [messageFiles, setMessageFiles] = useState<Map<number, FileAttachment[]>>(new Map())
-  const [messageToolCalls, setMessageToolCalls] = useState<Map<number, ToolCall[]>>(new Map())
+  const [thread, setThread] = useState<ThreadState>(emptyThread)
+  /** Per-conversation stream buffers while the LLM is responding. */
+  const [streams, setStreams] = useState<Map<number, StreamBuffer>>(() => new Map())
 
-  const streamingBuffersRef = useRef<Map<number, StreamBuffer>>(new Map())
-  /** Conv IDs that are allowed to accept stream events (set in prepareStreaming, cleared in cleanup). */
-  const activeStreamConvIdsRef = useRef<Set<number>>(new Set())
-  /** Which conversation the in-flight AbortMessage targets (single backend run). */
-  const activeStreamingConvRef = useRef<number | null>(null)
+  const buffersRef = useRef<Map<number, StreamBuffer>>(new Map())
+  /** Conversations whose stream events are accepted (between openStream and closeStream). */
+  const acceptingRef = useRef<Set<number>>(new Set())
+  /** The conversation the backend's single AbortMessage targets. */
+  const abortTargetRef = useRef<number | null>(null)
   const currentConvIDRef = useRef(currentConvID)
-  /** Monotonic counter — incremented every time a new load/clear/send-completion writes messages.
-   *  Async DB fetches compare their captured value to skip stale responses. */
-  const msgSeqRef = useRef(0)
+  /** Bumped by every write of the thread; async loads drop results that arrive after a newer write. */
+  const threadSeqRef = useRef(0)
 
   useEffect(() => {
     currentConvIDRef.current = currentConvID
   }, [currentConvID])
+
+  const isCurrent = (convID: number) => currentConvIDRef.current === convID
 
   /**
    * Shows buffered stream updates at most once per animation frame. Chunks can arrive far
@@ -103,7 +81,7 @@ export function useMessaging({
     streamFrameRef.current = requestAnimationFrame(() => {
       streamFrameRef.current = 0
       flushSync(() => {
-        setStreamingStreams(new Map(streamingBuffersRef.current))
+        setStreams(new Map(buffersRef.current))
       })
     })
   }, [])
@@ -111,501 +89,181 @@ export function useMessaging({
 
   // Route stream events by conversation id so switching chats does not mix streams.
   useEffect(() => {
-    if (isWailsDevStub) return
-
-    const onChunk = (...args: unknown[]) => {
-      if (args.length < 2) return
-      const convId = Number(args[0])
-      const chunk = String(args[1])
-      if (Number.isNaN(convId) || !activeStreamConvIdsRef.current.has(convId)) return
-      const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
-      buf.content += chunk
-      streamingBuffersRef.current.set(convId, buf)
+    const appendToStream = (convId: number, update: (buf: StreamBuffer) => StreamBuffer) => {
+      if (Number.isNaN(convId) || !acceptingRef.current.has(convId)) return
+      buffersRef.current.set(convId, update(buffersRef.current.get(convId) ?? { content: '', toolCalls: [] }))
       scheduleStreamRender()
     }
 
-    const onTool = (...args: unknown[]) => {
-      if (args.length < 3) return
-      const convId = Number(args[0])
-      const name = String(args[1])
-      const argsJSON = String(args[2])
-      if (Number.isNaN(convId) || !activeStreamConvIdsRef.current.has(convId)) return
-      const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
-      buf.toolCalls = [...buf.toolCalls, { name, argsJSON }]
-      streamingBuffersRef.current.set(convId, buf)
-      scheduleStreamRender()
-    }
-
-    const onConversationUpdated = (...args: unknown[]) => {
-      if (args.length < 1) return
-      const convId = Number(args[0])
-      if (Number.isNaN(convId)) return
-      void refreshConversations()
-    }
-
-    const unsubChunk = eventService.on('stream_chunk', onChunk)
-    const unsubTool = eventService.on('tool_call', onTool)
-    const unsubConversationUpdated = eventService.on(
-      'conversation_updated',
-      onConversationUpdated,
-    )
-    return () => {
-      unsubChunk?.()
-      unsubTool?.()
-      unsubConversationUpdated?.()
-    }
+    const unsubscribers = [
+      eventService.on('stream_chunk', (...args: unknown[]) => {
+        if (args.length < 2) return
+        const chunk = String(args[1])
+        appendToStream(Number(args[0]), buf => ({ ...buf, content: buf.content + chunk }))
+      }),
+      eventService.on('tool_call', (...args: unknown[]) => {
+        if (args.length < 3) return
+        const call = { name: String(args[1]), argsJSON: String(args[2]) }
+        appendToStream(Number(args[0]), buf => ({ ...buf, toolCalls: [...buf.toolCalls, call] }))
+      }),
+      eventService.on('conversation_updated', (...args: unknown[]) => {
+        if (args.length < 1 || Number.isNaN(Number(args[0]))) return
+        void refreshConversations()
+      }),
+    ]
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe())
   }, [refreshConversations, scheduleStreamRender])
 
-  const streamingForCurrent =
-    currentConvID != null && streamingStreams.has(currentConvID)
-      ? streamingStreams.get(currentConvID)!
-      : { content: '', toolCalls: [] }
+  const showThread = useCallback((next: ThreadState) => {
+    ++threadSeqRef.current
+    setThread(next)
+  }, [])
 
-  /** True when the visible thread is showing an in-flight assistant stream. */
-  const loading = currentConvID != null && streamingStreams.has(currentConvID)
-  /** True when any conversation has an active stream (blocks new sends until done or stop). */
-  const streamingBusy = streamingStreams.size > 0
-
-  const toolCalls = streamingForCurrent.toolCalls
-  const streamingContent = streamingForCurrent.content
-
-  /** Load messages for a conversation and rebuild attachment maps from DB data.
-   *  Clears state synchronously (before the async DB fetch) so React batches
-   *  the clear with the caller's setCurrentConvID — no render frame shows
-   *  the old conversation's messages under the new conversation's ID. */
+  /** Loads a conversation's stored thread. Clears synchronously first, so a frame never shows
+   *  the previous conversation's messages under the new conversation's ID. */
   const load = useCallback(async (convID: number): Promise<void> => {
-    const seq = ++msgSeqRef.current
-    setMessages([])
-    setMessageImages(new Map())
-    setMessageFiles(new Map())
-    setMessageToolCalls(new Map())
-
-    if (isDebugMockMermaid() && msgSeqRef.current === 1) {
-      const mockMessages = [
-        { Role: 'user', Content: 'Show me a mermaid diagram' } as Message,
-        { Role: 'assistant', Content: `Here is a diagram showing the flow:
-
-\`\`\`mermaid
-flowchart TD
-    A[User Signs Up] --> B[Derive KEK from Password]
-    B --> C[Generate random DEK]
-    C --> D[Wrap DEK with KEK]
-    D --> E[Generate Recovery Key]
-    E --> F[Wrap DEK with Recovery Key]
-    F --> G[Encrypt Data with DEK]
-    G --> H[Upload to Server]
-    
-    style A fill:#bbf
-    style H fill:#fbb
-\`\`\`
-
-This shows the key derivation and encryption flow.` } as Message,
-      ]
-      setMessages(mockMessages)
-      return
-    }
-
-    const msgs = await conversationService.getMessages(convID)
-    if (msgSeqRef.current !== seq) return
-    const list = msgs ?? []
-    setMessages(list)
-    const { images, files } = buildAttachmentMaps(list)
-    const toolCallsByMessageIndex = buildToolCallMaps(list)
-    setMessageImages(images)
-    setMessageFiles(files)
-    setMessageToolCalls(toolCallsByMessageIndex)
+    const seq = ++threadSeqRef.current
+    setThread(emptyThread())
+    const stored = await conversationService.getMessages(convID)
+    if (threadSeqRef.current !== seq) return
+    setThread(buildThreadState(stored))
   }, [])
 
-  /** Clear all message state (e.g. when "New Chat" is selected). */
-  const clear = useCallback((): void => {
-    ++msgSeqRef.current
-    setMessages([])
-    setMessageImages(new Map())
-    setMessageFiles(new Map())
-    setMessageToolCalls(new Map())
+  /** Clears the thread (e.g. when "New Chat" is selected). */
+  const clear = useCallback((): void => showThread(emptyThread()), [showThread])
+
+  const openStream = useCallback((convID: number) => {
+    abortTargetRef.current = convID
+    acceptingRef.current.add(convID)
+    buffersRef.current.set(convID, { content: '', toolCalls: [] })
+    setStreams(new Map(buffersRef.current))
   }, [])
 
-  function prepareStreaming(convId: number) {
-    activeStreamingConvRef.current = convId
-    activeStreamConvIdsRef.current.add(convId)
-    streamingBuffersRef.current.set(convId, { content: '', toolCalls: [] })
-    setStreamingStreams(new Map(streamingBuffersRef.current))
-  }
+  const closeStream = useCallback((convID: number) => {
+    acceptingRef.current.delete(convID)
+    buffersRef.current.delete(convID)
+    if (abortTargetRef.current === convID) abortTargetRef.current = null
+    setStreams(new Map(buffersRef.current))
+  }, [])
 
-  function cleanupStreaming(convId: number) {
-    activeStreamConvIdsRef.current.delete(convId)
-    streamingBuffersRef.current.delete(convId)
-    if (activeStreamingConvRef.current === convId) {
-      activeStreamingConvRef.current = null
-    }
-    setStreamingStreams(new Map(streamingBuffersRef.current))
-  }
+  /**
+   * Runs one backend turn that streams a reply into `convID`, then shows the stored thread.
+   * The stream row goes away in the same render that shows the stored reply, so the reply
+   * neither flickers nor shows twice.
+   */
+  const runTurn = useCallback(
+    async (convID: number, request: () => Promise<string>): Promise<void> => {
+      openStream(convID)
+      let closed = false
+      try {
+        const response = await request()
+        const stored = await conversationService.getMessages(convID)
+        if (isCurrent(convID)) {
+          closeStream(convID)
+          closed = true
+          showThread(buildThreadState(stored))
+        }
+        await refreshConversations()
+        if (isErrorResponse(response)) showError(response)
+      } finally {
+        if (!closed) closeStream(convID)
+      }
+    },
+    [openStream, closeStream, showThread, refreshConversations, showError],
+  )
 
   /** Sends a user message, creating the conversation first when needed. */
   const send = useCallback(
-    async (content: string, attachments: Attachment[] | undefined): Promise<void> => {
+    async (content: string, attachments: Attachment[] = []): Promise<void> => {
       let convID = currentConvID
-
-      if (!convID || uiConversationService.isVirtualConversation(convID)) {
+      if (!convID) {
         const conv = await createConversation()
         convID = conv.ID
         onConversationCreated(convID)
-        // Keep local ref in sync immediately so optimistic updates can run in this tick.
+        // Keep the ref in sync now so the optimistic update below targets the new chat.
         currentConvIDRef.current = convID
         await refreshConversations()
       }
 
-      const imageDataURLs = (attachments ?? [])
-        .filter(a => a.type === 'image')
-        .map(a => a.content)
+      if (isCurrent(convID)) {
+        // flushSync renders the person's message at once (Wayland batches it away otherwise).
+        flushSync(() => setThread(prev => appendUserMessage(prev, content, attachments)))
+      }
 
-      const fileAttachments: FileAttachment[] = (attachments ?? [])
-        .filter(a => a.type === 'file-ref' || a.type === 'folder-ref')
-        .map(a => ({
-          name: a.name,
-          path: a.content,
-          type: a.type === 'folder-ref' ? 'folder' : 'file',
-        }))
-
+      const id = convID
+      const images = imageDataURLs(attachments)
       const llmContent = buildLLMContent(content, attachments)
-      const attachmentsJSON = JSON.stringify(attachments ?? [])
-
-      const optimisticIdx = messages.length
-      if (currentConvIDRef.current === convID) {
-        // Use flushSync to ensure user message renders immediately on Wayland
-        flushSync(() => {
-          setMessages(prev => [...prev, { Role: 'user', Content: content } as Message])
-          if (imageDataURLs.length > 0) {
-            setMessageImages(m => new Map(m).set(optimisticIdx, imageDataURLs))
-          }
-          if (fileAttachments.length > 0) {
-            setMessageFiles(m => new Map(m).set(optimisticIdx, fileAttachments))
-          }
-        })
-      }
-
-      prepareStreaming(convID)
-      let streamClosed = false
-
-      try {
-        const response =
-          imageDataURLs.length > 0
-            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, attachmentsJSON)
-            : await messageService.send(convID, llmContent, attachmentsJSON)
-
-        const dbMsgs = (await conversationService.getMessages(convID)) ?? []
-
-        if (currentConvIDRef.current === convID) {
-          // Close the stream before committing final DB messages to avoid a one-frame duplicate
-          // assistant bubble (stream row + finalized assistant row).
-          cleanupStreaming(convID)
-          streamClosed = true
-          ++msgSeqRef.current
-          const { images, files } = buildAttachmentMaps(dbMsgs)
-          const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-          setMessageImages(images)
-          setMessageFiles(files)
-          setMessageToolCalls(toolCallsByMessageIndex)
-          setMessages(dbMsgs)
-        }
-
-        await refreshConversations()
-
-        if (response?.startsWith('Error:')) {
-          showError(response)
-        }
-      } finally {
-        if (!streamClosed) cleanupStreaming(convID)
-      }
+      const attachmentsJSON = JSON.stringify(attachments)
+      await runTurn(id, () =>
+        images.length > 0
+          ? messageService.sendWithImages(id, llmContent, images, attachmentsJSON)
+          : messageService.send(id, llmContent, attachmentsJSON),
+      )
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentConvID, messages, createConversation, onConversationCreated, refreshConversations, showError],
+    [currentConvID, createConversation, onConversationCreated, refreshConversations, runTurn],
   )
 
+  /** Replaces the reply at `index` (and drops anything after it) with a new one. */
   const regenerate = useCallback(
     async (index: number): Promise<void> => {
       const convID = currentConvID
-      if (!convID || uiConversationService.isVirtualConversation(convID)) return
-      const msg = messages[index]
-      if (msg?.Role !== 'assistant') return
-
-      if (currentConvIDRef.current === convID) {
-        setMessages(prev => prev.filter((_, i) => i !== index))
-        setMessageImages(prev => reindexMapWithoutIndex(prev, index))
-        setMessageFiles(prev => reindexMapWithoutIndex(prev, index))
-        setMessageToolCalls(prev => reindexMapWithoutIndex(prev, index))
-      }
-
-      prepareStreaming(convID)
-      let streamClosed = false
-
-      try {
-        const response = await messageService.regenerate(convID, index)
-        if (currentConvIDRef.current === convID) {
-          if (response?.startsWith('Error:')) {
-            showError(response)
-            ++msgSeqRef.current
-            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
-            const { images, files } = buildAttachmentMaps(dbMsgs)
-            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-            setMessageImages(images)
-            setMessageFiles(files)
-            setMessageToolCalls(toolCallsByMessageIndex)
-            setMessages(dbMsgs)
-          } else {
-            // Same handoff fix as send(): remove stream row first, then render final DB row.
-            cleanupStreaming(convID)
-            streamClosed = true
-            ++msgSeqRef.current
-            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
-            const { images, files } = buildAttachmentMaps(dbMsgs)
-            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-            setMessageImages(images)
-            setMessageFiles(files)
-            setMessageToolCalls(toolCallsByMessageIndex)
-            setMessages(dbMsgs)
-          }
-        } else if (!response?.startsWith('Error:')) {
-          await refreshConversations()
-        }
-      } finally {
-        if (!streamClosed) cleanupStreaming(convID)
-      }
+      if (!convID || thread.messages[index]?.Role !== 'assistant') return
+      setThread(prev => truncateThread(prev, index - 1))
+      await runTurn(convID, () => messageService.regenerate(convID, index))
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, currentConvID, showError, refreshConversations],
+    [currentConvID, thread.messages, runTurn],
   )
 
-  const stop = useCallback(() => {
-    messageService.abort()
-    const convId = activeStreamingConvRef.current
-    if (convId != null) {
-      cleanupStreaming(convId)
-    }
-  }, [])
-
+  /** Answers the question at `index` again, dropping everything after it. */
   const resendMessage = useCallback(
     async (index: number): Promise<void> => {
       const convID = currentConvID
-      if (!convID || uiConversationService.isVirtualConversation(convID)) return
-      const msg = messages[index]
-      if (msg?.Role !== 'user') return
-
-      if (currentConvIDRef.current === convID) {
-        setMessages(prev => prev.slice(0, index + 1))
-        setMessageImages(prev => truncateMapAfterIndex(prev, index))
-        setMessageFiles(prev => truncateMapAfterIndex(prev, index))
-        setMessageToolCalls(prev => truncateMapAfterIndex(prev, index))
-      }
-
-      prepareStreaming(convID)
-      let streamClosed = false
-
-      try {
-        const response = await messageService.resend(convID, index)
-        if (currentConvIDRef.current === convID) {
-          if (response?.startsWith('Error:')) {
-            showError(response)
-            ++msgSeqRef.current
-            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
-            const { images, files } = buildAttachmentMaps(dbMsgs)
-            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-            setMessageImages(images)
-            setMessageFiles(files)
-            setMessageToolCalls(toolCallsByMessageIndex)
-            setMessages(dbMsgs)
-          } else {
-            cleanupStreaming(convID)
-            streamClosed = true
-            ++msgSeqRef.current
-            const dbMsgs = (await conversationService.getMessages(convID)) ?? []
-            const { images, files } = buildAttachmentMaps(dbMsgs)
-            const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-            setMessageImages(images)
-            setMessageFiles(files)
-            setMessageToolCalls(toolCallsByMessageIndex)
-            setMessages(dbMsgs)
-          }
-        } else if (!response?.startsWith('Error:')) {
-          await refreshConversations()
-        }
-      } finally {
-        if (!streamClosed) cleanupStreaming(convID)
-      }
-
-      await refreshConversations()
+      if (!convID || thread.messages[index]?.Role !== 'user') return
+      setThread(prev => truncateThread(prev, index))
+      await runTurn(convID, () => messageService.resend(convID, index))
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, currentConvID, showError, refreshConversations],
+    [currentConvID, thread.messages, runTurn],
   )
 
+  const stop = useCallback(() => {
+    void messageService.abort()
+    const convID = abortTargetRef.current
+    if (convID != null) closeStream(convID)
+  }, [closeStream])
+
+  /** Deletes the question at `index` and everything after it; an emptied chat is deleted too. */
   const deleteMessage = useCallback(
     async (index: number): Promise<void> => {
       const convID = currentConvID
-      if (!convID || uiConversationService.isVirtualConversation(convID)) return
-      const msg = messages[index]
-      if (msg?.Role !== 'user') return
+      if (!convID || thread.messages[index]?.Role !== 'user') return
 
-      const messagesToDelete = messages.slice(index).filter(m => m.Role === 'user' || m.Role === 'assistant' || m.Role === 'tool')
-
-      for (let i = messagesToDelete.length - 1; i >= 0; i--) {
-        await messageService.deleteMessage(convID, index + i)
-      }
-
-      const dbMsgs = await conversationService.getMessages(convID)
-
-      if (dbMsgs.length === 0) {
+      await messageService.deleteFrom(convID, index)
+      const stored = await conversationService.getMessages(convID)
+      if (isCurrent(convID)) showThread(buildThreadState(stored))
+      if (stored.length === 0) {
         await conversationService.delete(convID)
-        if (currentConvIDRef.current === convID) {
-          ++msgSeqRef.current
-          setMessages([])
-          setMessageImages(new Map())
-          setMessageFiles(new Map())
-          setMessageToolCalls(new Map())
-        }
-      } else if (currentConvIDRef.current === convID) {
-        ++msgSeqRef.current
-        const { images, files } = buildAttachmentMaps(dbMsgs)
-        const toolCallsByMessageIndex = buildToolCallMaps(dbMsgs)
-        setMessageImages(images)
-        setMessageFiles(files)
-        setMessageToolCalls(toolCallsByMessageIndex)
-        setMessages(dbMsgs)
+        // The next message must start a new chat, not write into the deleted one.
+        onConversationDeleted(convID)
       }
-
       await refreshConversations()
     },
-    [currentConvID, messages, refreshConversations],
+    [currentConvID, thread.messages, showThread, refreshConversations, onConversationDeleted],
   )
 
+  const stream = currentConvID != null ? (streams.get(currentConvID) ?? null) : null
+
   return {
-    messages,
-    loading,
-    streamingBusy,
-    toolCalls,
-    messageToolCalls,
-    streamingContent,
-    messageImages,
-    messageFiles,
+    thread,
+    /** The reply streaming into the open chat, or null. */
+    stream,
+    /** True while any conversation has a reply in flight (sending waits until it ends). */
+    streamingBusy: streams.size > 0,
     load,
     clear,
     send,
     regenerate,
+    resendMessage,
     stop,
     deleteMessage,
-    resendMessage,
   }
-}
-
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
-function buildLLMContent(content: string, attachments?: Attachment[]): string {
-  const fileText = (attachments ?? [])
-    .filter(a => a.type !== 'image')
-    .map(a => {
-      if (a.type === 'file-ref') {
-        if (isRasterImageFilePath(a.content)) {
-          return (
-            `[File: ${a.name}]\n` +
-            `[Path: ${a.content}]\n` +
-            `[Raster image attached by path; the image pixels are also included in this message for vision.]`
-          )
-        }
-        if (isAudioFilePath(a.content)) {
-          return (
-            `[File: ${a.name}]\n` +
-            `[Path: ${a.content}]\n` +
-            `[Audio file attached by path. Use the transcribe_audio tool with this path to transcribe it.]`
-          )
-        }
-        return (
-          `[File: ${a.name}]\n` +
-          `[Path: ${a.content}]\n` +
-          `[Large file attached by path. For PDF or Office files use parse_document; for source code, logs, and plain text use read_file — always paginate with offset/limit.]`
-        )
-      }
-      if (a.type === 'folder-ref') {
-        return (
-          `[Folder: ${a.name}]\n` +
-          `[Path: ${a.content}]\n` +
-          `[Folder attached by path. Use the show_file_tree tool with this path (depth as needed; paginate with offset if truncated), then parse_document for PDF/Office files or read_file for text/code files.]`
-        )
-      }
-      return `[File: ${a.name}]\n${a.content}`
-    })
-    .join('\n\n')
-
-  return fileText ? `${content}\n\n${fileText}` : content
-}
-
-/** Parse each message's persisted Attachments JSON into index-keyed maps
- *  that Chat.tsx already consumes (messageImages, messageFiles). */
-function buildAttachmentMaps(msgs: Message[]): {
-  images: Map<number, string[]>
-  files: Map<number, FileAttachment[]>
-} {
-  const images = new Map<number, string[]>()
-  const files = new Map<number, FileAttachment[]>()
-
-  msgs.forEach((msg, idx) => {
-    if (!msg.Attachments) return
-    try {
-      const atts = JSON.parse(msg.Attachments) as Attachment[]
-      const imgUrls = atts.filter(a => a.type === 'image').map(a => a.content)
-      if (imgUrls.length > 0) images.set(idx, imgUrls)
-
-      const fileAtts: FileAttachment[] = atts
-        .filter(a => a.type === 'file-ref' || a.type === 'folder-ref')
-        .map(a => ({
-          name: a.name,
-          path: a.content,
-          type: a.type === 'folder-ref' ? 'folder' : 'file',
-        }))
-      if (fileAtts.length > 0) files.set(idx, fileAtts)
-    } catch {
-      /* ignore malformed JSON */
-    }
-  })
-
-  return { images, files }
-}
-
-/** Parse each message's persisted ToolCalls JSON into an index-keyed map. */
-function buildToolCallMaps(msgs: Message[]): Map<number, ToolCall[]> {
-  const out = new Map<number, ToolCall[]>()
-
-  msgs.forEach((msg, idx) => {
-    const persisted = msg.ToolCalls
-    if (!persisted) return
-    try {
-      const parsed = JSON.parse(persisted) as ToolCall[]
-      const clean = parsed.filter(
-        tc => tc && typeof tc.name === 'string' && typeof tc.argsJSON === 'string',
-      )
-      if (clean.length > 0) out.set(idx, clean)
-    } catch {
-      /* ignore malformed JSON */
-    }
-  })
-
-  return out
-}
-
-function truncateMapAfterIndex<T>(input: Map<number, T>, maxIndex: number): Map<number, T> {
-  const out = new Map<number, T>()
-  for (const [idx, value] of input.entries()) {
-    if (idx <= maxIndex) out.set(idx, value)
-  }
-  return out
-}
-
-function reindexMapWithoutIndex<T>(input: Map<number, T>, removedIndex: number): Map<number, T> {
-  const out = new Map<number, T>()
-  for (const [idx, value] of input.entries()) {
-    if (idx === removedIndex) continue
-    out.set(idx > removedIndex ? idx - 1 : idx, value)
-  }
-  return out
 }

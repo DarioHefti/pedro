@@ -1,6 +1,6 @@
 import { ChevronRight, Wrench } from 'lucide-react'
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
-import type { ToolCall } from '../../hooks/useMessaging'
+import type { ToolCall } from '../../hooks/messageModel'
 import { summarizeTools, toolCallArgDisplay, toolMeta } from './toolCalls'
 
 interface ToolCallGroupProps {

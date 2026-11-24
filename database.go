@@ -39,14 +39,26 @@ func appDataDir() string {
 	return filepath.Join(configDir, "Pedro")
 }
 
+// NewDatabase opens (and creates or migrates) Pedro's database in the app data directory.
 func NewDatabase() (*Database, error) {
 	dbDir := appDataDir()
-	os.MkdirAll(dbDir, 0755)
-	dbPath := filepath.Join(dbDir, "pedro.db")
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		return nil, err
+	}
+	return OpenDatabase(filepath.Join(dbDir, "pedro.db"))
+}
 
-	// _foreign_keys=on  – enforce FK constraints (including ON DELETE CASCADE).
-	// _busy_timeout=5000 – wait up to 5 s before returning SQLITE_BUSY.
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_foreign_keys=on&_busy_timeout=5000")
+// sqliteDSN builds the connection string for modernc.org/sqlite, which only applies
+// connection settings given as _pragma parameters (mattn-style _foreign_keys is ignored):
+//   - foreign_keys(1): enforce FK constraints, including ON DELETE CASCADE for messages.
+//   - busy_timeout(5000): wait up to 5 s before returning SQLITE_BUSY.
+func sqliteDSN(path string) string {
+	return "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+}
+
+// OpenDatabase opens (and creates or migrates) the database file at path.
+func OpenDatabase(path string) (*Database, error) {
+	db, err := sql.Open("sqlite", sqliteDSN(path))
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +114,7 @@ func (d *Database) init() error {
 			messages TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_llm_history_created ON llm_history(created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id);
 		CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
 		CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 	`)
@@ -187,6 +200,19 @@ func (d *Database) migrate() {
 		d.db.Exec("CREATE INDEX IF NOT EXISTS idx_llm_history_conv ON llm_history(conversation_id)")
 	}
 	d.sanitizeExistingConversationTitles()
+	d.removeOrphanedRows()
+}
+
+// removeOrphanedRows deletes rows whose conversation no longer exists. Foreign keys were
+// never enabled before (the DSN used a parameter the driver ignores), so deleting a chat left
+// its messages behind instead of cascading.
+func (d *Database) removeOrphanedRows() {
+	if _, err := d.db.Exec("DELETE FROM messages WHERE conversation_id NOT IN (SELECT id FROM conversations)"); err != nil {
+		fmt.Println("Warning: failed to remove orphaned messages:", err.Error())
+	}
+	if _, err := d.db.Exec("DELETE FROM llm_history WHERE conversation_id != 0 AND conversation_id NOT IN (SELECT id FROM conversations)"); err != nil {
+		fmt.Println("Warning: failed to remove orphaned request details:", err.Error())
+	}
 }
 
 // columnExists checks whether a column exists in the given table.
@@ -377,7 +403,10 @@ func (d *Database) GetConversations() ([]Conversation, error) {
 }
 
 func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", conversationID)
+	// Ordered by id (insertion order): created_at has one-second resolution, so the messages of
+	// one reply, stored within the same second, would otherwise tie. The message indexes the
+	// frontend and DeleteMessagesFrom use are positions in this order.
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE conversation_id = ? ORDER BY id ASC", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +424,7 @@ func (d *Database) GetMessages(conversationID int64) ([]Message, error) {
 }
 
 func (d *Database) SearchMessages(query string) (map[int64][]Message, error) {
-	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE content LIKE ? ORDER BY created_at ASC", "%"+query+"%")
+	rows, err := d.db.Query("SELECT id, conversation_id, role, content, attachments, tool_calls, tool_call_id, created_at FROM messages WHERE content LIKE ? ORDER BY id ASC", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -462,31 +491,33 @@ func sanitizeConversationTitle(raw string) string {
 	return strings.TrimSpace(title)
 }
 
-func (d *Database) DeleteMessage(conversationID int64, messageIndex int) error {
-	// Use QueryRow so the connection is released as soon as Scan returns,
-	// before we call Exec. With MaxOpenConns(1) this avoids a deadlock where
-	// an open *Rows holds the only connection while Exec waits for it.
-	var id int64
+// DeleteMessagesFrom deletes the message at position fromIndex of a conversation and every
+// later one. A position past the end deletes nothing.
+func (d *Database) DeleteMessagesFrom(conversationID int64, fromIndex int) error {
+	if fromIndex < 0 {
+		return fmt.Errorf("invalid message index %d", fromIndex)
+	}
+	// QueryRow releases the connection once Scan returns, before Exec needs it: with
+	// MaxOpenConns(1) an open *Rows would deadlock the Exec.
+	var firstID int64
 	err := d.db.QueryRow(
 		"SELECT id FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?",
-		conversationID, messageIndex,
-	).Scan(&id)
+		conversationID, fromIndex,
+	).Scan(&firstID)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("message not found at index %d", messageIndex)
+		return nil
 	}
 	if err != nil {
 		return err
 	}
-
-	_, err = d.db.Exec("DELETE FROM messages WHERE id = ?", id)
+	_, err = d.db.Exec("DELETE FROM messages WHERE conversation_id = ? AND id >= ?", conversationID, firstID)
 	return err
 }
 
 func (d *Database) DeleteConversation(id int64) error {
 	// Clean up llm_history entries for this conversation.
 	d.db.Exec("DELETE FROM llm_history WHERE conversation_id = ?", id)
-	// ON DELETE CASCADE (enforced via _foreign_keys=on DSN option) handles
-	// the child messages rows automatically.
+	// ON DELETE CASCADE (foreign keys are enabled in sqliteDSN) deletes the messages.
 	_, err := d.db.Exec("DELETE FROM conversations WHERE id = ?", id)
 	return err
 }
