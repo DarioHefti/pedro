@@ -1,33 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo } from 'react'
 import type { KeyboardEvent } from 'react'
+import { Inbox, Search, X } from 'lucide-react'
+import { Input, InputClear, InputGroup } from '@ui-sdk/react/input'
+import { Listbox, ListboxGroup, ListboxGroupLabel, ListboxItem } from '@ui-sdk/react/listbox'
 import { formatFull, formatTime, groupByDay } from './payload'
 import type { RequestRow } from './types'
 
-/* -------------------------------------------------------------------------- */
-/*  Single row                                                                 */
-/* -------------------------------------------------------------------------- */
-
-interface RequestListItemProps {
-  row: RequestRow
-  active: boolean
-  onSelect: () => void
-}
-
-function RequestListItem({ row, active, onSelect }: RequestListItemProps) {
+function RequestListItem({ row }: { row: RequestRow }) {
   const { entry, payload } = row
   const title = entry.ConversationTitle || 'Untitled conversation'
   const hasReply = payload.response.length > 0
 
   return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={active}
-      data-row-id={entry.ID}
-      className={`rd-row${active ? ' rd-row--active' : ''}`}
-      onClick={onSelect}
-      title={title}
-    >
+    <ListboxItem value={String(entry.ID)} label={title} className="rd-row">
       <span className="rd-row-head">
         <span className="rd-row-title">{title}</span>
         <time className="rd-row-time" title={formatFull(row.createdAt)}>
@@ -36,62 +21,18 @@ function RequestListItem({ row, active, onSelect }: RequestListItemProps) {
       </span>
       <span className="rd-row-preview">{row.preview}</span>
       <span className="rd-row-meta">
-        {entry.Model && <span className="rd-row-model">{entry.Model}</span>}
+        {entry.Model ? <span className="rd-row-model">{entry.Model}</span> : null}
         <span className="rd-row-stat">{payload.messages.length} msgs</span>
-        {payload.tools.length > 0 && <span className="rd-row-stat">{payload.tools.length} tools</span>}
+        {payload.tools.length > 0 ? <span className="rd-row-stat">{payload.tools.length} tools</span> : null}
         <span
-          className={`rd-status-dot${hasReply ? ' rd-status-dot--ok' : ''}`}
+          className="status-dot rd-row-dot"
+          data-tone={hasReply ? 'success' : undefined}
           title={hasReply ? 'Reply captured' : 'No reply captured'}
         />
       </span>
-    </button>
+    </ListboxItem>
   )
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Search field                                                               */
-/* -------------------------------------------------------------------------- */
-
-interface SearchFieldProps {
-  value: string
-  onChange: (v: string) => void
-  shown: number
-  total: number
-  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void
-}
-
-function SearchField({ value, onChange, shown, total, onKeyDown }: SearchFieldProps) {
-  return (
-    <div className="rd-search">
-      <svg className="rd-search-icon" viewBox="0 0 20 20" aria-hidden="true">
-        <circle cx="9" cy="9" r="5.5" />
-        <path d="M13.2 13.2 17 17" />
-      </svg>
-      <input
-        type="text"
-        className="rd-search-input"
-        placeholder="Search requests…"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        spellCheck={false}
-        aria-label="Search requests by model, role or content"
-      />
-      {value ? (
-        <button type="button" className="rd-search-clear" onClick={() => onChange('')} aria-label="Clear search">
-          ✕
-        </button>
-      ) : null}
-      <span className="rd-search-count" aria-live="polite">
-        {value ? `${shown}/${total}` : total}
-      </span>
-    </div>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
-/*  List pane                                                                  */
-/* -------------------------------------------------------------------------- */
 
 interface RequestListProps {
   rows: RequestRow[]
@@ -103,79 +44,72 @@ interface RequestListProps {
   onSelect: (id: number) => void
 }
 
-export function RequestList({
-  rows,
-  totalCount,
-  loading,
-  filter,
-  onFilterChange,
-  selectedId,
-  onSelect,
-}: RequestListProps) {
-  const listRef = useRef<HTMLDivElement>(null)
+export function RequestList({ rows, totalCount, loading, filter, onFilterChange, selectedId, onSelect }: RequestListProps) {
   const groups = useMemo(() => groupByDay(rows), [rows])
 
-  // Keep the active row visible (e.g. when auto-selected or navigated by keyboard).
-  useEffect(() => {
-    if (selectedId == null) return
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-row-id="${selectedId}"]`)
-    el?.scrollIntoView({ block: 'nearest' })
-  }, [selectedId])
-
-  function handleKeyDown(e: KeyboardEvent<HTMLElement>) {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
-    if (rows.length === 0) return
+  function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || rows.length === 0) return
     e.preventDefault()
     const idx = rows.findIndex(r => r.entry.ID === selectedId)
-    const next = e.key === 'ArrowDown'
-      ? Math.min(rows.length - 1, idx + 1)
-      : Math.max(0, idx - 1)
+    const next = e.key === 'ArrowDown' ? Math.min(rows.length - 1, idx + 1) : Math.max(0, idx - 1)
     onSelect(rows[next].entry.ID)
   }
 
   return (
     <aside className="rd-list-pane">
-      <SearchField
-        value={filter}
-        onChange={onFilterChange}
-        shown={rows.length}
-        total={totalCount}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="rd-search">
+        <InputGroup>
+          <Search className="input-leading-icon" aria-hidden="true" />
+          <Input
+            value={filter}
+            onValueChange={v => onFilterChange(v)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search requests"
+            aria-label="Search requests by model, role or content"
+            spellCheck={false}
+          />
+          <InputClear aria-label="Clear search">
+            <X aria-hidden="true" />
+          </InputClear>
+        </InputGroup>
+        <span className="rd-search-count" aria-live="polite">
+          {filter ? `${rows.length}/${totalCount}` : totalCount}
+        </span>
+      </div>
 
-      <div
-        ref={listRef}
-        className="rd-list"
-        role="listbox"
-        aria-label="Captured requests"
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
-      >
-        {loading ? (
-          Array.from({ length: 6 }).map((_, i) => <div key={i} className="rd-skeleton" />)
-        ) : rows.length === 0 ? (
-          <div className="rd-list-empty">
-            {totalCount === 0 ? 'No requests recorded yet' : `No matches for “${filter.trim()}”`}
-          </div>
-        ) : (
-          groups.map(group => (
-            <section key={group.key} className="rd-group">
-              <h3 className="rd-group-label">
+      {loading ? (
+        <div className="rd-list">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={`skeleton-${i}`} className="skeleton rd-skeleton" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="empty-hint rd-list-empty">
+          {totalCount === 0 ? <Inbox aria-hidden="true" /> : <Search aria-hidden="true" />}
+          <span>{totalCount === 0 ? 'No requests recorded yet' : `No matches for “${filter.trim()}”`}</span>
+        </div>
+      ) : (
+        <Listbox<string>
+          className="rd-list"
+          aria-label="Captured requests"
+          value={selectedId != null ? String(selectedId) : null}
+          onValueChange={v => {
+            if (v != null) onSelect(Number(v))
+          }}
+        >
+          {groups.map(group => (
+            <ListboxGroup key={group.key} className="rd-group">
+              <ListboxGroupLabel className="rd-group-label">
                 <span>{group.label}</span>
                 <span className="rd-group-count">{group.rows.length}</span>
-              </h3>
+              </ListboxGroupLabel>
               {group.rows.map(r => (
-                <RequestListItem
-                  key={r.entry.ID}
-                  row={r}
-                  active={r.entry.ID === selectedId}
-                  onSelect={() => onSelect(r.entry.ID)}
-                />
+                <RequestListItem key={r.entry.ID} row={r} />
               ))}
-            </section>
-          ))
-        )}
-      </div>
+            </ListboxGroup>
+          ))}
+        </Listbox>
+      )}
     </aside>
   )
 }

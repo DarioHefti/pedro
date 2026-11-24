@@ -1,0 +1,995 @@
+/* ============================================================ chat frame */
+.app-main {
+  container: main / inline-size;
+}
+
+.chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--gradient-canvas), hsl(var(--background));
+}
+
+.chat-header {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: var(--header-height);
+  padding: 0 0.8rem 0 1.3rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+}
+
+.chat:not([data-empty]) .chat-header {
+  border-bottom-color: hsl(var(--border) / 0.7);
+  background: hsl(var(--glass) / var(--glass-alpha));
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+
+.chat-header-nav {
+  display: flex;
+  gap: 0.15rem;
+  margin-inline-start: -0.55rem;
+  animation: fade-in var(--dur) var(--ease-out);
+}
+
+.chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 1.02rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+
+.chat[data-empty] .chat-title {
+  color: hsl(var(--muted-foreground));
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chat-stats {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.9rem;
+  padding: 0 0.65rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--surface) / 0.7);
+  transition: border-color var(--dur-fast), color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.stat-chip:hover {
+  border-color: hsl(var(--brand) / 0.4);
+  color: hsl(var(--foreground));
+  background: hsl(var(--surface));
+}
+
+.stat-chip > svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: hsl(var(--brand));
+}
+
+.stat-chip-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+}
+
+@container main (max-width: 620px) {
+  .stat-chip-label {
+    display: none;
+  }
+}
+
+/* ============================================================ thread */
+.thread {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: none;
+  /* Gutters on both sides keep the messages centred over the composer. */
+  scrollbar-gutter: stable both-edges;
+}
+
+.thread-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  width: 100%;
+  padding: 1.6rem var(--thread-gutter) 2rem;
+}
+
+.msg {
+  display: flex;
+  min-width: 0;
+  animation: rise-in var(--dur-slow) var(--ease-out) both;
+}
+
+.msg-assistant[data-continuation] {
+  margin-top: -0.75rem;
+}
+
+/* user */
+.msg-user {
+  justify-content: flex-end;
+}
+
+.msg-user-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  max-width: 85%;
+  min-width: 0;
+}
+
+.bubble {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--font-size-message);
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+}
+
+.bubble-user {
+  padding: 0.7rem 1rem;
+  border: 1px solid hsl(var(--brand) / 0.12);
+  border-radius: var(--radius-md);
+  background: hsl(var(--user-bubble));
+  box-shadow: var(--shadow-xs);
+}
+
+/* assistant: full width, aligned with the thread's left edge */
+.msg-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.bubble-assistant {
+  width: 100%;
+  padding: 0.8rem 1.1rem 0.85rem 1.25rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.bubble-assistant::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--gradient-rail);
+  opacity: 0.85;
+}
+
+.bubble-assistant[data-streaming]::before {
+  background: linear-gradient(180deg, hsl(var(--brand-glow)), hsl(var(--brand)), hsl(var(--brand-glow)));
+  background-size: 100% 200%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* hover actions */
+.msg-actions {
+  display: flex;
+  gap: 0.1rem;
+  margin-top: -0.2rem;
+  opacity: 0;
+  translate: 0 -2px;
+  transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out);
+}
+
+.msg:is(:hover, :focus-within) .msg-actions,
+.msg-actions:has([data-copied]) {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.msg-actions [data-btn] {
+  color: hsl(var(--faint-foreground));
+}
+
+.msg-actions [data-btn]:hover {
+  color: hsl(var(--foreground));
+}
+
+.msg-actions .msg-action-danger:hover {
+  color: hsl(var(--destructive-text));
+  background: hsl(var(--destructive) / 0.1);
+}
+
+/* attachments in history */
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.msg-image-thumb {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--muted));
+  cursor: zoom-in;
+  box-shadow: var(--shadow-xs);
+  transition: scale var(--dur) var(--ease-spring), box-shadow var(--dur);
+}
+
+.msg-image-thumb:hover {
+  scale: 1.02;
+  box-shadow: var(--shadow-md);
+}
+
+.msg-image-thumb img {
+  display: block;
+  max-width: 13rem;
+  max-height: 11rem;
+  object-fit: cover;
+}
+
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 18rem;
+  height: 2rem;
+  padding: 0 0.75rem 0 0.6rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: hsl(var(--foreground));
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.file-chip:hover {
+  border-color: hsl(var(--brand) / 0.4);
+  background: hsl(var(--accent));
+}
+
+.file-chip > svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+  color: hsl(var(--brand));
+}
+
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* thinking */
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.92rem;
+  font-weight: 550;
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-xs);
+}
+
+.thinking-label {
+  color: transparent;
+  background: linear-gradient(90deg, hsl(var(--muted-foreground)) 0%, hsl(var(--brand-glow)) 50%, hsl(var(--muted-foreground)) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer 2.2s linear infinite;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 0.22rem;
+}
+
+.thinking-dots span {
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: var(--radius-full);
+  background: hsl(var(--brand));
+  animation: dot-bounce 1.2s var(--ease-in-out) infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ============================================================ tool calls */
+.tool-group {
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--surface) / 0.65);
+  overflow: hidden;
+}
+
+.tool-group[data-live] {
+  border-color: hsl(var(--brand) / 0.3);
+  box-shadow: 0 0 0 3px hsl(var(--brand) / 0.06);
+}
+
+.tool-group-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.75rem;
+  text-align: start;
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+
+.tool-group-trigger:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent) / 0.6);
+}
+
+.tool-group-trigger:focus-visible {
+  outline-offset: -2px;
+}
+
+.tool-group-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: var(--radius-sm);
+  color: hsl(var(--role-tool));
+  background: hsl(var(--role-tool) / 0.12);
+}
+
+.tool-group-icon > svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.tool-group[data-live] .tool-group-icon {
+  color: hsl(var(--brand));
+  background: hsl(var(--brand) / 0.12);
+}
+
+.tool-group-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.tool-group-chips {
+  display: flex;
+  flex: 1;
+  gap: 0.3rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tool-chip {
+  flex-shrink: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+}
+
+.tool-chip-more {
+  color: hsl(var(--faint-foreground));
+}
+
+.tool-group-chevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  color: hsl(var(--faint-foreground));
+  transition: rotate var(--dur) var(--ease-out);
+}
+
+.tool-group-trigger[data-open] .tool-group-chevron {
+  rotate: 90deg;
+}
+
+.tool-steps {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.25rem 0.75rem 0.7rem 0.75rem;
+  list-style: none;
+}
+
+.tool-steps::before {
+  content: '';
+  position: absolute;
+  inset-block: 0.55rem 1.1rem;
+  inset-inline-start: calc(0.75rem + 0.77rem);
+  width: 1px;
+  background: hsl(var(--border-strong));
+}
+
+.tool-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2rem;
+  font-size: 0.88rem;
+  animation: fade-in var(--dur) var(--ease-out) both;
+}
+
+.tool-step-icon {
+  position: relative;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-full);
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--surface));
+}
+
+.tool-step-icon > svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.tool-step[data-running] .tool-step-icon {
+  border-color: hsl(var(--brand) / 0.4);
+  color: hsl(var(--brand));
+}
+
+.tool-step-name {
+  flex-shrink: 0;
+  font-weight: 550;
+  color: hsl(var(--foreground));
+}
+
+.tool-step-arg {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ============================================================ empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.2rem;
+  min-height: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.6rem 3rem;
+}
+
+.empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  text-align: center;
+  animation: rise-in var(--dur-slow) var(--ease-out) both;
+}
+
+.empty-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4.6rem;
+  height: 4.6rem;
+  margin-bottom: 0.6rem;
+  isolation: isolate;
+  animation: float 6s var(--ease-in-out) infinite;
+}
+
+.empty-avatar > img {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: hsl(var(--surface));
+  box-shadow: 0 0 0 3px hsl(var(--surface)), var(--shadow-glow);
+}
+
+.empty-avatar-halo {
+  position: absolute;
+  inset: -0.7rem;
+  z-index: -1;
+  border-radius: var(--radius-full);
+  background: var(--gradient-avatar);
+  filter: blur(14px);
+  opacity: 0.55;
+  animation: halo 5s linear infinite;
+}
+
+.empty-title {
+  max-width: 32rem;
+  font-size: clamp(1.5rem, 4.2cqi, 2.05rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: hsl(var(--foreground));
+  text-wrap: balance;
+}
+
+.empty-subtitle {
+  font-size: 1rem;
+  color: hsl(var(--muted-foreground));
+  text-wrap: balance;
+}
+
+.suggestions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  width: 100%;
+  list-style: none;
+}
+
+.suggestions > li {
+  animation: rise-in var(--dur-slow) var(--ease-out) both;
+}
+
+.suggestions > li:nth-child(1) { animation-delay: 60ms; }
+.suggestions > li:nth-child(2) { animation-delay: 110ms; }
+.suggestions > li:nth-child(3) { animation-delay: 160ms; }
+.suggestions > li:nth-child(4) { animation-delay: 210ms; }
+
+.suggestion {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  text-align: start;
+  background: hsl(var(--surface) / 0.8);
+  box-shadow: var(--shadow-xs);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    translate var(--dur) var(--ease-out),
+    background-color var(--dur-fast);
+}
+
+.suggestion:hover {
+  border-color: hsl(var(--brand) / 0.35);
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-md);
+  translate: 0 -2px;
+}
+
+.suggestion:active {
+  translate: 0 0;
+}
+
+.suggestion-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: var(--radius-md);
+  color: hsl(var(--brand));
+  background: hsl(var(--brand) / 0.1);
+  transition: background var(--dur), color var(--dur);
+}
+
+.suggestion:hover .suggestion-icon {
+  color: hsl(var(--primary-foreground));
+  background: var(--gradient-brand);
+}
+
+.suggestion-icon > svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.suggestion-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.suggestion-title {
+  font-size: 0.97rem;
+  font-weight: 620;
+  color: hsl(var(--foreground));
+}
+
+.suggestion-hint {
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+@container main (max-width: 560px) {
+  .suggestions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============================================================ composer */
+.composer-dock {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  /* The composer runs 0.2rem past the messages on each side. */
+  padding: 0 calc(var(--thread-gutter) + var(--scrollbar-size) - 0.2rem) 1.1rem;
+  flex-shrink: 0;
+}
+
+.composer-dock::before {
+  content: '';
+  position: absolute;
+  inset: -1.8rem 0 100%;
+  background: linear-gradient(180deg, hsl(var(--background) / 0), hsl(var(--background)));
+  pointer-events: none;
+}
+
+.chat[data-empty] .composer-dock::before {
+  display: none;
+}
+
+/* One row: a round attach button outside the input on the left, then the input, with
+   send inside it on the right. The input's frame is .composer-box, laid over its columns. */
+.composer {
+  --composer-min-h: 3.25rem;
+  --composer-pad: 0.55rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'lead chips chips'
+    'lead input trail';
+  align-items: end;
+}
+
+.composer-box {
+  grid-row: 1 / -1;
+  grid-column: 2 / -1;
+  align-self: stretch;
+  border: 1px solid hsl(var(--border-strong));
+  border-radius: var(--radius-md);
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-composer);
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+.composer:has(.composer-input:focus) .composer-box {
+  border-color: hsl(var(--brand) / 0.5);
+  box-shadow: var(--shadow-composer), 0 0 0 4px hsl(var(--ring) / 0.14);
+}
+
+.composer[data-busy] .composer-box {
+  border-color: hsl(var(--brand) / 0.35);
+}
+
+.composer-attachments {
+  grid-area: chips;
+}
+
+/* The attach button matches the input's one-line height and stays level with its last line. */
+.composer-lead {
+  grid-area: lead;
+  padding-inline-end: 0.55rem;
+}
+
+.composer .composer-attach[data-size] {
+  --btn-h: var(--composer-min-h);
+  box-shadow: var(--shadow-composer);
+}
+
+.composer-trail [data-btn] {
+  --btn-radius: var(--radius-sm);
+}
+
+.composer-trail {
+  grid-area: trail;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: var(--composer-pad);
+}
+
+[data-slot='textarea'].composer-input {
+  grid-area: input;
+  min-height: var(--composer-min-h);
+  max-height: var(--composer-max-height);
+  /* One line fills exactly the minimum height, so the box matches the attach button. */
+  padding: calc((var(--composer-min-h) - 1lh) / 2) 0.6rem calc((var(--composer-min-h) - 1lh) / 2) 1.15rem;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--font-size-message);
+  line-height: 1.55;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+
+[data-slot='textarea'].composer-input:focus {
+  box-shadow: none;
+}
+
+[data-slot='textarea'].composer-input::placeholder {
+  color: hsl(var(--faint-foreground));
+}
+
+.composer-send:not([data-disabled]) {
+  background: var(--gradient-brand);
+  box-shadow: var(--shadow-glow);
+}
+
+.composer-send:not([data-disabled]):hover {
+  filter: brightness(1.08);
+}
+
+.composer-stop {
+  border-color: hsl(var(--brand) / 0.4);
+  color: hsl(var(--brand));
+  animation: pulse-soft 1.8s var(--ease-in-out) infinite;
+}
+
+.composer-stop > svg {
+  fill: currentColor;
+}
+
+/* pending attachments */
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.75rem 0.8rem 0;
+}
+
+.attachment {
+  position: relative;
+  display: flex;
+  max-width: 15rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-sm);
+  background: hsl(var(--surface-2));
+  animation: pop-in var(--dur) var(--ease-spring) both;
+}
+
+.attachment-thumb {
+  display: block;
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.attachment-body {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.45rem 2rem 0.45rem 0.5rem;
+  border-radius: inherit;
+  text-align: start;
+}
+
+.attachment-body:not(:disabled):hover {
+  background: hsl(var(--accent));
+}
+
+.attachment-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: var(--radius-md);
+  color: hsl(var(--brand));
+  background: hsl(var(--brand) / 0.1);
+}
+
+.attachment[data-kind='folder-ref'] .attachment-icon {
+  color: hsl(var(--role-tool));
+  background: hsl(var(--role-tool) / 0.12);
+}
+
+.attachment-icon > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.attachment-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.attachment-name {
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+
+.attachment-kind {
+  font-size: 0.76rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.attachment-remove {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: var(--radius-sm);
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--surface));
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transition: opacity var(--dur-fast), color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.attachment[data-kind='image'] .attachment-remove {
+  top: -0.4rem;
+  right: -0.4rem;
+}
+
+.attachment:is(:hover, :focus-within) .attachment-remove {
+  opacity: 1;
+}
+
+.attachment-remove:hover {
+  color: hsl(var(--destructive-foreground));
+  background: hsl(var(--destructive));
+}
+
+.attachment-remove > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* jump to latest */
+.jump-latest {
+  position: absolute;
+  top: -3rem;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.1rem;
+  padding: 0 0.9rem 0 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.86rem;
+  font-weight: 560;
+  color: hsl(var(--foreground));
+  background: hsl(var(--popover));
+  box-shadow: var(--shadow-md);
+  translate: -50% 0;
+  animation: rise-in var(--dur) var(--ease-out);
+  transition: background-color var(--dur-fast), border-color var(--dur-fast);
+}
+
+.jump-latest:hover {
+  border-color: hsl(var(--brand) / 0.4);
+  background: hsl(var(--accent));
+}
+
+.jump-latest > svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: hsl(var(--brand));
+}
+
+/* drop overlay */
+.drop-overlay {
+  position: absolute;
+  inset: 0.75rem;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 2px dashed hsl(var(--brand) / 0.55);
+  border-radius: var(--radius-md);
+  background: hsl(var(--background) / 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: none;
+  animation: fade-in var(--dur) var(--ease-out);
+}
+
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  animation: pop-in var(--dur-slow) var(--ease-spring);
+}
+
+.drop-card strong {
+  font-size: 1.15rem;
+  font-weight: 680;
+}
+
+.drop-card > span:last-child {
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.drop-icon {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius-md);
+  color: hsl(var(--primary-foreground));
+  background: var(--gradient-brand);
+  box-shadow: var(--shadow-glow);
+}
+
+.drop-icon > svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}

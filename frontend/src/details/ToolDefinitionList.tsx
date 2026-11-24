@@ -1,3 +1,5 @@
+import { ChevronRight } from 'lucide-react'
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
 import { CopyButton } from './DetailsButton'
 import { summarizeToolParams } from './payload'
 import type { OAIToolDef } from './types'
@@ -10,10 +12,10 @@ function ToolDefinitionCard({ tool }: { tool: OAIToolDef }) {
   const requiredCount = params.filter(p => p.required).length
 
   return (
-    <details className="rd-tooldef">
-      <summary className="rd-tooldef-head">
+    <Collapsible className="rd-tooldef">
+      <CollapsibleTrigger className="rd-tooldef-head">
         <span className="rd-tooldef-title">
-          <span className="rd-chevron" aria-hidden="true">▸</span>
+          <ChevronRight className="rd-chevron" aria-hidden="true" />
           <span className="rd-tooldef-name">{name}</span>
           <span className="rd-tooldef-count">
             {params.length} param{params.length === 1 ? '' : 's'}
@@ -21,9 +23,9 @@ function ToolDefinitionCard({ tool }: { tool: OAIToolDef }) {
           </span>
         </span>
         {desc && <span className="rd-tooldef-desc">{desc}</span>}
-      </summary>
+      </CollapsibleTrigger>
 
-      <div className="rd-tooldef-body">
+      <CollapsiblePanel className="rd-tooldef-body">
         {params.length > 0 ? (
           <div className="rd-table-wrap">
             <table className="rd-table">
@@ -53,21 +55,21 @@ function ToolDefinitionCard({ tool }: { tool: OAIToolDef }) {
         )}
 
         {schema && (
-          <details className="rd-schema">
-            <summary className="rd-schema-head">
-              <span className="rd-chevron" aria-hidden="true">▸</span>
+          <Collapsible className="rd-schema">
+            <CollapsibleTrigger className="rd-schema-head">
+              <ChevronRight className="rd-chevron" aria-hidden="true" />
               JSON schema
-            </summary>
-            <div className="rd-schema-body">
+            </CollapsibleTrigger>
+            <CollapsiblePanel className="rd-schema-body">
               <div className="rd-schema-actions">
                 <CopyButton text={() => JSON.stringify(schema, null, 2)} label="Copy schema" />
               </div>
               <pre className="rd-code">{JSON.stringify(schema, null, 2)}</pre>
-            </div>
-          </details>
+            </CollapsiblePanel>
+          </Collapsible>
         )}
-      </div>
-    </details>
+      </CollapsiblePanel>
+    </Collapsible>
   )
 }
 

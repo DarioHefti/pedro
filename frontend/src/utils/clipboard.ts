@@ -1,17 +1,22 @@
-/** Matches markdown that is exactly one image and nothing else: ![alt](src "optional title"). */
-const SINGLE_IMAGE_MARKDOWN = /^\s*!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+"[^"]*")?\s*\)\s*$/
+import { isLocalImageSrc } from './fileKinds'
 
-/** The image URL when `markdown` consists of a single image, otherwise null. */
-export function singleImageSrc(markdown: string): string | null {
-  return SINGLE_IMAGE_MARKDOWN.exec(markdown)?.[1] ?? null
+/** Markdown images: ![alt](src "optional title"). */
+const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/g
+
+/** The first image in `markdown` that Pedro can copy (generated, pasted or inline), otherwise null. */
+export function copyableImageSrc(markdown: string): string | null {
+  for (const match of markdown.matchAll(MARKDOWN_IMAGE)) {
+    if (isLocalImageSrc(match[1])) return match[1]
+  }
+  return null
 }
 
 /**
- * Copies a message: the image itself when the message is just one image,
- * otherwise the text. Resolves to what was copied.
+ * Copies a message: its image when it shows one (even alongside text), otherwise the text.
+ * Resolves to what was copied.
  */
 export function copyMessageContent(content: string): Promise<'image' | 'text'> {
-  const src = singleImageSrc(content)
+  const src = copyableImageSrc(content)
   if (src) {
     return copyImageToClipboard(src).then(() => 'image' as const)
   }
@@ -24,11 +29,19 @@ export function copyMessageContent(content: string): Promise<'image' | 'text'> {
  * synchronously with a pending blob, which keeps WebKit's user-gesture
  * requirement satisfied while the image loads.
  */
-export async function copyImageToClipboard(src: string): Promise<void> {
+export function copyImageToClipboard(src: string): Promise<void> {
+  return copyPngToClipboard(fetchAsPng(src))
+}
+
+/**
+ * Copies a PNG that may still be in the making. Like copyImageToClipboard, it must be
+ * called straight from a click handler so the clipboard write starts inside the gesture.
+ */
+export async function copyPngToClipboard(png: Promise<Blob>): Promise<void> {
   if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+    png.catch(() => undefined)
     throw new Error('copying images is not supported here')
   }
-  const png = fetchAsPng(src)
   try {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
   } catch (err) {

@@ -91,6 +91,24 @@ export function useMessaging({
     currentConvIDRef.current = currentConvID
   }, [currentConvID])
 
+  /**
+   * Shows buffered stream updates at most once per animation frame. Chunks can arrive far
+   * faster than the thread re-renders; rendering each one queued up work that froze the UI
+   * when a long reply ended. flushSync keeps the Wayland fix: the frame's update reaches the
+   * DOM at once instead of being batched away.
+   */
+  const streamFrameRef = useRef(0)
+  const scheduleStreamRender = useCallback(() => {
+    if (streamFrameRef.current) return
+    streamFrameRef.current = requestAnimationFrame(() => {
+      streamFrameRef.current = 0
+      flushSync(() => {
+        setStreamingStreams(new Map(streamingBuffersRef.current))
+      })
+    })
+  }, [])
+  useEffect(() => () => cancelAnimationFrame(streamFrameRef.current), [])
+
   // Route stream events by conversation id so switching chats does not mix streams.
   useEffect(() => {
     if (isWailsDevStub) return
@@ -103,10 +121,7 @@ export function useMessaging({
       const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
       buf.content += chunk
       streamingBuffersRef.current.set(convId, buf)
-      // Use flushSync to force immediate DOM update - fixes Wayland event batching issues
-      flushSync(() => {
-        setStreamingStreams(new Map(streamingBuffersRef.current))
-      })
+      scheduleStreamRender()
     }
 
     const onTool = (...args: unknown[]) => {
@@ -118,10 +133,7 @@ export function useMessaging({
       const buf = streamingBuffersRef.current.get(convId) ?? { content: '', toolCalls: [] }
       buf.toolCalls = [...buf.toolCalls, { name, argsJSON }]
       streamingBuffersRef.current.set(convId, buf)
-      // Use flushSync to force immediate DOM update - fixes Wayland event batching issues
-      flushSync(() => {
-        setStreamingStreams(new Map(streamingBuffersRef.current))
-      })
+      scheduleStreamRender()
     }
 
     const onConversationUpdated = (...args: unknown[]) => {
@@ -142,7 +154,7 @@ export function useMessaging({
       unsubTool?.()
       unsubConversationUpdated?.()
     }
-  }, [refreshConversations])
+  }, [refreshConversations, scheduleStreamRender])
 
   const streamingForCurrent =
     currentConvID != null && streamingStreams.has(currentConvID)
@@ -229,15 +241,9 @@ This shows the key derivation and encryption flow.` } as Message,
     setStreamingStreams(new Map(streamingBuffersRef.current))
   }
 
-  /**
-   * Send a user message. selectedPersonaId is the chosen persona row id (backend loads prompt from DB).
-   */
+  /** Sends a user message, creating the conversation first when needed. */
   const send = useCallback(
-    async (
-      content: string,
-      attachments: Attachment[] | undefined,
-      selectedPersonaId: string,
-    ): Promise<void> => {
+    async (content: string, attachments: Attachment[] | undefined): Promise<void> => {
       let convID = currentConvID
 
       if (!convID || uiConversationService.isVirtualConversation(convID)) {
@@ -284,8 +290,8 @@ This shows the key derivation and encryption flow.` } as Message,
       try {
         const response =
           imageDataURLs.length > 0
-            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, selectedPersonaId, attachmentsJSON)
-            : await messageService.send(convID, llmContent, selectedPersonaId, attachmentsJSON)
+            ? await messageService.sendWithImages(convID, llmContent, imageDataURLs, attachmentsJSON)
+            : await messageService.send(convID, llmContent, attachmentsJSON)
 
         const dbMsgs = (await conversationService.getMessages(convID)) ?? []
 
@@ -317,7 +323,7 @@ This shows the key derivation and encryption flow.` } as Message,
   )
 
   const regenerate = useCallback(
-    async (index: number, selectedPersonaId: string): Promise<void> => {
+    async (index: number): Promise<void> => {
       const convID = currentConvID
       if (!convID || uiConversationService.isVirtualConversation(convID)) return
       const msg = messages[index]
@@ -334,7 +340,7 @@ This shows the key derivation and encryption flow.` } as Message,
       let streamClosed = false
 
       try {
-        const response = await messageService.regenerate(convID, index, selectedPersonaId)
+        const response = await messageService.regenerate(convID, index)
         if (currentConvIDRef.current === convID) {
           if (response?.startsWith('Error:')) {
             showError(response)
@@ -379,7 +385,7 @@ This shows the key derivation and encryption flow.` } as Message,
   }, [])
 
   const resendMessage = useCallback(
-    async (index: number, selectedPersonaId: string): Promise<void> => {
+    async (index: number): Promise<void> => {
       const convID = currentConvID
       if (!convID || uiConversationService.isVirtualConversation(convID)) return
       const msg = messages[index]
@@ -396,7 +402,7 @@ This shows the key derivation and encryption flow.` } as Message,
       let streamClosed = false
 
       try {
-        const response = await messageService.resend(convID, index, selectedPersonaId)
+        const response = await messageService.resend(convID, index)
         if (currentConvIDRef.current === convID) {
           if (response?.startsWith('Error:')) {
             showError(response)

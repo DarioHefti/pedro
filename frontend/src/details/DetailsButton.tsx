@@ -1,59 +1,36 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { useCopyToClipboard } from './useCopyToClipboard'
-
-type Variant = 'ghost' | 'outline' | 'danger' | 'danger-solid' | 'icon'
-type Size = 'sm' | 'md'
-
-interface DetailsButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant
-  size?: Size
-  children: ReactNode
-}
-
-/** Shared button for the Request Details modal; all looks live in `.rd-btn` variants. */
-export function DetailsButton({
-  variant = 'ghost',
-  size = 'sm',
-  className,
-  children,
-  type = 'button',
-  ...rest
-}: DetailsButtonProps) {
-  const classes = ['rd-btn', `rd-btn--${variant}`, `rd-btn--${size}`, className].filter(Boolean).join(' ')
-  return (
-    <button type={type} className={classes} {...rest}>
-      {children}
-    </button>
-  )
-}
+import { Check, Copy } from 'lucide-react'
+import { Button, type ButtonSize, type ButtonVariant } from '../ui/button'
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
 
 interface CopyButtonProps {
   text: string | (() => string)
   label?: string
   copiedLabel?: string
-  variant?: Variant
-  size?: Size
+  variant?: ButtonVariant
+  size?: ButtonSize
   title?: string
 }
 
+/** Copies text and confirms with a check for a moment. */
 export function CopyButton({
   text,
   label = 'Copy',
   copiedLabel = 'Copied',
   variant = 'ghost',
-  size = 'sm',
+  size = 'xs',
   title,
 }: CopyButtonProps) {
   const { copied, copy } = useCopyToClipboard()
   return (
-    <DetailsButton
+    <Button
       variant={variant}
       size={size}
       title={title}
-      data-state={copied ? 'copied' : undefined}
+      data-copied={copied ? '' : undefined}
       onClick={() => void copy(typeof text === 'function' ? text() : text)}
     >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       {copied ? copiedLabel : label}
-    </DetailsButton>
+    </Button>
   )
 }

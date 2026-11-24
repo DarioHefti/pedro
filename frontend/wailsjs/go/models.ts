@@ -101,26 +101,6 @@ export namespace main {
 	        this.CreatedAt = source["CreatedAt"];
 	    }
 	}
-	export class Persona {
-	    ID: number;
-	    Name: string;
-	    Prompt: string;
-	    CreatedAt: string;
-	    UpdatedAt: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Persona(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ID = source["ID"];
-	        this.Name = source["Name"];
-	        this.Prompt = source["Prompt"];
-	        this.CreatedAt = source["CreatedAt"];
-	        this.UpdatedAt = source["UpdatedAt"];
-	    }
-	}
 	export class RequestCounts {
 	    perChat: number;
 	    perChatTokens: number;
@@ -135,6 +115,20 @@ export namespace main {
 	        this.perChat = source["perChat"];
 	        this.perChatTokens = source["perChatTokens"];
 	        this.global = source["global"];
+	    }
+	}
+	export class SaveResult {
+	    path: string;
+	    cancelled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.cancelled = source["cancelled"];
 	    }
 	}
 	export class UpdateInfo {

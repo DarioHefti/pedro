@@ -1,0 +1,300 @@
+/* ============================================================ markdown */
+.message-container {
+  min-width: 0;
+}
+
+.markdown-content {
+  width: 100%;
+  font-size: var(--font-size-message);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+  color: hsl(var(--foreground));
+}
+
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+
+.markdown-content :is(p, [data-streamdown='paragraph']) {
+  margin: 0.55em 0;
+}
+
+.markdown-content :is(h1, h2, h3, h4, h5, h6, [data-streamdown^='heading-']) {
+  margin: 1.1em 0 0.45em;
+  font-weight: 680;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: hsl(var(--foreground));
+}
+
+.markdown-content :is(h1, [data-streamdown='heading-1']) {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 1.45em;
+}
+
+.markdown-content :is(h2, [data-streamdown='heading-2']) { font-size: 1.25em; }
+.markdown-content :is(h3, [data-streamdown='heading-3']) { font-size: 1.1em; }
+.markdown-content :is(h4, h5, h6, [data-streamdown='heading-4'], [data-streamdown='heading-5'], [data-streamdown='heading-6']) {
+  font-size: 1em;
+}
+
+.markdown-content :is(ul, ol, [data-streamdown='ordered-list'], [data-streamdown='unordered-list']) {
+  margin: 0.55em 0;
+  padding-inline-start: 1.45em;
+}
+
+.markdown-content :is(li, [data-streamdown='list-item']) {
+  margin: 0.25em 0;
+  padding-inline-start: 0.15em;
+}
+
+.markdown-content li::marker {
+  color: hsl(var(--brand) / 0.75);
+}
+
+.markdown-content :is(strong, [data-streamdown='strong']) {
+  font-weight: 650;
+  color: hsl(var(--foreground));
+}
+
+.markdown-content :is(a, [data-streamdown='link']) {
+  font-weight: 520;
+  color: hsl(var(--brand));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--brand) / 0.35);
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color var(--dur-fast);
+}
+
+.markdown-content :is(a, [data-streamdown='link']):hover {
+  text-decoration-color: hsl(var(--brand));
+}
+
+.markdown-content :is(blockquote, [data-streamdown='blockquote']) {
+  margin: 0.8em 0;
+  padding: 0.15em 0 0.15em 1em;
+  border-inline-start: 3px solid hsl(var(--brand) / 0.35);
+  font-style: normal;
+  color: hsl(var(--muted-foreground));
+}
+
+.markdown-content :is(hr, [data-streamdown='horizontal-rule']) {
+  margin: 1.3em 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.markdown-content [data-streamdown='inline-code'],
+.markdown-content :not(pre) > code {
+  padding: 0.12em 0.4em;
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--muted));
+}
+
+.markdown-content .local-path-link {
+  cursor: pointer;
+  color: hsl(var(--brand));
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.markdown-content .local-path-link:hover {
+  border-color: hsl(var(--brand) / 0.4);
+  background: hsl(var(--brand) / 0.1);
+}
+
+/* user bubbles sit on a tint; keep inline chips legible there */
+.bubble-user .markdown-content [data-streamdown='inline-code'] {
+  background: hsl(var(--surface) / 0.7);
+}
+
+/* tables */
+.markdown-content [data-streamdown='table-wrapper'] {
+  margin: 0.9em 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.markdown-content :is(table, [data-streamdown='table']) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+
+.markdown-content :is(th, td, [data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
+  padding: 0.5em 0.8em;
+  border-bottom: 1px solid hsl(var(--border));
+  text-align: start;
+}
+
+.markdown-content :is(th, [data-streamdown='table-header-cell']) {
+  font-weight: 620;
+  color: hsl(var(--foreground));
+  background: hsl(var(--surface-2));
+}
+
+.markdown-content :is(tr, [data-streamdown='table-row']):last-child > :is(td, [data-streamdown='table-cell']) {
+  border-bottom: 0;
+}
+
+/* code blocks — one card: a header bar (language on the left, copy and download inline on
+   the right) above the code. Streamdown's own padding, inner borders and floating action
+   pill are flattened into that layout; its rem sizing is rebased onto the message size. */
+.markdown-content [data-streamdown='code-block'] {
+  --code-header-h: 2.3rem;
+  position: relative;
+  gap: 0;
+  margin: 0.9em 0;
+  padding: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: hsl(var(--code));
+}
+
+.markdown-content [data-streamdown='code-block-header'] {
+  height: var(--code-header-h);
+  padding: 0 0.5rem 0 0.9rem;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: var(--font-mono);
+  font-size: var(--font-size-message-small);
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--code-header));
+}
+
+/* The actions' wrapper is pulled over the header by Streamdown; seat it in the header's
+   right end instead, at the header's height. */
+.markdown-content [data-streamdown='code-block'] > :has(> [data-streamdown='code-block-actions']) {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  height: var(--code-header-h);
+  margin: 0;
+  padding-inline-end: 0.4rem;
+}
+
+.markdown-content [data-streamdown='code-block-actions'] {
+  gap: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.markdown-content :is([data-streamdown='code-block-copy-button'], [data-streamdown='code-block-download-button']) {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: hsl(var(--muted-foreground));
+  transition: color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.markdown-content :is([data-streamdown='code-block-copy-button'], [data-streamdown='code-block-download-button']):hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent));
+}
+
+.markdown-content :is([data-streamdown='code-block-copy-button'], [data-streamdown='code-block-download-button']):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+.markdown-content [data-streamdown='code-block-body'] {
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 0;
+  font-size: calc(var(--font-size-message) * 0.9);
+  background: transparent;
+}
+
+.markdown-content [data-streamdown='code-block-body'] :is(pre, code) {
+  font-family: var(--font-mono);
+  font-size: inherit;
+  line-height: 1.6;
+  background: transparent;
+}
+
+/* streaming caret */
+.bubble[data-streaming] .markdown-content > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-inline-start: 0.15em;
+  border-radius: 2px;
+  vertical-align: -0.15em;
+  background: hsl(var(--brand));
+  animation: pulse-soft 0.9s var(--ease-in-out) infinite;
+}
+
+/* ============================================================ html / svg preview */
+.preview-block {
+  display: flex;
+  flex-direction: column;
+  margin: 0.9em 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: hsl(var(--code));
+}
+
+.preview-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.3rem;
+  padding: 0.3rem 0.45rem 0.3rem 0.9rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--code-header));
+}
+
+.preview-block-lang {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-message-small);
+  text-transform: lowercase;
+  color: hsl(var(--muted-foreground));
+  user-select: none;
+}
+
+.preview-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.preview-block-code {
+  max-height: 28rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size-message) * 0.9);
+  line-height: 1.6;
+  white-space: pre;
+  color: hsl(var(--foreground));
+}
+
+.preview-frame-wrap {
+  padding: 0.6rem;
+  background: hsl(var(--surface-2));
+}
+
+/* the preview renders untrusted page content, which expects a white canvas */
+.preview-frame-wrap iframe {
+  display: block;
+  width: 100%;
+  height: 26rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(0 0% 100%);
+}

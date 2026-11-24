@@ -1,0 +1,394 @@
+/* ============================================================ app shell */
+#root,
+.app {
+  height: 100dvh;
+}
+
+.app {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--background));
+}
+
+.app-shell {
+  display: flex;
+  height: 100%;
+}
+
+.app-sidebar {
+  min-width: 0;
+  overflow: hidden;
+  background: hsl(var(--sidebar));
+}
+
+.app-sidebar[data-collapsed] {
+  visibility: hidden;
+}
+
+.app-main {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The handle sits on the sidebar edge as a 1px seam with a wider grab area. */
+.app-shell > [data-slot='resizable-handle'] {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 1px;
+  width: 1px;
+  background: hsl(var(--border));
+}
+
+.app-shell > [data-slot='resizable-handle'][data-collapsed],
+.app-shell:has(> .app-sidebar[data-collapsed]) > [data-slot='resizable-handle'] {
+  background: transparent;
+}
+
+/* ============================================================ sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: hsl(var(--sidebar-foreground));
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: var(--header-height);
+  padding: 0 0.7rem 0 1rem;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.brand-avatar {
+  --avatar-size: 1.9rem;
+  isolation: isolate;
+}
+
+.brand-name {
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.15rem 0.75rem 0.6rem;
+  flex-shrink: 0;
+}
+
+.new-chat-btn > span:not(.kbd) {
+  flex: 1;
+  text-align: start;
+}
+
+.new-chat-btn .kbd {
+  border-color: hsl(var(--primary-foreground) / 0.22);
+  color: hsl(var(--primary-foreground) / 0.8);
+  background: hsl(var(--primary-foreground) / 0.12);
+  box-shadow: none;
+}
+
+.sidebar-search [data-slot='input'] {
+  height: 2.3rem;
+  border-color: transparent;
+  background: hsl(var(--sidebar-accent) / 0.75);
+  box-shadow: none;
+}
+
+.sidebar-search [data-slot='input']:hover {
+  border-color: hsl(var(--border-strong));
+}
+
+.sidebar-search [data-slot='input']:focus {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--surface));
+}
+
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem 0.1rem 1.05rem;
+  flex-shrink: 0;
+}
+
+.sidebar-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--faint-foreground));
+}
+
+.sidebar-section-count {
+  min-width: 1.3rem;
+  padding: 0.05rem 0.38rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--sidebar-accent));
+}
+
+.sidebar-empty {
+  flex: 1;
+  justify-content: center;
+}
+
+/* conversation list */
+.conv-list {
+  flex: 1;
+  min-height: 0;
+  padding: 0.15rem 0.5rem 0.8rem;
+  overflow-y: auto;
+  mask-image: linear-gradient(180deg, transparent 0, black 0.6rem, black calc(100% - 1.2rem), transparent 100%);
+}
+
+.conv-group + .conv-group {
+  margin-top: 0.85rem;
+}
+
+.conv-group-label {
+  padding: 0.35rem 0.6rem 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: hsl(var(--faint-foreground));
+}
+
+.conv-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+}
+
+.conv-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.conv-row:hover {
+  background: hsl(var(--sidebar-accent) / 0.85);
+}
+
+.conv-row[data-active] {
+  background: hsl(var(--sidebar-accent));
+  box-shadow: inset 0 0 0 1px hsl(var(--border-strong) / 0.5);
+}
+
+.conv-row[data-active]::before {
+  content: '';
+  position: absolute;
+  inset-block: 0.55rem;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-rail);
+  animation: pop-in var(--dur) var(--ease-spring);
+}
+
+.conv-row-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 2.3rem;
+  padding: 0 0.4rem 0 0.75rem;
+  border-radius: inherit;
+  text-align: start;
+  color: hsl(var(--sidebar-foreground) / 0.85);
+}
+
+.conv-row[data-active] .conv-row-main {
+  font-weight: 560;
+  color: hsl(var(--foreground));
+}
+
+.conv-row-main:focus-visible {
+  outline-offset: -2px;
+}
+
+.conv-row-title {
+  overflow: hidden;
+  font-size: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One-click delete at the end of the row, shown on hover or keyboard focus. */
+.conv-row-delete {
+  margin-inline-end: 0.3rem;
+  opacity: 0;
+  scale: 0.85;
+  transition: opacity var(--dur-fast) var(--ease-out), scale var(--dur-fast) var(--ease-out),
+    color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.conv-row:is(:hover, :focus-within) .conv-row-delete {
+  opacity: 1;
+  scale: 1;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem 0.75rem;
+  border-top: 1px solid hsl(var(--border) / 0.8);
+  flex-shrink: 0;
+}
+
+.sidebar-settings-btn {
+  color: hsl(var(--muted-foreground));
+}
+
+/* ============================================================ update card */
+.update-card {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(23rem, calc(100vw - 2rem));
+  padding: 0.95rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--popover));
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: rise-in var(--dur-slow) var(--ease-out);
+}
+
+.update-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--gradient-brand);
+}
+
+.update-card[data-state='error']::before {
+  background: hsl(var(--destructive));
+}
+
+.update-card[data-state='done']::before {
+  background: hsl(var(--success));
+}
+
+.update-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.update-card-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: var(--radius-md);
+  color: hsl(var(--brand));
+  background: hsl(var(--brand) / 0.1);
+}
+
+.update-card-icon > svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.update-card[data-state='done'] .update-card-icon {
+  color: hsl(var(--success));
+  background: hsl(var(--success) / 0.12);
+}
+
+.update-card[data-state='error'] .update-card-icon {
+  color: hsl(var(--destructive-text));
+  background: hsl(var(--destructive) / 0.12);
+}
+
+.update-card-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.update-card-text strong {
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.update-card-text span {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.update-progress {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, hsl(var(--brand) / 0.15) 0%, hsl(var(--brand)) 50%, hsl(var(--brand) / 0.15) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+
+.update-exclusion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.84rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.update-exclusion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.6rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--code));
+}
+
+.update-exclusion-row code {
+  flex: 1;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+
+.update-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}

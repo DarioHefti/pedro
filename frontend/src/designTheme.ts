@@ -6,35 +6,30 @@ const DESIGN_UI_FONT_SIZE_KEY = 'design_ui_font_size_px'
 const DEFAULT_LIGHT_BASE = '#242f62'
 const DEFAULT_DARK_BASE = '#6478d4'
 
-export const DEFAULT_MESSAGE_FONT_SIZE_PX = 12
+export const DEFAULT_MESSAGE_FONT_SIZE_PX = 14
 export const MESSAGE_FONT_SIZE_SLIDER_MIN_PX = 10
 export const MESSAGE_FONT_SIZE_SLIDER_MAX_PX = 22
 
-export const DEFAULT_UI_FONT_SIZE_PX = 12
+export const DEFAULT_UI_FONT_SIZE_PX = 13
 export const UI_FONT_SIZE_SLIDER_MIN_PX = 10
 export const UI_FONT_SIZE_SLIDER_MAX_PX = 18
 
-interface RgbColor {
-  r: number
-  g: number
-  b: number
-}
+/** Curated base colors offered as one-click presets in Settings → Appearance. */
+export const DESIGN_COLOR_PRESETS: { light: string; dark: string; name: string }[] = [
+  { name: 'Pedro', light: '#242f62', dark: '#6478d4' },
+  { name: 'Ocean', light: '#0b5d7a', dark: '#38b2d6' },
+  { name: 'Forest', light: '#1f5a3d', dark: '#4fbf86' },
+  { name: 'Plum', light: '#5b2a6e', dark: '#b07ad8' },
+  { name: 'Ember', light: '#8a3412', dark: '#f08a4b' },
+  { name: 'Rose', light: '#8c1d4a', dark: '#ec6f9e' },
+  { name: 'Graphite', light: '#2f3438', dark: '#9aa5b1' },
+  { name: 'Gold', light: '#6b5310', dark: '#e0b84a' },
+]
 
-interface ThemeColorSet {
-  accentPrimary: string
-  accentSecondary: string
-  accentSubtleBg: string
-  btnPrimaryBg: string
-  btnPrimaryText: string
-  btnPrimaryHoverBg: string
-  btnGhostText: string
-  btnGhostBorder: string
-  btnGhostHoverBg: string
-  sidebarSelectedBg: string
-  sidebarSelectedIndicator: string
-  inputFocusBorder: string
-  inputFocusShadow: string
-  bgGradient: string
+interface Hsl {
+  h: number
+  s: number
+  l: number
 }
 
 interface DesignPalette {
@@ -52,37 +47,19 @@ export function getDesignSettingsKeys() {
 }
 
 export function getMessageFontSizePxFromSettings(settings: Record<string, string>): number {
-  const raw = settings[DESIGN_MESSAGE_FONT_SIZE_KEY]?.trim()
-  const n = raw ? Number.parseInt(raw, 10) : NaN
-  if (!Number.isFinite(n)) {
-    return DEFAULT_MESSAGE_FONT_SIZE_PX
-  }
-  return clamp(n, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)
+  return readPx(settings[DESIGN_MESSAGE_FONT_SIZE_KEY], DEFAULT_MESSAGE_FONT_SIZE_PX, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)
 }
 
 export function applyMessageFontSizeToDocument(px: number) {
-  if (typeof document === 'undefined') {
-    return
-  }
-  const clamped = clamp(px, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)
-  document.documentElement.style.setProperty('--custom-message-font-size', `${clamped}px`)
+  setRootVar('--custom-message-font-size', `${clamp(px, MESSAGE_FONT_SIZE_SLIDER_MIN_PX, MESSAGE_FONT_SIZE_SLIDER_MAX_PX)}px`)
 }
 
 export function getUiFontSizePxFromSettings(settings: Record<string, string>): number {
-  const raw = settings[DESIGN_UI_FONT_SIZE_KEY]?.trim()
-  const n = raw ? Number.parseInt(raw, 10) : NaN
-  if (!Number.isFinite(n)) {
-    return DEFAULT_UI_FONT_SIZE_PX
-  }
-  return clamp(n, UI_FONT_SIZE_SLIDER_MIN_PX, UI_FONT_SIZE_SLIDER_MAX_PX)
+  return readPx(settings[DESIGN_UI_FONT_SIZE_KEY], DEFAULT_UI_FONT_SIZE_PX, UI_FONT_SIZE_SLIDER_MIN_PX, UI_FONT_SIZE_SLIDER_MAX_PX)
 }
 
 export function applyUiFontSizeToDocument(px: number) {
-  if (typeof document === 'undefined') {
-    return
-  }
-  const clamped = clamp(px, UI_FONT_SIZE_SLIDER_MIN_PX, UI_FONT_SIZE_SLIDER_MAX_PX)
-  document.documentElement.style.setProperty('--custom-ui-font-size', `${clamped}px`)
+  setRootVar('--custom-ui-font-size', `${clamp(px, UI_FONT_SIZE_SLIDER_MIN_PX, UI_FONT_SIZE_SLIDER_MAX_PX)}px`)
 }
 
 /** Applies saved design palette + typography to `document.documentElement`. */
@@ -99,16 +76,14 @@ export function getDesignPaletteFromSettings(settings: Record<string, string>): 
   }
 }
 
+/**
+ * Writes the --custom-{light,dark}-* inputs that styles/tokens.css derives the
+ * whole palette from. Lightness is clamped per theme so any base color the
+ * person picks still reads on that theme's surfaces.
+ */
 export function applyDesignPaletteToDocument(palette: DesignPalette) {
-  if (typeof document === 'undefined') {
-    return
-  }
-  const root = document.documentElement
-  const light = buildLightThemeColors(palette.lightBase)
-  const dark = buildDarkThemeColors(palette.darkBase)
-
-  setThemeCssVars(root, 'light', light)
-  setThemeCssVars(root, 'dark', dark)
+  writeTheme('light', lightTokens(hexToHsl(palette.lightBase)))
+  writeTheme('dark', darkTokens(hexToHsl(palette.darkBase)))
 }
 
 export function normalizeHex(value: string | null | undefined, fallback: string): string {
@@ -122,112 +97,109 @@ export function normalizeHex(value: string | null | undefined, fallback: string)
   return fallback
 }
 
-function setThemeCssVars(root: HTMLElement, theme: 'light' | 'dark', colors: ThemeColorSet) {
-  const prefix = `--custom-${theme}`
-  root.style.setProperty(`${prefix}-accent-primary`, colors.accentPrimary)
-  root.style.setProperty(`${prefix}-accent-secondary`, colors.accentSecondary)
-  root.style.setProperty(`${prefix}-accent-subtle-bg`, colors.accentSubtleBg)
-  root.style.setProperty(`${prefix}-btn-primary-bg`, colors.btnPrimaryBg)
-  root.style.setProperty(`${prefix}-btn-primary-text`, colors.btnPrimaryText)
-  root.style.setProperty(`${prefix}-btn-primary-hover-bg`, colors.btnPrimaryHoverBg)
-  root.style.setProperty(`${prefix}-btn-ghost-text`, colors.btnGhostText)
-  root.style.setProperty(`${prefix}-btn-ghost-border`, colors.btnGhostBorder)
-  root.style.setProperty(`${prefix}-btn-ghost-hover-bg`, colors.btnGhostHoverBg)
-  root.style.setProperty(`${prefix}-sidebar-selected-bg`, colors.sidebarSelectedBg)
-  root.style.setProperty(`${prefix}-sidebar-selected-indicator`, colors.sidebarSelectedIndicator)
-  root.style.setProperty(`${prefix}-input-focus-border`, colors.inputFocusBorder)
-  root.style.setProperty(`${prefix}-input-focus-shadow`, colors.inputFocusShadow)
-  root.style.setProperty(`${prefix}-bg-gradient`, colors.bgGradient)
+interface ThemeTokens {
+  h: number
+  tintS: number
+  brand: Hsl
+  primary: Hsl
+  primaryHover: Hsl
+  primaryFg: string
 }
 
-function buildDarkThemeColors(baseHex: string): ThemeColorSet {
-  const accentPrimary = mixHex(baseHex, '#ffffff', 0.1)
-  const btnPrimaryBg = accentPrimary
+function lightTokens(base: Hsl): ThemeTokens {
+  const s = clamp(base.s, 0, 90)
+  const brand = { h: base.h, s, l: clamp(base.l, 16, 44) }
   return {
-    accentPrimary,
-    accentSecondary: mixHex(baseHex, '#ffffff', 0.35),
-    accentSubtleBg: withAlpha(baseHex, 0.16),
-    btnPrimaryBg,
-    btnPrimaryText: pickReadableText(btnPrimaryBg),
-    btnPrimaryHoverBg: mixHex(baseHex, '#000000', 0.14),
-    btnGhostText: mixHex(baseHex, '#ffffff', 0.24),
-    btnGhostBorder: mixHex(baseHex, '#ffffff', 0.14),
-    btnGhostHoverBg: withAlpha(baseHex, 0.12),
-    sidebarSelectedBg: withAlpha(baseHex, 0.15),
-    sidebarSelectedIndicator: mixHex(baseHex, '#ffffff', 0.24),
-    inputFocusBorder: mixHex(baseHex, '#ffffff', 0.22),
-    inputFocusShadow: `0 0 0 1px ${withAlpha(baseHex, 0.45)}`,
-    bgGradient: `linear-gradient(180deg, ${withAlpha(baseHex, 0.14)} 0%, var(--bg) 56%)`,
+    h: base.h,
+    tintS: Math.min(s, 48),
+    brand,
+    primary: brand,
+    primaryHover: { ...brand, l: Math.max(8, brand.l - 6) },
+    primaryFg: readableOn(brand),
   }
 }
 
-function buildLightThemeColors(baseHex: string): ThemeColorSet {
-  const accentPrimary = mixHex(baseHex, '#000000', 0.08)
-  const btnPrimaryBg = mixHex(baseHex, '#000000', 0.06)
+function darkTokens(base: Hsl): ThemeTokens {
+  const s = clamp(base.s, 0, 90)
+  const brandL = clamp(base.l + 4, 58, 80)
+  const primary = { h: base.h, s, l: clamp(base.l - 5, 42, 62) }
   return {
-    accentPrimary,
-    accentSecondary: mixHex(baseHex, '#ffffff', 0.28),
-    accentSubtleBg: withAlpha(baseHex, 0.1),
-    btnPrimaryBg,
-    btnPrimaryText: pickReadableText(btnPrimaryBg),
-    btnPrimaryHoverBg: mixHex(baseHex, '#000000', 0.18),
-    btnGhostText: accentPrimary,
-    btnGhostBorder: mixHex(baseHex, '#000000', 0.12),
-    btnGhostHoverBg: withAlpha(baseHex, 0.07),
-    sidebarSelectedBg: withAlpha(baseHex, 0.08),
-    sidebarSelectedIndicator: accentPrimary,
-    inputFocusBorder: mixHex(baseHex, '#000000', 0.15),
-    inputFocusShadow: `0 0 0 1px ${withAlpha(baseHex, 0.22)}`,
-    bgGradient: `linear-gradient(180deg, ${withAlpha(baseHex, 0.1)} 0%, var(--bg) 60%)`,
+    h: base.h,
+    tintS: Math.min(s, 42),
+    brand: { h: base.h, s, l: brandL },
+    primary,
+    primaryHover: { ...primary, l: Math.min(70, primary.l + 6) },
+    primaryFg: readableOn(primary),
   }
 }
 
-function withAlpha(hex: string, alpha: number): string {
-  const rgb = hexToRgb(hex)
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1).toFixed(3)})`
+function writeTheme(theme: 'light' | 'dark', t: ThemeTokens) {
+  const p = `--custom-${theme}`
+  setRootVar(`${p}-h`, String(round(t.h)))
+  setRootVar(`${p}-ts`, `${round(t.tintS)}%`)
+  setRootVar(`${p}-brand`, triplet(t.brand))
+  setRootVar(`${p}-primary`, triplet(t.primary))
+  setRootVar(`${p}-primary-hover`, triplet(t.primaryHover))
+  setRootVar(`${p}-primary-fg`, t.primaryFg)
 }
 
-function mixHex(colorA: string, colorB: string, ratioToB: number): string {
-  const a = hexToRgb(colorA)
-  const b = hexToRgb(colorB)
-  const ratio = clamp(ratioToB, 0, 1)
-  const mixed: RgbColor = {
-    r: Math.round(a.r + (b.r - a.r) * ratio),
-    g: Math.round(a.g + (b.g - a.g) * ratio),
-    b: Math.round(a.b + (b.b - a.b) * ratio),
-  }
-  return rgbToHex(mixed)
+/** White or near-black text, whichever contrasts more with the fill. */
+function readableOn(fill: Hsl): string {
+  const bg = relativeLuminance(hslToRgb(fill))
+  const white = 1.05 / (bg + 0.05)
+  const ink = (bg + 0.05) / (relativeLuminance(hslToRgb({ h: fill.h, s: 45, l: 9 })) + 0.05)
+  return white >= ink * 0.9 ? '0 0% 100%' : `${round(fill.h)} 45% 9%`
 }
 
-function pickReadableText(bgHex: string): string {
-  const rgb = hexToRgb(bgHex)
-  const luminance = relativeLuminance(rgb)
-  return luminance > 0.62 ? '#111a34' : '#f8f9ff'
+function triplet(c: Hsl): string {
+  return `${round(c.h)} ${round(c.s)}% ${round(c.l)}%`
 }
 
-function relativeLuminance(rgb: RgbColor): number {
-  const channels = [rgb.r, rgb.g, rgb.b].map(value => {
-    const normalized = value / 255
-    return normalized <= 0.03928
-      ? normalized / 12.92
-      : ((normalized + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+function setRootVar(name: string, value: string) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty(name, value)
 }
 
-function hexToRgb(hex: string): RgbColor {
-  const normalized = normalizeHex(hex, '#000000')
-  const hexValue = normalized.slice(1)
-  return {
-    r: Number.parseInt(hexValue.slice(0, 2), 16),
-    g: Number.parseInt(hexValue.slice(2, 4), 16),
-    b: Number.parseInt(hexValue.slice(4, 6), 16),
-  }
+function readPx(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = raw?.trim() ? Number.parseInt(raw, 10) : NaN
+  return Number.isFinite(n) ? clamp(n, min, max) : fallback
 }
 
-function rgbToHex(rgb: RgbColor): string {
-  const toHex = (value: number) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0')
-  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
+function hexToHsl(hex: string): Hsl {
+  const v = normalizeHex(hex, '#000000').slice(1)
+  const r = Number.parseInt(v.slice(0, 2), 16) / 255
+  const g = Number.parseInt(v.slice(2, 4), 16) / 255
+  const b = Number.parseInt(v.slice(4, 6), 16) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  const d = max - min
+  if (d === 0) return { h: 0, s: 0, l: l * 100 }
+  const s = d / (1 - Math.abs(2 * l - 1))
+  let h: number
+  if (max === r) h = ((g - b) / d) % 6
+  else if (max === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+  h = (h * 60 + 360) % 360
+  return { h, s: s * 100, l: l * 100 }
+}
+
+function hslToRgb({ h, s, l }: Hsl): [number, number, number] {
+  const sat = s / 100
+  const lig = l / 100
+  const k = (n: number) => (n + h / 30) % 12
+  const a = sat * Math.min(lig, 1 - lig)
+  const f = (n: number) => lig - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+  return [f(0), f(8), f(4)]
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+function round(n: number): number {
+  return Math.round(n * 10) / 10
 }
 
 function clamp(value: number, min: number, max: number): number {

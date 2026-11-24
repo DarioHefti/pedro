@@ -64,7 +64,7 @@ func (s *DirImageStore) Save(img Image) (StoredImage, error) {
 	if _, err := rand.Read(suffix); err != nil {
 		return StoredImage{}, err
 	}
-	name := fmt.Sprintf("%s-%s.%s", time.Now().Format("20060102-150405"), hex.EncodeToString(suffix), extension(img.Format))
+	name := fmt.Sprintf("%s-%s.%s", time.Now().Format("20060102-150405"), hex.EncodeToString(suffix), Extension(img.Format))
 	full := filepath.Join(s.dir, name)
 	if err := os.WriteFile(full, img.Data, 0o644); err != nil {
 		return StoredImage{}, fmt.Errorf("save image: %w", err)
@@ -137,7 +137,8 @@ func (s *DirImageStore) fileName(urlPath string) (string, bool) {
 	return name, true
 }
 
-func extension(format string) string {
+// Extension is the file extension (without dot) used for an image format such as "jpeg".
+func Extension(format string) string {
 	switch strings.ToLower(format) {
 	case "jpeg", "jpg":
 		return "jpg"

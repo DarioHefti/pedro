@@ -1,0 +1,199 @@
+/* ============================================================ command palette */
+[data-slot='dialog-content'][data-size='palette'] {
+  max-height: min(34rem, calc(100dvh - 14vh - 2rem));
+  background: hsl(var(--popover));
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.palette-search {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  height: 3.5rem;
+  padding: 0 1.1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.palette-search > svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  color: hsl(var(--brand));
+}
+
+[data-slot='command-input'] {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  font-size: 1.05rem;
+  color: hsl(var(--foreground));
+  background: transparent;
+  outline: none;
+}
+
+[data-slot='command-input']::placeholder {
+  color: hsl(var(--faint-foreground));
+}
+
+.palette-list {
+  flex: 1;
+  min-height: 0;
+  padding: 0.45rem;
+  overflow-y: auto;
+  scroll-padding-block: 0.5rem;
+}
+
+[data-slot='command-group'] + [data-slot='command-group'] {
+  margin-top: 0.4rem;
+}
+
+[data-slot='command-group-label'] {
+  padding: 0.55rem 0.7rem 0.3rem;
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--faint-foreground));
+}
+
+[data-slot='command-item'] {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-md);
+  font-size: 0.96rem;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  scroll-margin-block: 0.4rem;
+}
+
+[data-slot='command-item'][data-highlighted] {
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--accent));
+}
+
+[data-slot='command-item'][data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+[data-slot='command-item-icon'] {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-sm);
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--surface));
+}
+
+[data-slot='command-item'][data-highlighted] [data-slot='command-item-icon'] {
+  border-color: transparent;
+  color: hsl(var(--primary-foreground));
+  background: var(--gradient-brand);
+}
+
+[data-slot='command-item-icon'] > svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+[data-slot='command-item-text'] {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot='command-item'] mark {
+  border-radius: 2px;
+  font-weight: 650;
+  color: inherit;
+  background: hsl(var(--brand) / 0.16);
+}
+
+[data-slot='command-shortcut'] {
+  display: inline-flex;
+  gap: 0.2rem;
+  margin-inline-start: auto;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: hsl(var(--faint-foreground));
+}
+
+.palette-hit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.palette-hit-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-hit-snippet {
+  overflow: hidden;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+}
+
+.palette-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  font-size: 0.94rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.palette-empty:not([data-empty]) {
+  display: none;
+}
+
+.palette-empty > svg {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: hsl(var(--faint-foreground));
+}
+
+.palette-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  height: 2.5rem;
+  padding: 0 1.1rem;
+  border-top: 1px solid hsl(var(--border));
+  font-size: 0.8rem;
+  color: hsl(var(--faint-foreground));
+  background: hsl(var(--surface-2));
+  flex-shrink: 0;
+}
+
+.palette-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.palette-footer > span:last-child {
+  margin-inline-start: auto;
+}

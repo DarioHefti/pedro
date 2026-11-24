@@ -9,19 +9,13 @@ export function ClearLLMDetails():Promise<void>;
 
 export function CreateConversation():Promise<main.Conversation>;
 
-export function CreatePersona(arg1:string,arg2:string):Promise<main.Persona>;
-
 export function DeleteAllConversations():Promise<void>;
 
 export function DeleteConversation(arg1:number):Promise<void>;
 
 export function DeleteMessage(arg1:number,arg2:number):Promise<void>;
 
-export function DeletePersona(arg1:number):Promise<void>;
-
 export function ForgetMemory(arg1:number):Promise<void>;
-
-export function GetActivePersonaID():Promise<string>;
 
 export function GetAvailableProviders():Promise<Array<Record<string, string>>>;
 
@@ -39,8 +33,6 @@ export function GetMemories():Promise<Array<shared.MemoryRecord>>;
 
 export function GetMessages(arg1:number):Promise<Array<main.Message>>;
 
-export function GetPersonas():Promise<Array<main.Persona>>;
-
 export function GetRequestCounts(arg1:number):Promise<main.RequestCounts>;
 
 export function GetSettings():Promise<Record<string, string>>;
@@ -49,11 +41,15 @@ export function IsAuthenticated():Promise<boolean>;
 
 export function OpenPath(arg1:string):Promise<string>;
 
-export function RegenerateMessage(arg1:number,arg2:number,arg3:string):Promise<string>;
+export function RegenerateMessage(arg1:number,arg2:number):Promise<string>;
 
-export function ResendMessage(arg1:number,arg2:number,arg3:string):Promise<string>;
+export function ResendMessage(arg1:number,arg2:number):Promise<string>;
 
-export function SaveFile(arg1:string,arg2:string):Promise<string>;
+export function SaveBase64File(arg1:string,arg2:string):Promise<main.SaveResult>;
+
+export function SaveFile(arg1:string,arg2:string):Promise<main.SaveResult>;
+
+export function SaveImage(arg1:string):Promise<main.SaveResult>;
 
 export function SaveMemory(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -65,11 +61,9 @@ export function SelectFile():Promise<string>;
 
 export function SelectFolder():Promise<string>;
 
-export function SendMessage(arg1:number,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function SendMessage(arg1:number,arg2:string,arg3:string):Promise<string>;
 
-export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>,arg4:string,arg5:string):Promise<string>;
-
-export function SetActivePersonaID(arg1:string):Promise<void>;
+export function SendMessageWithImages(arg1:number,arg2:string,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SetSetting(arg1:string,arg2:string):Promise<void>;
 
@@ -78,5 +72,3 @@ export function SignIn():Promise<string>;
 export function SignOut():Promise<void>;
 
 export function TestConnection():Promise<string>;
-
-export function UpdatePersona(arg1:number,arg2:string,arg3:string):Promise<void>;

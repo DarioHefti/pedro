@@ -18,7 +18,7 @@ import (
 
 func TestFullSystemPrompt(t *testing.T) {
 	base := "You are a bot."
-	got := FullSystemPrompt(base, "", "", "")
+	got := FullSystemPrompt(base, "", "")
 	if !strings.HasPrefix(got, base) {
 		t.Fatalf("expected prefix %q, got %q", base, got)
 	}
@@ -29,7 +29,7 @@ func TestFullSystemPrompt(t *testing.T) {
 		t.Fatalf("expected operating system section in %q", got)
 	}
 	custom := "Be brief."
-	got = FullSystemPrompt(base, "", custom, "")
+	got = FullSystemPrompt(base, custom, "")
 	if !strings.HasPrefix(got, base) {
 		t.Fatalf("expected prefix %q", base)
 	}
@@ -40,24 +40,6 @@ func TestFullSystemPrompt(t *testing.T) {
 		t.Fatalf("expected custom text in %q", got)
 	}
 
-	persona := "You are a pirate."
-	got = FullSystemPrompt(base, persona, "", "")
-	if !strings.Contains(got, "## Persona") {
-		t.Fatalf("expected persona section in %q", got)
-	}
-	if !strings.Contains(got, persona) {
-		t.Fatalf("expected persona text in %q", got)
-	}
-
-	got = FullSystemPrompt(base, persona, custom, "")
-	if !strings.Contains(got, "## Persona") || !strings.Contains(got, "## Additional Instructions") {
-		t.Fatalf("expected both persona and additional sections in %q", got)
-	}
-	personaIdx := strings.Index(got, "## Persona")
-	customIdx := strings.Index(got, "## Additional Instructions")
-	if personaIdx > customIdx {
-		t.Fatalf("persona section should come before additional instructions")
-	}
 }
 
 func TestBuildMessagesCountsAndOrder(t *testing.T) {

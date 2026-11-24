@@ -70,8 +70,8 @@ func userFacingShellHint() string {
 }
 
 // FullSystemPrompt builds the final system prompt from the base instructions,
-// an optional persona, optional custom instructions, and optional memory context.
-func FullSystemPrompt(base, persona, custom, memoryCtx string) string {
+// optional custom instructions, and optional memory context.
+func FullSystemPrompt(base, custom, memoryCtx string) string {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05 MST")
 	out := base + "\n\n## Current Date/Time\nCurrent UTC datetime: " + now
 	out += fmt.Sprintf(
@@ -81,10 +81,6 @@ func FullSystemPrompt(base, persona, custom, memoryCtx string) string {
 		goruntime.GOARCH,
 		userFacingShellHint(),
 	)
-	if persona != "" {
-		out += "\n\n## Persona\nYou MUST adopt the following persona for ALL your responses. " +
-			"This overrides your default tone, style, and personality:\n" + persona
-	}
 	if custom != "" {
 		out += "\n\n## Additional Instructions\n" + custom
 	}

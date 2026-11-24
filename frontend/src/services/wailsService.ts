@@ -33,12 +33,8 @@ import {
   SelectFolder,
   OpenPath,
   SaveFile,
-  GetPersonas,
-  CreatePersona,
-  UpdatePersona,
-  DeletePersona,
-  GetActivePersonaID,
-  SetActivePersonaID,
+  SaveBase64File,
+  SaveImage,
   GetMemories,
   SaveMemory,
   ForgetMemory,
@@ -60,10 +56,10 @@ import { main, shared } from '../../wailsjs/go/models'
 // Re-export generated types so the rest of the app never imports from wailsjs.
 export type Conversation = main.Conversation
 export type Message = main.Message
-export type Persona = main.Persona
 export type MemoryRecord = shared.MemoryRecord
 export type UpdateInfo = main.UpdateInfo
 export type LLMDetailsEntry = main.LLMDetailsEntry
+export type SaveResult = Pick<main.SaveResult, 'path' | 'cancelled'>
 
 function hasWailsBridge(): boolean {
   if (typeof window === 'undefined') return false
@@ -241,23 +237,14 @@ export const conversationService = {
 // Message service
 // ---------------------------------------------------------------------------
 export const messageService = {
-  /** selectedPersonaID: DB row id; backend loads prompt text from SQLite. */
-  send: (convID: number, content: string, selectedPersonaID: string, attachmentsJSON: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SendMessage(convID, content, selectedPersonaID, attachmentsJSON),
-  sendWithImages: (
-    convID: number,
-    content: string,
-    images: string[],
-    selectedPersonaID: string,
-    attachmentsJSON: string,
-  ): Promise<string> =>
-    useDevStub
-      ? Promise.resolve('')
-      : SendMessageWithImages(convID, content, images, selectedPersonaID, attachmentsJSON),
-  regenerate: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex, selectedPersonaID),
-  resend: (convID: number, messageIndex: number, selectedPersonaID: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : ResendMessage(convID, messageIndex, selectedPersonaID),
+  send: (convID: number, content: string, attachmentsJSON: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : SendMessage(convID, content, attachmentsJSON),
+  sendWithImages: (convID: number, content: string, images: string[], attachmentsJSON: string): Promise<string> =>
+    useDevStub ? Promise.resolve('') : SendMessageWithImages(convID, content, images, attachmentsJSON),
+  regenerate: (convID: number, messageIndex: number): Promise<string> =>
+    useDevStub ? Promise.resolve('') : RegenerateMessage(convID, messageIndex),
+  resend: (convID: number, messageIndex: number): Promise<string> =>
+    useDevStub ? Promise.resolve('') : ResendMessage(convID, messageIndex),
   abort: (): Promise<void> => (useDevStub ? Promise.resolve() : AbortMessage()),
   deleteMessage: (convID: number, messageIndex: number): Promise<void> =>
     useDevStub ? Promise.resolve() : DeleteMessage(convID, messageIndex),
@@ -283,36 +270,6 @@ export const settingsService = {
 }
 
 // ---------------------------------------------------------------------------
-// Personas (SQLite-backed)
-// ---------------------------------------------------------------------------
-export const personaService = {
-  getAll: async (): Promise<main.Persona[]> => {
-    const raw = useDevStub ? [] : await GetPersonas()
-    return raw ?? []
-  },
-  create: (name: string, prompt: string): Promise<main.Persona> =>
-    useDevStub
-      ? Promise.resolve(
-          new main.Persona({
-            ID: Date.now(),
-            Name: name,
-            Prompt: prompt,
-            CreatedAt: new Date().toISOString(),
-            UpdatedAt: new Date().toISOString(),
-          }),
-        )
-      : CreatePersona(name, prompt),
-  update: (id: number, name: string, prompt: string): Promise<void> =>
-    useDevStub ? Promise.resolve() : UpdatePersona(id, name, prompt),
-  delete: (id: number): Promise<void> =>
-    useDevStub ? Promise.resolve() : DeletePersona(id),
-  getActiveId: (): Promise<string> =>
-    useDevStub ? Promise.resolve('') : GetActivePersonaID(),
-  setActive: (id: string): Promise<void> =>
-    useDevStub ? Promise.resolve() : SetActivePersonaID(id),
-}
-
-// ---------------------------------------------------------------------------
 // Memory (SQLite-backed)
 // ---------------------------------------------------------------------------
 export const memoryService = {
@@ -335,9 +292,36 @@ export const fileService = {
   /** Opens with the OS default app (WebView blocks file:// links). */
   openPath: (path: string): Promise<string> =>
     useDevStub ? Promise.resolve('') : OpenPath(path),
-  /** Shows a native save dialog and writes content to disk. */
-  saveFile: (defaultFilename: string, content: string): Promise<string> =>
-    useDevStub ? Promise.resolve('') : SaveFile(defaultFilename, content),
+  /** Asks where to save text content (native save dialog) and writes it there. */
+  saveFile: (defaultFilename: string, content: string): Promise<SaveResult> =>
+    useDevStub
+      ? browserDownload(defaultFilename, new Blob([content], { type: 'text/plain' }))
+      : SaveFile(defaultFilename, content),
+  /** Asks where to save binary content, given as base64, and writes it there. */
+  saveBase64File: (defaultFilename: string, base64: string): Promise<SaveResult> =>
+    useDevStub
+      ? fetch(`data:application/octet-stream;base64,${base64}`)
+          .then(res => res.blob())
+          .then(blob => browserDownload(defaultFilename, blob))
+      : SaveBase64File(defaultFilename, base64),
+  /** Asks where to save an image the chat shows (stored image URL or data URL) and copies it there. */
+  saveImage: (src: string): Promise<SaveResult> =>
+    useDevStub
+      ? fetch(src)
+          .then(res => res.blob())
+          .then(blob => browserDownload(src.startsWith('data:') ? 'image.png' : src.split('/').pop() || 'image.png', blob))
+      : SaveImage(src),
+}
+
+/** Dev-only stand-in for the native save dialog: a regular browser download. */
+function browserDownload(filename: string, blob: Blob): Promise<SaveResult> {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return Promise.resolve({ path: filename, cancelled: false })
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +350,7 @@ export const statsService = {
     useDevStub ? Promise.resolve(0) : GetGlobalRequestCount(),
   getLifetimeStats: (): Promise<main.LifetimeStats> =>
     useDevStub
-      ? Promise.resolve(new main.LifetimeStats({ TotalRequests: 0, TotalTokens: 0 }))
+      ? Promise.resolve(new main.LifetimeStats({ totalRequests: 0, totalTokens: 0 }))
       : GetLifetimeStats(),
 }
 
