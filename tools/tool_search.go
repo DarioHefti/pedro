@@ -48,6 +48,18 @@ type ToolReference struct {
 type ToolSearchResult struct {
 	Type          string          `json:"type"`
 	ToolReference []ToolReference `json:"tool_references"`
+	// Message tells the model the tools are loaded, so it calls them instead of searching again.
+	Message string `json:"message"`
+}
+
+const noToolsMatchedResult = `{"tool_references": [], "message": "No tools matched. Search with an exact tool name from the system prompt."}`
+
+func loadedToolsMessage(refs []ToolReference) string {
+	names := make([]string, len(refs))
+	for i, ref := range refs {
+		names[i] = ref.ToolName
+	}
+	return "Loaded " + strings.Join(names, ", ") + " for the rest of the conversation. Call them directly; do not search for them again."
 }
 
 func (t ToolSearchTool) Execute(argsJSON string) (string, error) {
@@ -73,24 +85,55 @@ func (t ToolSearchTool) Execute(argsJSON string) (string, error) {
 		mode = "regex"
 	}
 
-	references := t.search(query, mode)
+	references := t.exactMatches(query)
+	if len(references) == 0 {
+		references = t.search(query, mode)
+	}
 	if len(references) == 0 && mode == "regex" {
 		// Models often send a natural-language description in regex mode.
 		references = t.search(query, "bm25")
 	}
 	if len(references) == 0 {
-		return `{"tool_references": []}`, nil
+		return noToolsMatchedResult, nil
 	}
 
 	result := ToolSearchResult{
 		Type:          "tool_reference",
 		ToolReference: references,
+		Message:       loadedToolsMessage(references),
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Sprintf(`{"error": "Failed to encode result: %v"}`, err), nil
 	}
 	return string(data), nil
+}
+
+// exactMatches returns the named tools when the query only lists tool names
+// ("web_search", "web_search|webclaw"), so a search by name loads just those
+// tools and not every tool whose description mentions them.
+func (t ToolSearchTool) exactMatches(query string) []ToolReference {
+	searchable := map[string]bool{}
+	for _, def := range t.registry.AllDefinitions() {
+		if def.DeferLoading && def.Name != ToolSearchToolName {
+			searchable[def.Name] = true
+		}
+	}
+	names := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return strings.ContainsRune("|,;() \t\n^$", r)
+	})
+	var refs []ToolReference
+	seen := map[string]bool{}
+	for _, name := range names {
+		if !searchable[name] {
+			return nil
+		}
+		if !seen[name] {
+			seen[name] = true
+			refs = append(refs, ToolReference{ToolName: name})
+		}
+	}
+	return refs
 }
 
 func (t ToolSearchTool) search(query, mode string) []ToolReference {

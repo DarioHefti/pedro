@@ -220,3 +220,116 @@ func TestStreamingChatRetriesWithReasoningNoneWhenToolsRejected(t *testing.T) {
 		t.Fatalf("memoized reasoning_effort: got %v want none", got)
 	}
 }
+
+func TestToolsCalledInHistory(t *testing.T) {
+	history := []shared.Message{
+		{Role: "user", Content: "make an infographic"},
+		{Role: "assistant", ToolCalls: `[{"name":"tool_search","argsJSON":"{\"query\":\"image\"}","id":"s1"},{"name":"generate_image","argsJSON":"{}","id":"g1"}]`},
+		// Searched but never called: must not stay loaded.
+		{Role: "tool", ToolCallID: "s1", Content: `{"type":"tool_reference","tool_references":[{"tool_name":"generate_image"},{"tool_name":"browser"}]}`},
+		{Role: "tool", ToolCallID: "g1", Content: "Image generated"},
+		{Role: "assistant", Content: "done"},
+	}
+	called := toolsCalledInHistory(history)
+	if len(called) != 1 {
+		t.Fatalf("expected only generate_image, got %+v", called)
+	}
+	if _, ok := called["generate_image"]; !ok {
+		t.Fatalf("expected generate_image to stay loaded, got %+v", called)
+	}
+}
+
+func TestToolDefinitionsWithAddsOnlyDeferredTools(t *testing.T) {
+	r := tools.NewRegistry()
+	r.Register(tools.NewToolSearchTool(r))
+	r.Register(tools.NewGenerateImageTool(nil, nil))
+	unlocked := map[string]struct{}{"tool_search": {}, "generate_image": {}, "unknown": {}}
+
+	var names []string
+	for _, d := range toolDefinitionsWith(r, unlocked) {
+		names = append(names, d.Function.Name)
+	}
+	if strings.Join(names, ",") != "tool_search,generate_image" {
+		t.Fatalf("tool list: got %v", names)
+	}
+}
+
+func TestStreamingChatKeepsToolsUsedInEarlierTurns(t *testing.T) {
+	var (
+		mu        sync.Mutex
+		toolNames []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Tools []struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			} `json:"tools"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		for _, tool := range body.Tools {
+			toolNames = append(toolNames, tool.Function.Name)
+		}
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeSSE(w, `{"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+		writeSSE(w, `[DONE]`)
+	}))
+	defer server.Close()
+
+	client := openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test"))
+	registry := tools.NewRegistry()
+	registry.Register(tools.NewToolSearchTool(registry))
+	registry.Register(tools.NewGenerateImageTool(nil, nil))
+
+	history := []shared.Message{
+		{Role: "user", Content: "draw an infographic"},
+		{Role: "assistant", ToolCalls: `[{"name":"generate_image","argsJSON":"{\"prompt\":\"x\"}","id":"g1"}]`},
+		{Role: "tool", ToolCallID: "g1", Content: "Image generated and saved to: /tmp/x.png"},
+		{Role: "assistant", Content: "here it is"},
+		{Role: "user", Content: "fix the typo in the title"},
+	}
+	if _, err := StreamingChat(context.Background(), client, "keep-tools-test", registry, history, nil, "sys", nil, nil, nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(toolNames, ",") != "tool_search,generate_image" {
+		t.Fatalf("first request should already offer generate_image, got tools %v", toolNames)
+	}
+}
+
+func TestWithoutToolSearchesDropsSearchCallsAndResults(t *testing.T) {
+	history := []shared.Message{
+		{Role: "user", Content: "draw it"},
+		{Role: "assistant", ToolCalls: `[{"name":"tool_search","argsJSON":"{}","id":"s1"},{"name":"generate_image","argsJSON":"{}","id":"g1"}]`},
+		{Role: "tool", ToolCallID: "s1", Content: `{"tool_references":[{"tool_name":"generate_image"}]}`},
+		{Role: "tool", ToolCallID: "g1", Content: "Image generated"},
+		{Role: "assistant", Content: "here"},
+		{Role: "user", Content: "search only"},
+		{Role: "assistant", ToolCalls: `[{"name":"tool_search","argsJSON":"{}","id":"s2"}]`},
+		{Role: "tool", ToolCallID: "s2", Content: `{"tool_references":[]}`},
+		{Role: "assistant", Content: "nothing found"},
+	}
+	out := withoutToolSearches(history)
+
+	var got []string
+	for _, m := range out {
+		got = append(got, m.Role+":"+m.ToolCallID+":"+m.ToolCalls)
+	}
+	want := []string{
+		"user::",
+		`assistant::[{"name":"generate_image","argsJSON":"{}","id":"g1"}]`,
+		"tool:g1:",
+		"assistant::",
+		"user::",
+		"assistant::",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

@@ -355,3 +355,44 @@ func TestToolSearchToolNotDeferred(t *testing.T) {
 		t.Error("tool_search must not have DeferLoading=true")
 	}
 }
+
+func TestToolSearchResultSaysToolsAreLoaded(t *testing.T) {
+	r := newTestRegistry()
+	ts := NewToolSearchTool(r)
+
+	out, err := ts.Execute(`{"query":"generate_image","mode":"regex"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result ToolSearchResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("result is not JSON: %v (%q)", err, out)
+	}
+	if len(result.ToolReference) == 0 || result.ToolReference[0].ToolName != GenerateImageToolName {
+		t.Fatalf("expected generate_image first, got %+v", result.ToolReference)
+	}
+	if !strings.Contains(result.Message, "Loaded generate_image") || !strings.Contains(result.Message, "do not search for them again") {
+		t.Errorf("result should say the tool is loaded, got %q", result.Message)
+	}
+}
+
+func TestToolSearchByExactNamesLoadsOnlyThoseTools(t *testing.T) {
+	ts := NewToolSearchTool(newTestRegistry())
+	cases := map[string][]string{
+		"webclaw":                 {"webclaw"},
+		"read_file":               {"read_file"},
+		"^(web_search|webclaw)$":  {"web_search", "webclaw"},
+		"glob, grep":              {"glob", "grep"},
+		"webclaw page reader":     nil, // not only names: fuzzy search
+		"web_search|no_such_tool": nil,
+	}
+	for query, want := range cases {
+		var got []string
+		for _, ref := range ts.exactMatches(query) {
+			got = append(got, ref.ToolName)
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("exactMatches(%q) = %v, want %v", query, got, want)
+		}
+	}
+}

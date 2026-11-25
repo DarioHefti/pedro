@@ -206,9 +206,13 @@ func StreamingChat(
 	onRequestCaptured func(shared.CapturedRequest),
 ) ([]shared.Message, error) {
 	var generated []shared.Message
-	apiMessages := BuildMessages(messages, imageDataURLs, systemPrompt)
-	toolDefs := ToolDefinitions(registry)
-	unlockedTools := map[string]struct{}{}
+	// Tools called earlier in the conversation stay loaded, so a follow-up
+	// (e.g. "fix the text in that image") needs no new tool_search. Tools a
+	// search merely returned are not kept, so their schemas are not sent with
+	// every later request.
+	unlockedTools := toolsCalledInHistory(messages)
+	apiMessages := BuildMessages(withoutToolSearches(messages), imageDataURLs, systemPrompt)
+	toolDefs := toolDefinitionsWith(registry, unlockedTools)
 
 	for {
 		params := openai.ChatCompletionNewParams{
@@ -318,18 +322,94 @@ func StreamingChat(
 			})
 		}
 
-		toolDefs = ToolDefinitions(registry)
-		if len(unlockedTools) > 0 {
-			names := make([]string, 0, len(unlockedTools))
-			for name := range unlockedTools {
-				names = append(names, name)
-			}
-			sort.Strings(names)
-			toolDefs = append(toolDefs, toOpenAIToolDefinitions(registry.DefinitionsByName(names))...)
-		}
+		toolDefs = toolDefinitionsWith(registry, unlockedTools)
 	}
 
 	return generated, nil
+}
+
+// toolDefinitionsWith returns the always-visible tools plus the unlocked
+// deferred ones. Non-deferred names are skipped, as they are already listed.
+func toolDefinitionsWith(registry *tools.Registry, unlocked map[string]struct{}) []openai.ChatCompletionToolParam {
+	defs := ToolDefinitions(registry)
+	if registry == nil || len(unlocked) == 0 {
+		return defs
+	}
+	names := make([]string, 0, len(unlocked))
+	for name := range unlocked {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var extra []tools.Definition
+	for _, def := range registry.DefinitionsByName(names) {
+		if def.DeferLoading {
+			extra = append(extra, def)
+		}
+	}
+	return append(defs, toOpenAIToolDefinitions(extra)...)
+}
+
+// withoutToolSearches drops earlier turns' tool_search calls and their
+// results. The tools they loaded stay loaded (see toolsLoadedInHistory), and
+// left in, they teach the model to search again at the start of every turn.
+func withoutToolSearches(messages []shared.Message) []shared.Message {
+	out := make([]shared.Message, 0, len(messages))
+	dropped := map[string]struct{}{}
+	for _, m := range messages {
+		switch {
+		case m.Role == "assistant" && m.ToolCalls != "":
+			var tcs []toolCallRecord
+			if err := json.Unmarshal([]byte(m.ToolCalls), &tcs); err != nil {
+				out = append(out, m)
+				continue
+			}
+			var kept []toolCallRecord
+			for _, tc := range tcs {
+				if tc.Name == tools.ToolSearchToolName {
+					dropped[tc.ID] = struct{}{}
+				} else {
+					kept = append(kept, tc)
+				}
+			}
+			switch {
+			case len(kept) == len(tcs):
+				out = append(out, m)
+			case len(kept) > 0:
+				data, _ := json.Marshal(kept)
+				out = append(out, shared.Message{Role: m.Role, Content: m.Content, ToolCalls: string(data)})
+			case strings.TrimSpace(m.Content) != "":
+				out = append(out, shared.Message{Role: m.Role, Content: m.Content})
+			}
+		case m.Role == "tool":
+			if _, ok := dropped[m.ToolCallID]; !ok {
+				out = append(out, m)
+			}
+		default:
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// toolsCalledInHistory collects the tools earlier turns called, apart from
+// tool_search itself.
+func toolsCalledInHistory(messages []shared.Message) map[string]struct{} {
+	called := map[string]struct{}{}
+	for _, m := range messages {
+		if m.Role != "assistant" || m.ToolCalls == "" {
+			continue
+		}
+		var tcs []toolCallRecord
+		if err := json.Unmarshal([]byte(m.ToolCalls), &tcs); err != nil {
+			continue
+		}
+		for _, tc := range tcs {
+			if tc.Name != "" && tc.Name != tools.ToolSearchToolName {
+				called[tc.Name] = struct{}{}
+			}
+		}
+	}
+	return called
 }
 
 type toolSearchResultJSON struct {
