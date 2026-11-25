@@ -237,6 +237,12 @@
   background: hsl(var(--code));
 }
 
+/* Toggled in for the diagram, the code takes its exact frame so the thread stays still. */
+.diagram-code[data-fit] {
+  height: var(--diagram-frame-h);
+  max-height: none;
+}
+
 /* ============================================================ diagram viewer */
 [data-slot='dialog-content'][data-size='viewer'] {
   --dialog-width: 96vw;

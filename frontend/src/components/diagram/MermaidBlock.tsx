@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import type { CustomRendererProps } from 'streamdown'
 import { Check, Code, Copy, Maximize2, TriangleAlert, Workflow } from 'lucide-react'
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard'
@@ -23,6 +23,9 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
   const [diagram, setDiagram] = useState<RenderedDiagram | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)
+  /** The diagram's height when the code replaced it; the code keeps that frame. */
+  const [frameHeight, setFrameHeight] = useState<number | null>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
   const { copied, copy } = useCopyToClipboard()
 
   useEffect(() => {
@@ -49,6 +52,12 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
     if (diagram) void diagramViewer.open({ payload: { diagram, code: source } })
   }
 
+  /** Swapping views keeps the block's height, so the thread doesn't shift under the reader. */
+  function toggleCode() {
+    if (!showCode) setFrameHeight(previewRef.current?.getBoundingClientRect().height ?? null)
+    setShowCode(v => !v)
+  }
+
   function onPreviewKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'Enter' && e.key !== ' ') return
     e.preventDefault()
@@ -68,7 +77,7 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
         </span>
         <div className="diagram-block-actions">
           {diagram ? (
-            <Button variant={showCode ? 'secondary' : 'ghost'} size="xs" onClick={() => setShowCode(v => !v)}>
+            <Button variant={showCode ? 'secondary' : 'ghost'} size="xs" onClick={toggleCode}>
               {showCode ? <Workflow aria-hidden="true" /> : <Code aria-hidden="true" />}
               {showCode ? 'Diagram' : 'Code'}
             </Button>
@@ -99,7 +108,11 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
       ) : null}
 
       {codeVisible ? (
-        <pre className="diagram-code">
+        <pre
+          className="diagram-code"
+          data-fit={showCode && frameHeight ? '' : undefined}
+          style={showCode && frameHeight ? ({ '--diagram-frame-h': `${frameHeight}px` } as CSSProperties) : undefined}
+        >
           <code>{source}</code>
         </pre>
       ) : pending ? (
@@ -109,6 +122,7 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
         </div>
       ) : diagram ? (
         <div
+          ref={previewRef}
           className="diagram-preview"
           role="button"
           tabIndex={0}

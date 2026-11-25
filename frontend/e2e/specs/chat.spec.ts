@@ -159,8 +159,14 @@ test.describe('chatting', () => {
     await expect(diagram.locator('.diagram-preview-svg svg')).toBeVisible()
     await expect(diagram.locator('.diagram-preview-svg')).toContainText('Sign in with Azure')
 
+    const heightWithDiagram = (await diagram.boundingBox())?.height
     await diagram.getByRole('button', { name: 'Code', exact: true }).click()
     await expect(diagram.locator('.diagram-code')).toContainText('flowchart TD')
+    // Toggling keeps the block's height, so the thread doesn't jump.
+    expect((await diagram.boundingBox())?.height).toBeCloseTo(heightWithDiagram ?? 0, 0)
+    await diagram.getByRole('button', { name: 'Diagram', exact: true }).click()
+    await expect(diagram.locator('.diagram-preview-svg svg')).toBeVisible()
+    expect((await diagram.boundingBox())?.height).toBeCloseTo(heightWithDiagram ?? 0, 0)
   })
 
   test('a provider error is reported and the question is kept', async ({ pedro }) => {
