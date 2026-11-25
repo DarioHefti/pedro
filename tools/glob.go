@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -27,15 +28,19 @@ func (GlobTool) Definition() Definition {
 				},
 				"base_dir": map[string]any{
 					"type":        "string",
-					"description": "Base directory to search from (defaults to current working directory)",
+					"description": "Absolute path of the folder to search in, such as a folder the user attached",
 				},
 			},
-			"required": []string{"pattern"},
+			"required": []string{"pattern", "base_dir"},
 		},
 	}
 }
 
 func (t GlobTool) Execute(argsJSON string) (string, error) {
+	return t.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (t GlobTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Pattern string `json:"pattern"`
 		BaseDir string `json:"base_dir"`
@@ -43,15 +48,26 @@ func (t GlobTool) Execute(argsJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
-
-	baseDir := args.BaseDir
-	if baseDir == "" {
-		baseDir = "."
+	if strings.TrimSpace(args.BaseDir) == "" {
+		return "Glob error: base_dir is required: use the absolute path of a folder the user attached", nil
 	}
 
-	matches, err := globPattern(baseDir, args.Pattern)
+	access := fileAccessFrom(ctx)
+	baseDir, err := access.Resolve(args.BaseDir)
 	if err != nil {
 		return fmt.Sprintf("Glob error: %v", err), nil
+	}
+
+	found, err := globPattern(baseDir, args.Pattern)
+	if err != nil {
+		return fmt.Sprintf("Glob error: %v", err), nil
+	}
+	// The pattern itself can point elsewhere ("../*", symlinks): list only what may be read.
+	var matches []string
+	for _, m := range found {
+		if _, err := access.Resolve(m); err == nil {
+			matches = append(matches, m)
+		}
 	}
 
 	sort.Strings(matches)

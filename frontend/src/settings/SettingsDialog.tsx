@@ -14,6 +14,7 @@ import pedroAvatar from '../assets/images/pedro.svg'
 import { Button, buttonStyle } from '../ui/button'
 import { confirmAction } from '../ui/confirm'
 import { Hint } from '../ui/hint'
+import { formatVersion } from '../utils/version'
 import { AppearancePanel } from './AppearancePanel'
 import { ConnectionPanel } from './ConnectionPanel'
 import { InstructionsPanel } from './InstructionsPanel'
@@ -40,12 +41,6 @@ const SECTIONS: Section[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'Accent color and text size for both themes.' },
   { id: 'usage', label: 'Usage', icon: ChartColumn, description: 'Lifetime requests and token estimates.' },
 ]
-
-/** "1.4.0" → "Pedro v1.4.0"; non-numeric builds such as "dev" are shown as-is. */
-function formatVersion(version: string): string {
-  if (!version) return 'Pedro'
-  return /^\d/.test(version) ? `Pedro v${version}` : `Pedro ${version}`
-}
 
 interface SettingsDialogProps {
   open: boolean
@@ -104,7 +99,7 @@ function SettingsBody({ services, onSaved, onViewDetails, dirtyRef, layerRef }: 
             )
           })}
         </TabsList>
-        <div className="settings-nav-foot">{formatVersion(version)}</div>
+        <div className="settings-nav-foot">{formatVersion(version, __PEDRO_SOURCE_VERSION__)}</div>
       </aside>
 
       <section className="settings-main">

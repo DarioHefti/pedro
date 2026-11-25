@@ -3,12 +3,14 @@ package openaiutil
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -18,18 +20,18 @@ import (
 
 func TestFullSystemPrompt(t *testing.T) {
 	base := "You are a bot."
-	got := FullSystemPrompt(base, "", "")
+	got := FullSystemPrompt(base, "", "", time.Now())
 	if !strings.HasPrefix(got, base) {
 		t.Fatalf("expected prefix %q, got %q", base, got)
 	}
-	if !strings.Contains(got, "## Current Date/Time") {
-		t.Fatalf("expected datetime section in %q", got)
+	if !strings.Contains(got, "## Date and Time\nThis conversation started on ") {
+		t.Fatalf("expected date and time section in %q", got)
 	}
 	if !strings.Contains(got, "## Operating System") {
 		t.Fatalf("expected operating system section in %q", got)
 	}
 	custom := "Be brief."
-	got = FullSystemPrompt(base, custom, "")
+	got = FullSystemPrompt(base, custom, "", time.Now())
 	if !strings.HasPrefix(got, base) {
 		t.Fatalf("expected prefix %q", base)
 	}
@@ -331,5 +333,157 @@ func TestWithoutToolSearchesDropsSearchCallsAndResults(t *testing.T) {
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestDateTimeSectionStaysFixedForTheChat(t *testing.T) {
+	started := time.Date(2026, 11, 25, 8, 1, 2, 0, time.Local)
+	first := dateTimeSection(started, started)
+	later := dateTimeSection(started, started.Add(9*time.Hour))
+	if first != later {
+		t.Fatalf("the prompt changed within a day, which defeats prompt caching: %q vs %q", first, later)
+	}
+	if !strings.Contains(first, "Wednesday, 25 November 2026 at 08:01") || strings.Contains(first, "Today is") {
+		t.Fatalf("section = %q", first)
+	}
+
+	nextDay := dateTimeSection(started, started.Add(24*time.Hour))
+	if !strings.HasPrefix(nextDay, first) || !strings.HasSuffix(nextDay, " Today is Thursday, 26 November 2026.") {
+		t.Fatalf("a chat continued the next day should also name today: %q", nextDay)
+	}
+	if dateTimeSection(started, started.Add(30*time.Hour)) != nextDay {
+		t.Fatal("the prompt changed within the next day")
+	}
+}
+
+// echoTool is a tool that returns its name, for driving the tool loop in tests.
+type echoTool struct{ calls *int }
+
+func (e echoTool) Definition() tools.Definition {
+	return tools.Definition{Name: "echo", Description: "echo", Parameters: map[string]any{"type": "object"}}
+}
+
+func (e echoTool) Execute(string) (string, error) {
+	*e.calls++
+	return "echoed", nil
+}
+
+func TestStreamingChatStopsCallingToolsAtTheLimit(t *testing.T) {
+	var (
+		mu          sync.Mutex
+		toolChoices []any
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		toolChoices = append(toolChoices, body["tool_choice"])
+		n := len(toolChoices)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		// A model that never stops calling tools, and ignores tool_choice "none": two
+		// calls per request.
+		writeSSE(w, fmt.Sprintf(`{"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"step ","tool_calls":[{"index":0,"id":"a%[1]d","type":"function","function":{"name":"echo","arguments":"{}"}},{"index":1,"id":"b%[1]d","type":"function","function":{"name":"echo","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}`, n))
+		writeSSE(w, `[DONE]`)
+	}))
+	defer server.Close()
+
+	calls := 0
+	registry := tools.NewRegistry()
+	registry.Register(echoTool{calls: &calls})
+	client := openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test"), option.WithMaxRetries(0))
+
+	generated, err := StreamingChat(context.Background(), client, "loop-test", registry,
+		[]shared.Message{{Role: "user", Content: "loop forever"}}, nil, "sys", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != MaxToolCallsPerReply {
+		t.Fatalf("ran %d tool calls, want the limit of %d", calls, MaxToolCallsPerReply)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	// 25 requests run two calls each, then one more request must answer without tools.
+	if want := MaxToolCallsPerReply/2 + 1; len(toolChoices) != want {
+		t.Fatalf("sent %d requests, want %d", len(toolChoices), want)
+	}
+	if toolChoices[0] != nil || toolChoices[len(toolChoices)-1] != "none" {
+		t.Fatalf("tool_choice first=%v last=%v, want unset then none", toolChoices[0], toolChoices[len(toolChoices)-1])
+	}
+	last := generated[len(generated)-1]
+	if last.Role != "assistant" || last.ToolCalls != "" || last.Content != "step " {
+		t.Fatalf("turn should end with a text reply, got %+v", last)
+	}
+}
+
+func TestStreamingChatKeepsTheToolLimitForTheWholeBatch(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "text/event-stream")
+		if requests > 1 {
+			writeSSE(w, `{"id":"2","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}`)
+			writeSSE(w, `[DONE]`)
+			return
+		}
+		var parts []string
+		for i := 0; i < MaxToolCallsPerReply+3; i++ {
+			parts = append(parts, fmt.Sprintf(`{"index":%d,"id":"c%d","type":"function","function":{"name":"echo","arguments":"{}"}}`, i, i))
+		}
+		writeSSE(w, `{"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[`+strings.Join(parts, ",")+`]},"finish_reason":"tool_calls"}]}`)
+		writeSSE(w, `[DONE]`)
+	}))
+	defer server.Close()
+
+	calls := 0
+	registry := tools.NewRegistry()
+	registry.Register(echoTool{calls: &calls})
+	client := openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test"), option.WithMaxRetries(0))
+
+	generated, err := StreamingChat(context.Background(), client, "batch-limit-test", registry,
+		[]shared.Message{{Role: "user", Content: "many at once"}}, nil, "sys", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != MaxToolCallsPerReply {
+		t.Fatalf("ran %d tool calls, want %d", calls, MaxToolCallsPerReply)
+	}
+	var notRun int
+	for _, m := range generated {
+		if m.Role == "tool" && m.Content == toolLimitResult {
+			notRun++
+		}
+	}
+	if notRun != 3 {
+		t.Fatalf("%d calls got the limit result, want 3", notRun)
+	}
+}
+
+func TestStreamingChatReturnsThePartialReplyWhenCancelled(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeSSE(w, `{"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"Once upon "},"finish_reason":null}]}`)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test"), option.WithMaxRetries(0))
+	onChunk := func(string) { cancel() }
+
+	generated, err := StreamingChat(ctx, client, "cancel-test", nil,
+		[]shared.Message{{Role: "user", Content: "tell me a story"}}, nil, "sys", onChunk, nil, nil, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if len(generated) != 1 || generated[0].Role != "assistant" || generated[0].Content != "Once upon " {
+		t.Fatalf("generated = %+v, want the partial reply", generated)
 	}
 }

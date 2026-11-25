@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -54,6 +55,10 @@ func (ReadFileTool) Definition() Definition {
 }
 
 func (r ReadFileTool) Execute(argsJSON string) (string, error) {
+	return r.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (r ReadFileTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Path   string `json:"path"`
 		Offset int    `json:"offset"`
@@ -63,11 +68,11 @@ func (r ReadFileTool) Execute(argsJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
-	args.Path = filepath.Clean(strings.TrimSpace(args.Path))
-	if !filepath.IsAbs(args.Path) {
-		return "File read error: path must be absolute", nil
+	path, err := fileAccessFrom(ctx).Resolve(args.Path)
+	if err != nil {
+		return fmt.Sprintf("File read error: %v", err), nil
 	}
-	result, err := r.read(args.Path, args.Offset, args.Limit, args.Sheet)
+	result, err := r.read(path, args.Offset, args.Limit, args.Sheet)
 	if err != nil {
 		return fmt.Sprintf("File read error: %v", err), nil
 	}

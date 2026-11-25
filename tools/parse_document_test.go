@@ -34,7 +34,7 @@ func TestParseDocumentToolPlainText(t *testing.T) {
 		t.Fatal(err)
 	}
 	var p ParseDocumentTool
-	s, err := p.Execute(string(payload))
+	s, err := p.ExecuteContext(openFiles(t), string(payload))
 	if err != nil {
 		t.Fatal(err)
 	}

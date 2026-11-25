@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -57,7 +58,11 @@ func (ShowFileTreeTool) Definition() Definition {
 	}
 }
 
-func (ShowFileTreeTool) Execute(argsJSON string) (string, error) {
+func (t ShowFileTreeTool) Execute(argsJSON string) (string, error) {
+	return t.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (ShowFileTreeTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Path   string   `json:"path"`
 		Depth  int      `json:"depth"`
@@ -101,16 +106,20 @@ func (ShowFileTreeTool) Execute(argsJSON string) (string, error) {
 		}
 	}
 
-	out, err := buildFileTree(args.Path, depth, offset, limit, ignoredSet)
+	out, err := buildFileTree(fileAccessFrom(ctx), args.Path, depth, offset, limit, ignoredSet)
 	if err != nil {
 		return fmt.Sprintf("File tree error: %v", err), nil
 	}
 	return out, nil
 }
 
-func buildFileTree(root string, maxDepth, offset, limit int, ignoredSet map[string]bool) (string, error) {
+func buildFileTree(access FileAccess, root string, maxDepth, offset, limit int, ignoredSet map[string]bool) (string, error) {
 	absRoot, err := newFileTreePathPolicy().ValidateRoot(root)
 	if err != nil {
+		return "", err
+	}
+	// Even a specific folder may only be listed when it was given to the chat.
+	if _, err := access.Resolve(absRoot); err != nil {
 		return "", err
 	}
 	st, err := os.Stat(absRoot)

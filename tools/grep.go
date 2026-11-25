@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -59,6 +60,10 @@ type grepMatch struct {
 }
 
 func (t GrepTool) Execute(argsJSON string) (string, error) {
+	return t.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (t GrepTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Pattern         string `json:"pattern"`
 		Path            string `json:"path"`
@@ -89,13 +94,21 @@ func (t GrepTool) Execute(argsJSON string) (string, error) {
 
 	var matches []grepMatch
 
-	info, err := os.Stat(args.Path)
+	access := fileAccessFrom(ctx)
+	root, err := access.Resolve(args.Path)
+	if err != nil {
+		return fmt.Sprintf("Error accessing path: %v", err), nil
+	}
+	info, err := os.Stat(root)
 	if err != nil {
 		return fmt.Sprintf("Error accessing path: %v", err), nil
 	}
 
 	if info.IsDir() {
-		err := filepath.Walk(args.Path, func(path string, fi os.FileInfo, err error) error {
+		err := filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			if err != nil {
 				return nil
 			}
@@ -108,6 +121,13 @@ func (t GrepTool) Execute(argsJSON string) (string, error) {
 			if args.FilePattern != "" && !matchesAnyPattern(filePatterns, fi.Name()) {
 				return nil
 			}
+			// Walk does not follow symlinks, but opening one would: it must not lead out
+			// of what may be read.
+			if fi.Mode()&os.ModeSymlink != 0 {
+				if _, err := access.Resolve(path); err != nil {
+					return nil
+				}
+			}
 			t.searchInFile(path, re, &matches, args.MaxMatches)
 			return nil
 		})
@@ -115,7 +135,7 @@ func (t GrepTool) Execute(argsJSON string) (string, error) {
 			return fmt.Sprintf("Error walking directory: %v", err), nil
 		}
 	} else {
-		t.searchInFile(args.Path, re, &matches, args.MaxMatches)
+		t.searchInFile(root, re, &matches, args.MaxMatches)
 	}
 
 	if len(matches) == 0 {

@@ -50,7 +50,7 @@ func TestGrepCaseInsensitiveFlagNotCorrupted(t *testing.T) {
 		"path":             f,
 		"case_insensitive": false,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestGrepCaseInsensitive(t *testing.T) {
 		"path":             f,
 		"case_insensitive": true,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestGrepMaxMatches(t *testing.T) {
 		"path":        f,
 		"max_matches": 50,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestGrepBraceExpansion(t *testing.T) {
 		"path":         dir,
 		"file_pattern": "*.{ts,tsx}",
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestGrepSkipsGitDir(t *testing.T) {
 		"pattern": "needle",
 		"path":    dir,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestGlobNoDoublestar(t *testing.T) {
 		"pattern":  "*.go",
 		"base_dir": dir,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestGlobDoublestar(t *testing.T) {
 		"pattern":  "**/*.go",
 		"base_dir": dir,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestGlobDoublestarSkipsGitDir(t *testing.T) {
 		"pattern":  "**",
 		"base_dir": dir,
 	})
-	out, err := g.Execute(string(argsJSON))
+	out, err := g.ExecuteContext(openFiles(t), string(argsJSON))
 	if err != nil {
 		t.Fatal(err)
 	}

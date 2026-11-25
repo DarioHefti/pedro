@@ -102,6 +102,6 @@ func (p *Provider) Chat(ctx context.Context, messages []shared.Message, imageDat
 	if base == "" {
 		base = shared.DefaultSystemPrompt
 	}
-	prompt := openaiutil.FullSystemPrompt(base, p.customSystemPrompt, p.memoryContext)
+	prompt := openaiutil.FullSystemPrompt(base, p.customSystemPrompt, p.memoryContext, shared.ChatStart(ctx))
 	return openaiutil.StreamingChat(ctx, p.client, p.config.Model, p.registry, messages, imageDataURLs, prompt, onChunk, onToolCall, onRequestDone, onRequestCaptured)
 }

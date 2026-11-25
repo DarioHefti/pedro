@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -44,7 +45,11 @@ func (ParseDocumentTool) Definition() Definition {
 	}
 }
 
-func (ParseDocumentTool) Execute(argsJSON string) (string, error) {
+func (p ParseDocumentTool) Execute(argsJSON string) (string, error) {
+	return p.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (ParseDocumentTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Path   string `json:"path"`
 		Offset int    `json:"offset"`
@@ -54,10 +59,11 @@ func (ParseDocumentTool) Execute(argsJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err), nil
 	}
-	args.Path = filepath.Clean(strings.TrimSpace(args.Path))
-	if !filepath.IsAbs(args.Path) {
-		return "Document parse error: path must be absolute", nil
+	path, err := fileAccessFrom(ctx).Resolve(args.Path)
+	if err != nil {
+		return fmt.Sprintf("Document parse error: %v", err), nil
 	}
+	args.Path = path
 	if args.Offset < 1 {
 		args.Offset = 1
 	}
@@ -67,7 +73,6 @@ func (ParseDocumentTool) Execute(argsJSON string) (string, error) {
 
 	ext := strings.ToLower(filepath.Ext(args.Path))
 	var res *documentparser.Result
-	var err error
 
 	switch ext {
 	case ".xlsx", ".xls", ".xlsm":

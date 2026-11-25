@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +23,16 @@ import (
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
+
+const (
+	// releaseDownloadPrefix is where Pedro's release files are served; the updater downloads
+	// nothing from anywhere else.
+	releaseDownloadPrefix = "https://github.com/DarioHefti/pedro/releases/download/"
+	// checksumsAssetName is the release file listing the SHA-256 of every other release file.
+	checksumsAssetName = "SHA256SUMS"
+	// maxChecksumsBytes bounds the checksum file download.
+	maxChecksumsBytes = 1 << 20
+)
 
 type githubRelease struct {
 	TagName string        `json:"tag_name"`
@@ -113,19 +127,29 @@ func (u *Updater) DownloadAndInstall(assetURL, assetName string) error {
 	}()
 
 	u.logUpdate("Starting download and install process")
-	tmpDir := os.TempDir()
-	destPath := filepath.Join(tmpDir, assetName)
+	// The name comes from the URL, not from assetName: both arrive from the frontend, and
+	// only a file of one of Pedro's releases may be downloaded and run.
+	name, checksumsURL, err := releaseAssetURLs(assetURL)
+	if err != nil {
+		u.logUpdate(fmt.Sprintf("Refusing update download: %v", err))
+		runtime.EventsEmit(u.ctx, "update_progress", -1, "error")
+		return err
+	}
+	if name != assetName {
+		u.logUpdate(fmt.Sprintf("Asset name %q differs from the URL's %q; using the URL's", assetName, name))
+	}
+	destPath := filepath.Join(os.TempDir(), name)
 
 	u.logUpdate(fmt.Sprintf("Downloading from: %s", assetURL))
 	runtime.EventsEmit(u.ctx, "update_progress", 0, "downloading")
 
-	if err := downloadFile(u.ctx, assetURL, destPath); err != nil {
+	if err := downloadVerified(u.ctx, assetURL, checksumsURL, name, destPath); err != nil {
 		u.logUpdate(fmt.Sprintf("Download failed: %v", err))
 		runtime.EventsEmit(u.ctx, "update_progress", -1, "error")
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	u.logUpdate("Download successful")
+	u.logUpdate("Download successful, SHA-256 verified")
 	runtime.EventsEmit(u.ctx, "update_progress", 100, "installing")
 
 	u.logUpdate(fmt.Sprintf("Launching installer: %s", destPath))
@@ -223,14 +247,98 @@ func pickAsset(assets []githubAsset) *githubAsset {
 	return nil
 }
 
-func downloadFile(ctx context.Context, url, dest string) error {
+// releaseAssetURLs checks that assetURL is a file of one of Pedro's GitHub releases and
+// returns the file's name and the URL of that release's checksum file.
+func releaseAssetURLs(assetURL string) (name, checksumsURL string, err error) {
+	if len(assetURL) <= len(releaseDownloadPrefix) || !strings.EqualFold(assetURL[:len(releaseDownloadPrefix)], releaseDownloadPrefix) {
+		return "", "", fmt.Errorf("not a Pedro release download: %s", assetURL)
+	}
+	tag, name, ok := strings.Cut(assetURL[len(releaseDownloadPrefix):], "/")
+	if !ok || tag == "" || name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\?#%") {
+		return "", "", fmt.Errorf("not a Pedro release download: %s", assetURL)
+	}
+	return name, assetURL[:len(releaseDownloadPrefix)] + tag + "/" + checksumsAssetName, nil
+}
+
+// downloadVerified downloads assetURL to dest and checks its SHA-256 against the one the
+// release's checksum file lists for name. A file that does not match is deleted.
+func downloadVerified(ctx context.Context, assetURL, checksumsURL, name, dest string) error {
+	want, err := expectedChecksum(ctx, checksumsURL, name)
+	if err != nil {
+		return fmt.Errorf("cannot verify the update: %w", err)
+	}
+	got, err := downloadFile(ctx, assetURL, dest)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(got, want) {
+		_ = os.Remove(dest)
+		return fmt.Errorf("the downloaded %s is not the published file (SHA-256 %s, expected %s)", name, got, want)
+	}
+	return nil
+}
+
+// expectedChecksum fetches a release's checksum file and returns the SHA-256 it lists for name.
+func expectedChecksum(ctx context.Context, checksumsURL, name string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", checksumsURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Pedro-Updater/"+Version)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("the release has no %s file (status %d)", checksumsAssetName, resp.StatusCode)
+	}
+	sums, err := parseChecksums(io.LimitReader(resp.Body, maxChecksumsBytes))
+	if err != nil {
+		return "", err
+	}
+	sum, ok := sums[name]
+	if !ok {
+		return "", fmt.Errorf("%s lists no checksum for %s", checksumsAssetName, name)
+	}
+	return sum, nil
+}
+
+// parseChecksums reads sha256sum output: one "<hex>  <name>" line per file ("*<name>" in
+// binary mode).
+func parseChecksums(r io.Reader) (map[string]string, error) {
+	sums := map[string]string{}
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) != 2 {
+			continue
+		}
+		sum, name := strings.ToLower(fields[0]), strings.TrimPrefix(fields[1], "*")
+		if decoded, err := hex.DecodeString(sum); err != nil || len(decoded) != sha256.Size {
+			continue
+		}
+		sums[name] = sum
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(sums) == 0 {
+		return nil, errors.New(checksumsAssetName + " lists no checksums")
+	}
+	return sums, nil
+}
+
+// downloadFile downloads url to dest and returns the file's SHA-256 as hex.
+func downloadFile(ctx context.Context, url, dest string) (string, error) {
 	if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove stale download: %w", err)
+		return "", fmt.Errorf("remove stale download: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("User-Agent", "Pedro-Updater/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
@@ -238,31 +346,32 @@ func downloadFile(ctx context.Context, url, dest string) error {
 	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
 	f, err := os.Create(dest)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer f.Close()
 
-	written, err := io.Copy(f, resp.Body)
+	hash := sha256.New()
+	written, err := io.Copy(io.MultiWriter(f, hash), resp.Body)
 	if err != nil {
 		_ = os.Remove(dest)
-		return err
+		return "", err
 	}
 	if written == 0 {
 		_ = os.Remove(dest)
-		return fmt.Errorf("download returned empty file")
+		return "", fmt.Errorf("download returned empty file")
 	}
 
-	return nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // isNewerVersion returns true if latest > current (simple semver comparison).
@@ -286,7 +395,8 @@ func isNewerVersion(current, latest string) bool {
 }
 
 func logUpdate(message string) {
-	f, err := os.OpenFile("updater.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// In Pedro's data folder: a relative path would land in whatever folder Pedro was started from.
+	f, err := os.OpenFile(filepath.Join(appDataDir(), "updater.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}

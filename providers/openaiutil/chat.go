@@ -69,11 +69,27 @@ func userFacingShellHint() string {
 	}
 }
 
+// dateTimeSection tells the model when the conversation started. It is fixed for the whole
+// chat on purpose: the system prompt is the start of every request and providers cache prompts
+// by exact prefix, so a clock here would make every turn miss the cache. Only when the chat
+// goes on past the day it started is today's date added, which changes the prompt at most
+// once a day.
+func dateTimeSection(started, now time.Time) string {
+	started, now = started.In(time.Local), now.In(time.Local)
+	out := fmt.Sprintf("This conversation started on %s at %s (time zone %s, UTC%s); the current time may be later.",
+		started.Format("Monday, 2 January 2006"), started.Format("15:04"), started.Format("MST"), started.Format("-07:00"))
+	if sy, sm, sd := started.Date(); !(now.Year() == sy && now.Month() == sm && now.Day() == sd) {
+		out += " Today is " + now.Format("Monday, 2 January 2006") + "."
+	}
+	return out
+}
+
 // FullSystemPrompt builds the final system prompt from the base instructions,
-// optional custom instructions, and optional memory context.
-func FullSystemPrompt(base, custom, memoryCtx string) string {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05 MST")
-	out := base + "\n\n## Current Date/Time\nCurrent UTC datetime: " + now
+// optional custom instructions, and optional memory context. started is when the
+// conversation began (see dateTimeSection): it keeps the prompt identical across the turns
+// of a chat, so providers can reuse their prompt cache.
+func FullSystemPrompt(base, custom, memoryCtx string, started time.Time) string {
+	out := base + "\n\n## Date and Time\n" + dateTimeSection(started, time.Now())
 	out += fmt.Sprintf(
 		"\n\n## Operating System\nThe user is running Pedro on %s (%s/%s). When suggesting terminal commands, file paths, keyboard shortcuts, or other OS-specific steps, use conventions appropriate for this operating system. Default shell: %s.",
 		userFacingOSName(),
@@ -190,8 +206,22 @@ func BuildMessages(messages []shared.Message, imageDataURLs []string, systemProm
 	return result
 }
 
+// MaxToolCallsPerReply caps the tool calls one reply may run. A model that keeps calling tools
+// would otherwise loop, and pay for every request, until it is stopped by hand.
+const MaxToolCallsPerReply = 50
+
+// toolLimitResult is what a tool call past MaxToolCallsPerReply gets instead of running.
+var toolLimitResult = fmt.Sprintf("Not run: this reply already used the limit of %d tool calls. Do not call more tools; answer now with what you have, and say what is still missing.", MaxToolCallsPerReply)
+
+// stoppedResult is what the tool calls left in a batch get once the reply has been stopped.
+const stoppedResult = "Not run: the user stopped the reply."
+
 // StreamingChat runs an OpenAI-compatible streaming chat loop with tool calling.
 // This is the shared "engine" used by all providers that speak the OpenAI protocol.
+//
+// It returns the messages the turn generated. When the stream fails or ctx is cancelled it
+// still returns what was generated until then, ending with the partly streamed reply, so the
+// caller can keep it.
 func StreamingChat(
 	ctx context.Context,
 	client openai.Client,
@@ -213,8 +243,10 @@ func StreamingChat(
 	unlockedTools := toolsCalledInHistory(messages)
 	apiMessages := BuildMessages(withoutToolSearches(messages), imageDataURLs, systemPrompt)
 	toolDefs := toolDefinitionsWith(registry, unlockedTools)
+	toolCallsRun := 0
 
 	for {
+		limitReached := toolCallsRun >= MaxToolCallsPerReply
 		params := openai.ChatCompletionNewParams{
 			Model:    openai.ChatModel(model),
 			Messages: apiMessages,
@@ -228,6 +260,11 @@ func StreamingChat(
 		if len(toolDefs) > 0 && requiresReasoningNone(model) {
 			params.ReasoningEffort = reasoningEffortNone
 		}
+		if limitReached && len(toolDefs) > 0 {
+			// The tools stay listed, so the request still matches the tool calls in the
+			// history, but the model must answer in text now.
+			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{OfAuto: openai.String("none")}
+		}
 
 		// Capture the exact HTTP request body about to be sent to the provider.
 		if onRequestCaptured != nil {
@@ -238,12 +275,17 @@ func StreamingChat(
 
 		stream := client.Chat.Completions.NewStreaming(ctx, params)
 		acc := openai.ChatCompletionAccumulator{}
+		var streamed strings.Builder
 
 		for stream.Next() {
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 			for _, choice := range chunk.Choices {
-				if choice.Delta.Content != "" && onChunk != nil {
+				if choice.Delta.Content == "" {
+					continue
+				}
+				streamed.WriteString(choice.Delta.Content)
+				if onChunk != nil {
 					onChunk(choice.Delta.Content)
 				}
 			}
@@ -256,6 +298,10 @@ func StreamingChat(
 			if len(toolDefs) > 0 && params.ReasoningEffort == "" && len(acc.Choices) == 0 && isToolReasoningConflict(err) {
 				markRequiresReasoningNone(model)
 				continue
+			}
+			// Keep what the person already saw stream in, e.g. when they stopped the reply.
+			if partial := streamed.String(); strings.TrimSpace(partial) != "" {
+				generated = append(generated, shared.Message{Role: "assistant", Content: partial})
 			}
 			return generated, fmt.Errorf("streaming error: %w", err)
 		}
@@ -274,8 +320,9 @@ func StreamingChat(
 		}
 
 		msg := acc.Choices[0].Message
-		if len(msg.ToolCalls) == 0 {
-			// Final assistant text message.
+		if len(msg.ToolCalls) == 0 || limitReached {
+			// Final assistant text message. Past the limit, tool calls are dropped even when
+			// a provider ignores tool_choice "none", so the loop always ends.
 			generated = append(generated, shared.Message{
 				Role:    "assistant",
 				Content: msg.Content,
@@ -305,13 +352,23 @@ func StreamingChat(
 		apiMessages = append(apiMessages, msg.ToParam())
 
 		for _, tc := range msg.ToolCalls {
-			if onToolCall != nil {
-				onToolCall(tc.Function.Name, tc.Function.Arguments, tc.ID)
-			}
-			result := registry.ExecuteContext(ctx, tc.Function.Name, tc.Function.Arguments)
-
-			if tc.Function.Name == tools.ToolSearchToolName {
-				handleToolSearchResult(result, unlockedTools)
+			// Every call gets a result, even one that does not run: the API rejects tool
+			// calls without a matching tool message.
+			var result string
+			switch {
+			case ctx.Err() != nil:
+				result = stoppedResult
+			case toolCallsRun >= MaxToolCallsPerReply:
+				result = toolLimitResult
+			default:
+				toolCallsRun++
+				if onToolCall != nil {
+					onToolCall(tc.Function.Name, tc.Function.Arguments, tc.ID)
+				}
+				result = registry.ExecuteContext(ctx, tc.Function.Name, tc.Function.Arguments)
+				if tc.Function.Name == tools.ToolSearchToolName {
+					handleToolSearchResult(result, unlockedTools)
+				}
 			}
 
 			apiMessages = append(apiMessages, openai.ToolMessage(result, tc.ID))

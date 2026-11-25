@@ -122,7 +122,7 @@ func TestShowFileTreeSpecificFolderAndPagination(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out, err := tool.Execute(string(args))
+		out, err := tool.ExecuteContext(openFiles(t), string(args))
 		if err != nil || !strings.Contains(out, tc.want) || strings.Contains(out, tc.absent) {
 			t.Fatalf("expected successful paginated folder listing, got %q, %v", out, err)
 		}

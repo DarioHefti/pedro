@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +14,7 @@ import (
 
 	"pedro/media"
 	"pedro/shared"
+	"pedro/tools"
 )
 
 // ---------------------------------------------------------------- test doubles
@@ -57,12 +61,14 @@ type scriptedTurn struct {
 type fakeLLM struct {
 	turns        []scriptedTurn
 	seen         [][]shared.Message
+	ctxs         []context.Context
 	memory       string
 	streamedOnce chan struct{}
 }
 
 func (f *fakeLLM) Chat(ctx context.Context, messages []shared.Message, _ []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(shared.RequestUsage), onRequestCaptured func(shared.CapturedRequest)) ([]shared.Message, error) {
 	f.seen = append(f.seen, messages)
+	f.ctxs = append(f.ctxs, ctx)
 	if len(f.turns) == 0 {
 		return nil, errors.New("fakeLLM: no scripted turn left")
 	}
@@ -85,8 +91,9 @@ func (f *fakeLLM) Chat(ctx context.Context, messages []shared.Message, _ []strin
 			onRequestDone(shared.RequestUsage{PromptTokens: 100, CompletionTokens: 10})
 		}
 	}
+	// Like a real provider, a failed turn returns what it generated before failing.
 	if turn.err != nil {
-		return nil, turn.err
+		return generated, turn.err
 	}
 	var text strings.Builder
 	for _, c := range turn.chunks {
@@ -98,7 +105,7 @@ func (f *fakeLLM) Chat(ctx context.Context, messages []shared.Message, _ []strin
 			close(f.streamedOnce)
 		}
 		<-ctx.Done()
-		return nil, ctx.Err()
+		return append(generated, shared.Message{Role: "assistant", Content: text.String()}), ctx.Err()
 	}
 	if onRequestCaptured != nil {
 		body, _ := json.Marshal(map[string]any{"model": "fake-model", "messages": messages})
@@ -255,9 +262,13 @@ func TestApp_SendMessage_ToADeletedConversationFails(t *testing.T) {
 	}
 }
 
-func TestApp_AbortMessage_ReturnsThePartialReplyAndStoresNothing(t *testing.T) {
+func TestApp_AbortMessage_KeepsThePartialReply(t *testing.T) {
 	streamed := make(chan struct{})
-	app, llm, _ := newTestApp(t, scriptedTurn{chunks: []string{"Once ", "upon "}, blockUntilCancelled: true})
+	app, llm, _ := newTestApp(t, scriptedTurn{
+		toolCalls:           []toolCallRecord{{Name: "web_search", ArgsJSON: `{"query":"story"}`, ID: "c1"}},
+		chunks:              []string{"Once ", "upon "},
+		blockUntilCancelled: true,
+	})
 	llm.streamedOnce = streamed
 	conv := app.CreateConversation()
 
@@ -279,8 +290,74 @@ func TestApp_AbortMessage_ReturnsThePartialReplyAndStoresNothing(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("abort did not end the reply")
 	}
-	if got := rows(t, app, conv.ID); len(got) != 1 {
-		t.Fatalf("stored = %#v, want the question only", got)
+	msgs := app.GetMessages(conv.ID)
+	if len(msgs) != 4 {
+		t.Fatalf("stored %d messages, want question, tool call, tool result, partial reply: %#v", len(msgs), msgs)
+	}
+	if msgs[1].ToolCalls == "" || msgs[2].ToolCallID != "c1" || msgs[3].Role != "assistant" || msgs[3].Content != "Once upon " {
+		t.Fatalf("stored = %#v", msgs)
+	}
+}
+
+func TestApp_SendMessage_ProviderErrorKeepsTheToolsThatRan(t *testing.T) {
+	app, _, _ := newTestApp(t, scriptedTurn{
+		toolCalls: []toolCallRecord{{Name: "web_search", ArgsJSON: `{"query":"x"}`, ID: "c1"}},
+		err:       errors.New("connection reset"),
+	})
+	conv := app.CreateConversation()
+
+	if got := app.SendMessage(conv.ID, "Search for x", ""); got != "Error: connection reset" {
+		t.Fatalf("reply = %q", got)
+	}
+	msgs := app.GetMessages(conv.ID)
+	if len(msgs) != 3 || msgs[1].ToolCalls == "" || msgs[2].ToolCallID != "c1" {
+		t.Fatalf("stored = %#v, want the question and the tool round-trip", msgs)
+	}
+}
+
+func TestApp_PromptTimeIsWhenTheChatStarted(t *testing.T) {
+	app, llm, _ := newTestApp(t, reply("one"), reply("two"))
+	conv := app.CreateConversation()
+	before := time.Now().Add(-2 * time.Second)
+	app.SendMessage(conv.ID, "first", "")
+	app.SendMessage(conv.ID, "second", "")
+
+	first, second := shared.ChatStart(llm.ctxs[0]), shared.ChatStart(llm.ctxs[1])
+	if !first.Equal(second) {
+		t.Fatalf("turns got different start times %v and %v; the prompt would change every turn", first, second)
+	}
+	// Stored in UTC by SQLite: it must still read as the actual moment, not shifted by the zone.
+	if first.Before(before) || first.After(time.Now().Add(2*time.Second)) {
+		t.Fatalf("start time %v is not when the chat started (around %v)", first, before)
+	}
+	if want := app.GetMessages(conv.ID)[0].CreatedAt; !first.Equal(want) {
+		t.Fatalf("start time %v, want the first message's %v", first, want)
+	}
+}
+
+func TestApp_FileToolsReadOnlyWhatTheChatWasGiven(t *testing.T) {
+	dir := t.TempDir()
+	attached := filepath.Join(dir, "attached.txt")
+	other := filepath.Join(dir, "other.txt")
+	for _, p := range []string{attached, other} {
+		if err := os.WriteFile(p, []byte("contents of "+filepath.Base(p)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app, llm, _ := newTestApp(t, reply("ok"))
+	conv := app.CreateConversation()
+	atts, _ := json.Marshal([]map[string]string{{"type": "file-ref", "content": attached, "name": "attached.txt"}})
+	app.SendMessage(conv.ID, "Summarize this", string(atts))
+
+	read := func(path string) string {
+		out, _ := tools.NewReadFileTool().ExecuteContext(llm.ctxs[0], `{"path":`+strconv.Quote(path)+`}`)
+		return out
+	}
+	if out := read(attached); !strings.Contains(out, "contents of attached.txt") {
+		t.Errorf("attached file: %q", out)
+	}
+	if out := read(other); !strings.Contains(out, "access denied") {
+		t.Errorf("a file that was not attached was readable: %q", out)
 	}
 }
 

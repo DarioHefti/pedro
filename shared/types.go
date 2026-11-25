@@ -13,6 +13,9 @@ type SettingsStore interface {
 }
 
 type LLMClient interface {
+	// Chat streams one reply and returns the messages the turn generated (tool calls, their
+	// results, the reply). When it fails or ctx is cancelled it returns the error together with
+	// what was generated until then, ending with the partly streamed reply if there is one.
 	Chat(ctx context.Context, messages []Message, imageDataURLs []string, onChunk func(string), onToolCall func(name, argsJSON, id string), onRequestDone func(RequestUsage), onRequestCaptured func(CapturedRequest)) ([]Message, error)
 	SetBaseSystemPrompt(prompt string)
 	SetCustomSystemPrompt(prompt string)
@@ -127,6 +130,8 @@ Use tool_search to load any of the following tools before using them:
 | transcribe_audio | Transcribe local audio; long MP3s are split automatically, and long transcripts are saved to a local file |
 
 **Web research:** search with web_search, then read the best results with webclaw. Long pages are returned in parts; instead of reading every part, use web_find with the page URL to find the relevant passage, then webclaw with the offset it gives to read on from there. Use site_search when the answer is somewhere on a known website, and browser only when a page needs interaction (forms, buttons, menus, a site's own search).
+
+**Local files:** read_file, parse_document, show_file_tree, glob and grep can only read files and folders the user attached to this chat or wrote the path of in a message. To read anything else, ask the user to attach it.
 
 **Images and audio:** When the user asks you to create, draw or generate an image, use generate_image and include the markdown image line it returns in your reply so the image is shown. There is no separate image editing tool: to change an existing image (one the user attached or one generated earlier), call generate_image with the requested change as prompt and the image's file path in images. When the user attaches an audio file or asks for a transcript, use transcribe_audio with the file path.
 

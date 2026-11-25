@@ -189,7 +189,7 @@ test.describe('chatting', () => {
     await expect(pedro.replies).toHaveCount(0)
   })
 
-  test('stop ends a reply early and keeps only the question', async ({ pedro }) => {
+  test('stop ends a reply early and keeps what was written so far', async ({ pedro }) => {
     await pedro.open()
     await pedro.queueReply({ ...SLOW_REPLY, chunkDelayMs: 200 })
     await pedro.send('Tell me a long story')
@@ -199,10 +199,35 @@ test.describe('chatting', () => {
 
     await pedro.waitForIdle()
     await expect(pedro.userMessages).toHaveCount(1)
-    await expect(pedro.replies).toHaveCount(0)
-    expect(await pedro.calls('AbortMessage')).toHaveLength(1)
-    await pedro.ask('Are you still there?')
     await expect(pedro.replies).toHaveCount(1)
+    await expect(pedro.replyBubbles).toContainText('This')
+    await expect(pedro.replyBubbles).not.toContainText('still being written')
+    expect(await pedro.calls('AbortMessage')).toHaveLength(1)
+
+    // The partial reply is stored: it is still there after opening the chat again.
+    await pedro.shortcut('n')
+    await expect(pedro.replies).toHaveCount(0)
+    await pedro.chat('Tell me a long story').click()
+    await expect(pedro.replyBubbles).toContainText('This')
+    await pedro.ask('Are you still there?')
+    await expect(pedro.replies).toHaveCount(2)
+  })
+
+  test('stopping during a tool call keeps the tools that ran', async ({ pedro }) => {
+    await pedro.open()
+    await pedro.queueReply({
+      toolCalls: [{ name: 'web_search', args: { query: 'pedro' }, result: 'results' }],
+      text: 'Never streamed.',
+      chunkDelayMs: 1000,
+    })
+    await pedro.send('Search for pedro')
+    await expect(pedro.stopButton).toBeVisible()
+    await expect(pedro.streamingReply.getByText(/Working 1 tool/)).toBeVisible()
+    await pedro.stopButton.click()
+
+    await pedro.waitForIdle()
+    await expect(pedro.replies).toHaveCount(1)
+    await expect(pedro.replyBubbles).toHaveCount(0)
   })
 
   test('escape stops a running reply', async ({ pedro }) => {

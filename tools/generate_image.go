@@ -87,6 +87,10 @@ func (t *GenerateImageTool) Definition() Definition {
 }
 
 func (t *GenerateImageTool) Execute(argsJSON string) (string, error) {
+	return t.ExecuteContext(context.Background(), argsJSON)
+}
+
+func (t *GenerateImageTool) ExecuteContext(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Prompt  string   `json:"prompt"`
 		Images  []string `json:"images"`
@@ -105,12 +109,12 @@ func (t *GenerateImageTool) Execute(argsJSON string) (string, error) {
 	if generator == nil {
 		return "", errors.New("image generation is not configured: choose the Azure OpenAI (API Key) provider and set an image deployment in Settings")
 	}
-	sources, err := t.loadSources(args.Images)
+	sources, err := t.loadSources(fileAccessFrom(ctx), args.Images)
 	if err != nil {
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), generateImageTimeout)
+	ctx, cancel := context.WithTimeout(ctx, generateImageTimeout)
 	defer cancel()
 	img, err := generator.GenerateImage(ctx, media.ImageRequest{Prompt: prompt, Sources: sources, Size: args.Size, Quality: args.Quality})
 	if err != nil {
@@ -137,7 +141,7 @@ func (t *GenerateImageTool) Execute(argsJSON string) (string, error) {
 
 // loadSources reads the images to edit. Besides absolute paths it accepts the
 // URLs of images this tool generated earlier, as models sometimes pass those.
-func (t *GenerateImageTool) loadSources(refs []string) ([]media.SourceImage, error) {
+func (t *GenerateImageTool) loadSources(access FileAccess, refs []string) ([]media.SourceImage, error) {
 	if len(refs) > maxSourceImages {
 		return nil, fmt.Errorf("at most %d images can be edited at once", maxSourceImages)
 	}
@@ -147,9 +151,9 @@ func (t *GenerateImageTool) loadSources(refs []string) ([]media.SourceImage, err
 		if stored, ok := t.store.Lookup(path); ok {
 			path = stored
 		}
-		path = filepath.Clean(path)
-		if !filepath.IsAbs(path) {
-			return nil, fmt.Errorf("image path must be absolute: %q", ref)
+		path, err := access.Resolve(path)
+		if err != nil {
+			return nil, fmt.Errorf("image %q: %w", ref, err)
 		}
 		if ext := strings.ToLower(filepath.Ext(path)); !supportedSourceImageExts[ext] {
 			return nil, fmt.Errorf("unsupported image format %q for %s (supported: png, jpg, jpeg, webp)", ext, filepath.Base(path))

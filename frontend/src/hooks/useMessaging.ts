@@ -225,11 +225,13 @@ export function useMessaging({
     [currentConvID, thread.messages, runTurn],
   )
 
+  /**
+   * Stops the running reply. The stream stays on screen until the backend has stored what
+   * arrived so far; runTurn then swaps it for the stored reply, so nothing flickers or is lost.
+   */
   const stop = useCallback(() => {
-    void messageService.abort()
-    const convID = abortTargetRef.current
-    if (convID != null) closeStream(convID)
-  }, [closeStream])
+    if (abortTargetRef.current != null) void messageService.abort()
+  }, [])
 
   /** Deletes the question at `index` and everything after it; an emptied chat is deleted too. */
   const deleteMessage = useCallback(

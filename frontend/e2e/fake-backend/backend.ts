@@ -196,7 +196,11 @@ export function createFakeBackend(seed: FakeSeed = {}): FakeBackend {
     store.addLLMDetails(conversationID, modelName(), globalRequests, JSON.stringify({ request, response: finalText }))
   }
 
-  /** Mirrors App.runChat: streams the scripted reply, then persists it like the Go side does. */
+  /**
+   * Mirrors App.runChat: streams the scripted reply, then persists it like the Go side does.
+   * A stopped or failed reply keeps what it generated: the tool calls that ran, their results
+   * and the partly streamed text.
+   */
   async function runChat(conversationID: number): Promise<string> {
     const controller = new AbortController()
     activeRun = controller
@@ -208,6 +212,15 @@ export function createFakeBackend(seed: FakeSeed = {}): FakeBackend {
     const usage = script.usage ?? DEFAULT_USAGE
     let streamed = ''
     const toolCalls: ToolCallRecord[] = []
+
+    /** A finished reply is always stored; a cut-off one only when some text arrived (as in Go). */
+    const storeTurn = (reply: string, finished: boolean) => {
+      if (toolCalls.length > 0) {
+        store.addMessage(conversationID, 'assistant', '', '', JSON.stringify(toolCalls), '')
+        toolCalls.forEach((tc, i) => store.addMessage(conversationID, 'tool', script.toolCalls?.[i]?.result ?? 'ok', '', '', tc.id))
+      }
+      if (finished || reply.trim() !== '') store.addMessage(conversationID, 'assistant', reply)
+    }
 
     try {
       await sleep(script.firstTokenDelayMs ?? 40, controller.signal)
@@ -226,22 +239,23 @@ export function createFakeBackend(seed: FakeSeed = {}): FakeBackend {
       }
       recordRequest(conversationID, usage)
     } catch (err) {
-      // Go returns the partial reply on cancel and persists nothing beyond the user message.
-      if (err instanceof Cancelled) return streamed
-      if (err instanceof ScriptedFailure) return `Error: ${err.message}`
+      if (err instanceof Cancelled) {
+        storeTurn(streamed, false)
+        return streamed
+      }
+      if (err instanceof ScriptedFailure) {
+        storeTurn(streamed, false)
+        return `Error: ${err.message}`
+      }
       throw err
     } finally {
       if (activeRun === controller) activeRun = null
     }
 
-    if (toolCalls.length > 0) {
-      store.addMessage(conversationID, 'assistant', '', '', JSON.stringify(toolCalls), '')
-      toolCalls.forEach((tc, i) => store.addMessage(conversationID, 'tool', script.toolCalls?.[i]?.result ?? 'ok', '', '', tc.id))
-    }
     const finalText = script.text ?? ''
     // The captured payload is the last request sent, so it holds everything but the reply itself.
     recordLLMDetails(conversationID, finalText)
-    store.addMessage(conversationID, 'assistant', finalText)
+    storeTurn(finalText, true)
     return finalText
   }
 

@@ -50,6 +50,22 @@ func (p privateFileTreePathPolicy) ValidateRoot(path string) (string, error) {
 	return realPath, nil
 }
 
+// IsBroadFolder reports whether path is a filesystem root, a top-level system folder, a home
+// folder or a parent of one: folders too broad to open up by accident.
+func IsBroadFolder(path string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return true
+	}
+	if isBroadFileTreeRoot(path, home) {
+		return true
+	}
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return isBroadFileTreeRoot(real, home)
+	}
+	return false
+}
+
 func fileTreeAccessDenied() error {
 	return fmt.Errorf("access denied: show_file_tree is not allowed to list filesystem roots, top-level system directories, user home directories, or their parent directories. Do not explore the computer or retry through aliases. Ask the user for a specific folder path")
 }

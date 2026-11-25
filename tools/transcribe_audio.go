@@ -81,9 +81,9 @@ func (t *TranscribeAudioTool) ExecuteContext(ctx context.Context, argsJSON strin
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
-	path := filepath.Clean(strings.TrimSpace(args.Path))
-	if !filepath.IsAbs(path) {
-		return "", errors.New("path must be absolute")
+	path, err := fileAccessFrom(ctx).Resolve(args.Path)
+	if err != nil {
+		return "", err
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	if !supportedAudioExts[ext] {

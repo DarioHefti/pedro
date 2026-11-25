@@ -1,6 +1,8 @@
 /// <reference types="vitest/config" />
+import { execSync } from 'node:child_process'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { GENERATED_IMAGES_ROUTE, PASTED_IMAGES_ROUTE } from './src/utils/fileKinds'
 
 /**
  * Modes that run the UI against the in-browser fake Go backend (e2e/fake-backend) instead of
@@ -25,8 +27,50 @@ function fakeBackend(): Plugin {
   }
 }
 
+/**
+ * The git tag of the source tree: "v1.8.0" on the tag, "v1.8.0-3-gf60f48d" three commits later.
+ * Release builds stamp their version into the Go binary; `wails dev` builds cannot (Wails
+ * builds with -buildvcs=false) and report "dev", so the settings show this instead. Empty
+ * without git or tags, e.g. in a shallow CI checkout.
+ */
+function sourceVersion(): string {
+  try {
+    return execSync('git describe --tags', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  } catch {
+    return ''
+  }
+}
+
+/** URL prefixes the Go backend serves itself (App.assetHandler), not this dev server. */
+const BACKEND_ROUTES = [GENERATED_IMAGES_ROUTE, PASTED_IMAGES_ROUTE]
+
+/**
+ * Under `wails dev`, Wails asks this dev server for every GET and only falls back to the Go
+ * asset handler when the answer is 404. Vite's SPA fallback answers any unknown path with
+ * index.html instead, so generated and pasted images would load as HTML and never show.
+ * Answering 404 for the backend's routes hands them to Go.
+ */
+function backendRoutes(): Plugin {
+  return {
+    name: 'pedro-backend-routes',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url && BACKEND_ROUTES.some(route => req.url?.startsWith(route))) {
+          res.statusCode = 404
+          res.end()
+          return
+        }
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), ...(FAKE_BACKEND_MODES.has(mode) ? [fakeBackend()] : [])],
+  plugins: [react(), backendRoutes(), ...(FAKE_BACKEND_MODES.has(mode) ? [fakeBackend()] : [])],
+  define: {
+    __PEDRO_SOURCE_VERSION__: JSON.stringify(sourceVersion()),
+  },
   server: {
     // Test output lands inside the project; changes there must not reload a running `wails dev`.
     watch: { ignored: ['**/playwright-report/**', '**/test-results/**', '**/blob-report/**', '**/e2e/.dist/**'] },

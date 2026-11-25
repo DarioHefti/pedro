@@ -277,6 +277,9 @@ jobs:
             chmod +x release/Pedro-linux-amd64 || true
           fi
           
+          # The updater refuses a download whose SHA-256 is not listed here.
+          (cd release && sha256sum Pedro-* > SHA256SUMS && cat SHA256SUMS)
+
           echo "=== Release files ==="
           ls -la release/ || echo "Release directory is empty or does not exist"
 

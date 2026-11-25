@@ -42,7 +42,7 @@ func TestGenerateImageToolReturnsMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	tool := NewGenerateImageTool(switchWith(media.Services{Images: gen}), media.NewDirImageStore(dir, media.GeneratedImagesRoute))
 
-	out, err := tool.Execute(`{"prompt":"a [red] parrot (cartoon)","size":"1024x1024","quality":"low"}`)
+	out, err := tool.ExecuteContext(openFiles(t), `{"prompt":"a [red] parrot (cartoon)","size":"1024x1024","quality":"low"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestGenerateImageToolEditsSourceImages(t *testing.T) {
 	}
 
 	// The earlier image is referenced by its chat URL, which the tool resolves.
-	out, err := tool.Execute(`{"prompt":"replace the title with bla","images":[` + jsonString(attached) + `,` + jsonString(earlier.URL) + `]}`)
+	out, err := tool.ExecuteContext(openFiles(t), `{"prompt":"replace the title with bla","images":[` + jsonString(attached) + `,` + jsonString(earlier.URL) + `]}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestGenerateImageToolEditsSourceImages(t *testing.T) {
 func TestGeneratedImagePath(t *testing.T) {
 	store := media.NewDirImageStore(t.TempDir(), media.GeneratedImagesRoute)
 	tool := NewGenerateImageTool(switchWith(media.Services{Images: &fakeImageGenerator{}}), store)
-	out, err := tool.Execute(`{"prompt":"x"}`)
+	out, err := tool.ExecuteContext(openFiles(t), `{"prompt":"x"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestGenerateImageToolRejectsBadSources(t *testing.T) {
 		"missing":     `[` + jsonString(filepath.Join(dir, "nope.png")) + `]`,
 		"too many":    `[` + strings.TrimSuffix(strings.Repeat(jsonString(gif)+",", maxSourceImages+1), ",") + `]`,
 	} {
-		if _, err := tool.Execute(`{"prompt":"x","images":` + images + `}`); err == nil {
+		if _, err := tool.ExecuteContext(openFiles(t), `{"prompt":"x","images":` + images + `}`); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
 	}
@@ -127,10 +127,10 @@ func TestGenerateImageToolRejectsBadSources(t *testing.T) {
 
 func TestGenerateImageToolNotConfigured(t *testing.T) {
 	tool := NewGenerateImageTool(media.NewSwitch(), media.NewDirImageStore(t.TempDir(), media.GeneratedImagesRoute))
-	if _, err := tool.Execute(`{"prompt":"x"}`); err == nil || !strings.Contains(err.Error(), "not configured") {
+	if _, err := tool.ExecuteContext(openFiles(t), `{"prompt":"x"}`); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("expected not configured error, got %v", err)
 	}
-	if _, err := tool.Execute(`{"prompt":"  "}`); err == nil {
+	if _, err := tool.ExecuteContext(openFiles(t), `{"prompt":"  "}`); err == nil {
 		t.Fatal("expected error for empty prompt")
 	}
 }
@@ -154,7 +154,7 @@ func TestTranscribeAudioTool(t *testing.T) {
 	tr := &fakeTranscriber{}
 	tool := NewTranscribeAudioTool(switchWith(media.Services{Transcriber: tr}), media.NewDirTranscriptStore(t.TempDir()))
 
-	out, err := tool.Execute(`{"path":` + jsonString(path) + `,"language":"de"}`)
+	out, err := tool.ExecuteContext(openFiles(t), `{"path":` + jsonString(path) + `,"language":"de"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,13 +185,13 @@ func TestTranscribeAudioToolValidation(t *testing.T) {
 		"missing":     `{"path":` + jsonString(filepath.Join(dir, "nope.mp3")) + `}`,
 		"too large":   `{"path":` + jsonString(big) + `}`,
 	} {
-		if _, err := configured.Execute(args); err == nil {
+		if _, err := configured.ExecuteContext(openFiles(t), args); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
 	}
 
 	unconfigured := NewTranscribeAudioTool(media.NewSwitch(), store)
-	if _, err := unconfigured.Execute(`{"path":` + jsonString(ok) + `}`); err == nil || !strings.Contains(err.Error(), "not configured") {
+	if _, err := unconfigured.ExecuteContext(openFiles(t), `{"path":` + jsonString(ok) + `}`); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("expected not configured error, got %v", err)
 	}
 }

@@ -58,7 +58,7 @@ func TestTranscribeAudioToolLargeMP3(t *testing.T) {
 		}
 		return emit(strings.NewReader("chunk-0002.wav"))
 	})
-	out, err := tool.ExecuteContext(t.Context(), `{"path":`+jsonString(path)+`,"language":" de ","prompt":" names "}`)
+	out, err := tool.ExecuteContext(openFiles(t), `{"path":`+jsonString(path)+`,"language":" de ","prompt":" names "}`)
 	if err != nil || len(files) != 2 {
 		t.Fatalf("uploads %v, error %v", files, err)
 	}
@@ -101,7 +101,7 @@ func TestTranscribeAudioToolCancellationStopsChunks(t *testing.T) {
 		}
 		return emit(strings.NewReader("second"))
 	})
-	_, err := tool.ExecuteContext(ctx, `{"path":`+jsonString(path)+`}`)
+	_, err := tool.ExecuteContext(WithFileAccess(ctx, allowEverything{}), `{"path":`+jsonString(path)+`}`)
 	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "chunk 1") || uploads != 1 {
 		t.Fatalf("uploads %d, error %v", uploads, err)
 	}
