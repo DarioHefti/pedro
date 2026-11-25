@@ -128,8 +128,12 @@ jobs:
           DMG_NAME="Pedro-macos-${{ matrix.arch }}.dmg"
 
           if [ -d "$APP_PATH" ]; then
-            # hdiutil fails sporadically on hosted runners (e.g. "Resource busy"), so retry.
+            # hdiutil fails sporadically on hosted runners with "Resource busy" because
+            # XProtect scans the freshly built bundle. Stop it before each attempt and retry.
+            # See https://github.com/actions/runner-images/issues/7522
             for attempt in 1 2 3 4 5; do
+              sudo pkill -9 XProtect >/dev/null 2>&1 || true
+              while pgrep XProtect >/dev/null; do sleep 3; done
               if hdiutil create -volname "Pedro" -srcfolder "$APP_PATH" -ov -format UDZO "build/bin/$DMG_NAME"; then
                 exit 0
               fi
