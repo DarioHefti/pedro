@@ -13,7 +13,7 @@ export function DeleteAllConversations():Promise<void>;
 
 export function DeleteConversation(arg1:number):Promise<void>;
 
-export function DeleteMessage(arg1:number,arg2:number):Promise<void>;
+export function DeleteMessagesFrom(arg1:number,arg2:number):Promise<void>;
 
 export function ForgetMemory(arg1:number):Promise<void>;
 

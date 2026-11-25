@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Ellipsis, MessagesSquare, Moon, PanelLeftClose, Search, Settings, SquarePen, Sun, Trash2, X } from 'lucide-react'
 import { InputClear, InputGroup, Input } from '@ui-sdk/react/input'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@ui-sdk/react/menu'
 import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch'
 import type { Conversation, Message } from '../../services/wailsService'
 import { useTheme, type Theme } from '../../ThemeContext'
 import { Button, buttonStyle } from '../../ui/button'
@@ -30,6 +31,7 @@ interface SidebarProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 160
+const NO_MATCHES: ReadonlySet<number> = new Set()
 
 export default function Sidebar({
   conversations,
@@ -45,29 +47,12 @@ export default function Sidebar({
 }: SidebarProps) {
   const { theme, setTheme } = useTheme()
   const [query, setQuery] = useState('')
-  const [contentMatches, setContentMatches] = useState<Set<number>>(() => new Set())
-
-  useEffect(() => {
-    const q = query.trim()
-    if (!q) {
-      setContentMatches(new Set())
-      return
-    }
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      onSearch(q)
-        .then(results => {
-          if (!cancelled) setContentMatches(new Set(Object.keys(results).map(Number)))
-        })
-        .catch(() => {
-          if (!cancelled) setContentMatches(new Set())
-        })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [query, onSearch])
+  const searchContent = useCallback(
+    (q: string) => onSearch(q).then(results => new Set(Object.keys(results).map(Number))),
+    [onSearch],
+  )
+  /** Chats whose messages match the query (titles are matched locally). */
+  const contentMatches = useDebouncedSearch(query, searchContent, NO_MATCHES, { delayMs: SEARCH_DEBOUNCE_MS })
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

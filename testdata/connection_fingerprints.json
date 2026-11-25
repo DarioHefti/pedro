@@ -1,0 +1,72 @@
+[
+  {
+    "name": "compat",
+    "settings": {
+      "authenticated": "true",
+      "compat_api_key": "",
+      "compat_base_url": "http://localhost:1234/v1",
+      "compat_model": "qwen-3-coder",
+      "custom_system_prompt": "Answer briefly.",
+      "design_dark_base_color": "#6478d4",
+      "design_light_base_color": "#242f62",
+      "design_message_font_size_px": "14",
+      "design_ui_font_size_px": "13",
+      "provider_type": "compat",
+      "system_prompt": "",
+      "welcome_message": "Welcome to Pedro"
+    },
+    "fingerprint": "[[\"compat_api_key\",\"\"],[\"compat_base_url\",\"http://localhost:1234/v1\"],[\"compat_model\",\"qwen-3-coder\"],[\"custom_system_prompt\",\"Answer briefly.\"],[\"design_dark_base_color\",\"#6478d4\"],[\"design_light_base_color\",\"#242f62\"],[\"design_message_font_size_px\",\"14\"],[\"design_ui_font_size_px\",\"13\"],[\"provider_type\",\"compat\"],[\"system_prompt\",\"\"],[\"welcome_message\",\"Welcome to Pedro\"]]"
+  },
+  {
+    "name": "azure",
+    "settings": {
+      "azure_deployment": "gpt-4o",
+      "azure_endpoint": "https://contoso.openai.azure.com",
+      "azure_tenant_id": "contoso.onmicrosoft.com",
+      "custom_system_prompt": "",
+      "design_dark_base_color": "#38b2d6",
+      "design_light_base_color": "#0b5d7a",
+      "design_message_font_size_px": "16",
+      "design_ui_font_size_px": "14",
+      "provider_type": "azure",
+      "system_prompt": "You are Pedro.",
+      "welcome_message": "Hi there"
+    },
+    "fingerprint": "[[\"azure_deployment\",\"gpt-4o\"],[\"azure_endpoint\",\"https://contoso.openai.azure.com\"],[\"azure_tenant_id\",\"contoso.onmicrosoft.com\"],[\"custom_system_prompt\",\"\"],[\"design_dark_base_color\",\"#38b2d6\"],[\"design_light_base_color\",\"#0b5d7a\"],[\"design_message_font_size_px\",\"16\"],[\"design_ui_font_size_px\",\"14\"],[\"provider_type\",\"azure\"],[\"system_prompt\",\"You are Pedro.\"],[\"welcome_message\",\"Hi there\"]]"
+  },
+  {
+    "name": "azure_apikey with media turned off",
+    "settings": {
+      "azure_api_key": "secret",
+      "azure_deployment": "gpt-4.1",
+      "azure_endpoint": "https://contoso.openai.azure.com",
+      "azure_image_deployment": "",
+      "azure_transcription_deployment": "gpt-transcribe",
+      "custom_system_prompt": "",
+      "design_dark_base_color": "#6478d4",
+      "design_light_base_color": "#242f62",
+      "design_message_font_size_px": "14",
+      "design_ui_font_size_px": "13",
+      "provider_type": "azure_apikey",
+      "system_prompt": "",
+      "welcome_message": "Welcome to Pedro"
+    },
+    "fingerprint": "[[\"azure_api_key\",\"secret\"],[\"azure_deployment\",\"gpt-4.1\"],[\"azure_endpoint\",\"https://contoso.openai.azure.com\"],[\"azure_image_deployment\",\"\"],[\"azure_transcription_deployment\",\"gpt-transcribe\"],[\"custom_system_prompt\",\"\"],[\"design_dark_base_color\",\"#6478d4\"],[\"design_light_base_color\",\"#242f62\"],[\"design_message_font_size_px\",\"14\"],[\"design_ui_font_size_px\",\"13\"],[\"provider_type\",\"azure_apikey\"],[\"system_prompt\",\"\"],[\"welcome_message\",\"Welcome to Pedro\"]]"
+  },
+  {
+    "name": "openai",
+    "settings": {
+      "custom_system_prompt": "",
+      "design_dark_base_color": "#b07ad8",
+      "design_light_base_color": "#5b2a6e",
+      "design_message_font_size_px": "18",
+      "design_ui_font_size_px": "12",
+      "openai_api_key": "sk-test",
+      "openai_model": "gpt-4.1-mini",
+      "provider_type": "openai",
+      "system_prompt": "",
+      "welcome_message": "Welcome to Pedro"
+    },
+    "fingerprint": "[[\"custom_system_prompt\",\"\"],[\"design_dark_base_color\",\"#b07ad8\"],[\"design_light_base_color\",\"#5b2a6e\"],[\"design_message_font_size_px\",\"18\"],[\"design_ui_font_size_px\",\"12\"],[\"openai_api_key\",\"sk-test\"],[\"openai_model\",\"gpt-4.1-mini\"],[\"provider_type\",\"openai\"],[\"system_prompt\",\"\"],[\"welcome_message\",\"Welcome to Pedro\"]]"
+  }
+]

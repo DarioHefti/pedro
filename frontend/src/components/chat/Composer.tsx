@@ -2,7 +2,7 @@ import type { Ref } from 'react'
 import { ArrowUp, FileText, Folder, Paperclip, Square, X } from 'lucide-react'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@ui-sdk/react/menu'
 import { Textarea } from '@ui-sdk/react/textarea'
-import type { Attachment } from '../../hooks/useMessaging'
+import type { Attachment } from '../../hooks/messageModel'
 import { fileService } from '../../services/wailsService'
 import { Button, buttonStyle } from '../../ui/button'
 import { Hint } from '../../ui/hint'
@@ -35,10 +35,7 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
           title={isRef ? attachment.content : attachment.name}
           disabled={!isRef}
           onClick={() => {
-            if (!isRef) return
-            void fileService.openPath(attachment.content).then(err => {
-              if (err) console.warn('[OpenPath]', err)
-            })
+            if (isRef) void fileService.open(attachment.content)
           }}
         >
           <span className="attachment-icon">

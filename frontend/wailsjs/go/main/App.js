@@ -22,8 +22,8 @@ export function DeleteConversation(arg1) {
   return window['go']['main']['App']['DeleteConversation'](arg1);
 }
 
-export function DeleteMessage(arg1, arg2) {
-  return window['go']['main']['App']['DeleteMessage'](arg1, arg2);
+export function DeleteMessagesFrom(arg1, arg2) {
+  return window['go']['main']['App']['DeleteMessagesFrom'](arg1, arg2);
 }
 
 export function ForgetMemory(arg1) {

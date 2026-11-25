@@ -11,36 +11,36 @@ import (
 
 // RedditPost represents a parsed Reddit post.
 type RedditPost struct {
-	ID           *string `json:"id,omitempty"`
-	Title        string  `json:"title"`
-	Author       string  `json:"author"`
-	Subreddit    *string `json:"subreddit,omitempty"`
-	Score        int64   `json:"score"`
-	Body         *string `json:"body,omitempty"`
-	NumComments  int     `json:"num_comments"`
-	Permalink    string  `json:"permalink"`
-	URL          *string `json:"url,omitempty"`
-	IsSelf       bool    `json:"is_self"`
-	Flair        *string `json:"flair,omitempty"`
-	CreatedUTC   *string `json:"created_utc,omitempty"`
+	ID          *string `json:"id,omitempty"`
+	Title       string  `json:"title"`
+	Author      string  `json:"author"`
+	Subreddit   *string `json:"subreddit,omitempty"`
+	Score       int64   `json:"score"`
+	Body        *string `json:"body,omitempty"`
+	NumComments int     `json:"num_comments"`
+	Permalink   string  `json:"permalink"`
+	URL         *string `json:"url,omitempty"`
+	IsSelf      bool    `json:"is_self"`
+	Flair       *string `json:"flair,omitempty"`
+	CreatedUTC  *string `json:"created_utc,omitempty"`
 }
 
 // RedditComment represents a parsed Reddit comment.
 type RedditComment struct {
-	ID         *string          `json:"id,omitempty"`
-	Author     string           `json:"author"`
-	Body       string           `json:"body"`
-	Score      *int64           `json:"score,omitempty"`
-	Depth      int              `json:"depth"`
-	IsOP       bool             `json:"is_op"`
-	CreatedUTC *string          `json:"created_utc,omitempty"`
-	Replies    []RedditComment  `json:"replies"`
+	ID         *string         `json:"id,omitempty"`
+	Author     string          `json:"author"`
+	Body       string          `json:"body"`
+	Score      *int64          `json:"score,omitempty"`
+	Depth      int             `json:"depth"`
+	IsOP       bool            `json:"is_op"`
+	CreatedUTC *string         `json:"created_utc,omitempty"`
+	Replies    []RedditComment `json:"replies"`
 }
 
 // RedditThread represents a full Reddit thread.
 type RedditThread struct {
-	SourceURL string         `json:"url"`
-	Post      *RedditPost    `json:"post,omitempty"`
+	SourceURL string          `json:"url"`
+	Post      *RedditPost     `json:"post,omitempty"`
 	Comments  []RedditComment `json:"comments"`
 }
 
@@ -119,9 +119,9 @@ func redditToExtractionResult(thread *RedditThread) *ExtractionResult {
 	lang := "en"
 	return &ExtractionResult{
 		Metadata: Metadata{
-			Title:    title,
-			Author:   author,
-			Language: &lang,
+			Title:     title,
+			Author:    author,
+			Language:  &lang,
 			WordCount: wc,
 		},
 		Content: Content{

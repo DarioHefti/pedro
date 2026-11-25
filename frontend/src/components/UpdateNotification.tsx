@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CircleAlert, CircleCheck, Copy, Check, Download, X } from 'lucide-react'
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
 import { updaterService, eventService } from '../services/wailsService'
 import type { UpdateInfo } from '../services/wailsService'
 import { Button } from '../ui/button'
@@ -12,7 +13,7 @@ export default function UpdateNotification() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [dismissed, setDismissed] = useState(false)
   const [defenderExclusion, setDefenderExclusion] = useState('')
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard(2000)
 
   useEffect(() => {
     if (import.meta.env.DEV) return
@@ -59,16 +60,9 @@ export default function UpdateNotification() {
     }
   }, [updateInfo])
 
-  const handleCopy = useCallback(async () => {
-    if (!defenderExclusion) return
-    try {
-      await navigator.clipboard.writeText(defenderExclusion)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* clipboard may be unavailable */
-    }
-  }, [defenderExclusion])
+  const handleCopy = useCallback(() => {
+    if (defenderExclusion) void copy(defenderExclusion)
+  }, [defenderExclusion, copy])
 
   if (dismissed || state === 'idle') return null
 

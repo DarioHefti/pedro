@@ -42,8 +42,8 @@ type UpdateInfo struct {
 }
 
 type Updater struct {
-	ctx        context.Context
-	mu         sync.Mutex
+	ctx         context.Context
+	mu          sync.Mutex
 	downloading bool
 }
 

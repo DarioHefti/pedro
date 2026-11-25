@@ -32,7 +32,8 @@ type Store interface {
 	GetMessages(conversationID int64) ([]Message, error)
 	SearchMessages(query string) (map[int64][]Message, error)
 	AddMessage(conversationID int64, role, content, attachments, toolCalls, toolCallID string) (*Message, error)
-	DeleteMessage(conversationID int64, messageIndex int) error
+	// DeleteMessagesFrom deletes the message at position fromIndex and every later one.
+	DeleteMessagesFrom(conversationID int64, fromIndex int) error
 	IncrementRequestCount(conversationID int64) (int, error)
 	GetRequestCount(conversationID int64) (int, error)
 	IncrementRequestTokens(conversationID int64, tokens int) (int, error)
@@ -50,4 +51,15 @@ type Store interface {
 	ClearLLMDetails() error
 	shared.MemoryBackend
 	Close() error
+}
+
+// EventEmitter publishes backend events (stream chunks, counters, ...) to the frontend.
+type EventEmitter interface {
+	Emit(name string, data ...any)
+}
+
+// OpenDialogs asks the person to pick a file or folder. An empty path means they cancelled.
+type OpenDialogs interface {
+	PickFile() (string, error)
+	PickFolder() (string, error)
 }
